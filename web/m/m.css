@@ -583,3 +583,23 @@ body.kb .edta { padding-bottom:12px; }
 .tchip .nm { max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .tchip .x { position:relative; width:30px; height:30px; display:grid; place-items:center; color:var(--ink-3); }
 .tchip .x::before { content:""; position:absolute; inset:-4px; }
+
+/* ===================================================================== Usage (Misc → Usage) */
+.nrow .hint .warm, .urow .warm { color:var(--warn, #b26a00); } .nrow .hint .hot, .urow .hot { color:var(--err); }
+.usec { margin-top:14px; }
+.usec .uplan { margin-left:2px; font-size:var(--fs-meta); color:var(--ink-3); text-transform:none; letter-spacing:0; font-weight:400; }
+.urow { display:flex; align-items:center; gap:10px; min-height:44px; padding:6px var(--pr) 6px var(--pl); font-size:15px; border-bottom:var(--hair) solid var(--line); }
+.rows > .urow:last-child { border-bottom:0; }
+.urow .ul { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .urow .ul.dim { color:var(--ink-3); }
+.urow .ubar { flex:none; width:96px; height:6px; border-radius:3px; background:color-mix(in srgb, var(--ink) 10%, transparent); overflow:hidden; }
+.urow .ubar i { display:block; height:100%; border-radius:3px; background:var(--ink-2); }
+.urow .ubar.warm i { background:var(--warn, #b26a00); } .urow .ubar.hot i { background:var(--err); }
+.urow .up { flex:none; width:40px; text-align:right; font-variant-numeric:tabular-nums; }
+.urow .ur { flex:none; width:56px; text-align:right; font-size:var(--fs-meta); color:var(--ink-3); font-variant-numeric:tabular-nums; }
+.ufoot { padding:0 var(--pr) 0 var(--pl); }
+
+/* ===================================================================== Quote: the pill under a selection */
+.mquote { position:fixed; left:0; top:0; z-index:55; height:36px; padding:0 14px 0 12px; border-radius:18px; display:none; align-items:center; gap:6px;
+  background:var(--ink); color:var(--bg); font-size:15px; font-weight:500; box-shadow:0 4px 14px rgba(0,0,0,.18); }
+.mquote.show { display:inline-flex; }
+.mquote:active { opacity:.8; }

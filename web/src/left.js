@@ -417,9 +417,9 @@ function groupMenu(gid, where) {
     { label: "Delete group…", danger: true, disabled: S.groups.length < 2, run: () => deleteGroup(gid) },
   ], where);
 }
-/* A group's name: given, and no other group's (case and spaces ignored; Favorites and the Fleet count). The server
-   checks the same. */
-const groupKey = n => String(n || "").split(/\s+/).filter(Boolean).join(" ").toLowerCase();
+/* A group's name: given, and no other group's (case and every space ignored: "Invest Assistant" is "InvestAssistant";
+   Favorites and the Fleet count). The server checks the same. */
+const groupKey = n => String(n || "").replace(/\s+/g, "").toLowerCase();
 function groupNameError(name, gid = "") {
   const k = groupKey(name);
   if (!k) return "Give the group a name.";

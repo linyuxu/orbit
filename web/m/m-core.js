@@ -89,6 +89,7 @@ function modelName(m) {  // "claude-opus-5-5-high" → "Claude Opus 5.5 High" (a
 /* ===================================================================== icons (ui.md §5: one line set, 16×16, stroke 1.5) */
 const ICONS = {
   plus: '<path d="M8 3v10M3 8h10"/>',
+  quote: '<path d="M3 9.5h3v3.5H2.5V9c0-2.5 1-4 3-5M9.5 9.5h3v3.5H9V9c0-2.5 1-4 3-5"/>',
   x: '<path d="M4 4l8 8M12 4l-8 8"/>',
   up: '<path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/>',
   down: '<path d="M8 3v10M3.5 8.5L8 13l4.5-4.5"/>',

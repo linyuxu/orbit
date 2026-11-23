@@ -148,7 +148,7 @@ class SessionsTest(test_skeleton.SkeletonTest):
     def test_group_names_are_unique(self):
         _, a = self.req("POST", "/api/groups", {"name": "Research  Notes"})
         self.assertEqual(a["name"], "Research Notes")  # (inner spaces as one)
-        for taken in ("research notes", " RESEARCH   NOTES ", "Favorites", "fleet"):
+        for taken in ("research notes", " RESEARCH   NOTES ", "ResearchNotes", "research notes", "Favorites", "fleet"):
             code, r = self.req("POST", "/api/groups", {"name": taken})
             self.assertEqual(code, 400, taken)
             self.assertIn("already", r["error"])

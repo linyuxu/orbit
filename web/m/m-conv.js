@@ -402,3 +402,70 @@ function sessionMenu() {
 $("#cmore").addEventListener("click", sessionMenu);
 function goBack() { closeSession(); history.replaceState(null, "", location.pathname + location.search); }
 $("#cback").addEventListener("click", goBack);
+
+/* ===================================================================== Quote (the desktop's ❝ Quote, editor.md §5)
+   Text selected in an answer, or in a plugin thread's message, shows a Quote pill under the selection (iOS puts its
+   own menu above it); a tap puts "> where" and the quoted lines at the end of that input (the session's, or the
+   thread's reply), with the cursor after them. The pill keeps the selection (pointerdown is not let through). */
+const quoteBlock = q => `> ${q.ref}\n` + q.text.replace(/\s+$/, "").split("\n").map(l => "> " + l).join("\n") + "\n\n";
+const QUOTE = { q: null, el: null };
+function quoteSourceM() {
+  const sel = getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+  const text = sel.toString().trim();
+  const el = n => n && (n.nodeType === 1 ? n : n.parentElement);
+  const a = el(sel.anchorNode), f = el(sel.focusNode);
+  if (!text || !a || !f) return null;
+  const range = sel.getRangeAt(0);
+  const card = a.closest("#cards .card");
+  if (card && card.contains(f) && S.current && document.body.classList.contains("in-conv")) {
+    const s = S.sessions.get(S.current);
+    return { text, ref: `${s ? sessionTitle(s) : "session"} #${card.id.replace("card-", "")}`, into: null, range };
+  }
+  const msg = a.closest(".tmsg"), page = msg && typeof PV !== "undefined" && PV.threads.find(p => p.el.contains(msg));
+  if (page && page.el.contains(f) && page.t.ed) {
+    let m = msg; while (m && !m.querySelector(".tauthor .st") && !m.classList.contains("req")) m = m.previousElementSibling;  // (grouped: the author line above)
+    const who = msg.classList.contains("req") ? "me" : m && m.querySelector(".tauthor .st") ? m.querySelector(".tauthor .st").textContent.trim() : "";
+    return { text, ref: `${(page.t.data && page.t.data.title) || "thread"}${who ? " · " + who : ""}`, into: page, range };
+  }
+  return null;
+}
+function placeQuote() {
+  const q = quoteSourceM();
+  if (!QUOTE.el) {
+    QUOTE.el = document.createElement("button");
+    QUOTE.el.className = "mquote"; QUOTE.el.type = "button";
+    QUOTE.el.innerHTML = `${I("quote", 14)}<span>Quote</span>`;
+    QUOTE.el.addEventListener("pointerdown", e => e.preventDefault());  // (the selection stays)
+    QUOTE.el.addEventListener("click", () => { if (QUOTE.q) quoteInto(QUOTE.q); });
+    document.body.appendChild(QUOTE.el);
+  }
+  QUOTE.q = q;
+  if (!q) { QUOTE.el.classList.remove("show"); return; }
+  const rs = q.range.getClientRects(), r = rs[rs.length - 1] || q.range.getBoundingClientRect();
+  const vv = window.visualViewport, top0 = vv ? vv.offsetTop : 0, h = vv ? vv.height : innerHeight;
+  const bw = 96, bh = 36;
+  let y = r.bottom + 12;  // under the selection's end; above it when that is off the visible part
+  if (y + bh > top0 + h - 8) y = Math.max(top0 + 8, r.top - bh - 52);
+  const x = Math.max(8, Math.min(innerWidth - bw - 8, r.right - bw / 2));
+  QUOTE.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+  QUOTE.el.classList.add("show");
+}
+function quoteInto(q) {
+  const block = quoteBlock(q);
+  if (q.into) {  // a plugin thread: its reply
+    const ed = q.into.t.ed, v = ed.getDoc(), add = (v && !v.endsWith("\n") ? "\n\n" : "") + block;
+    ed.view.dispatch({ changes: { from: v.length, insert: add }, selection: { anchor: v.length + add.length }, userEvent: "input", scrollIntoView: true });
+    ed.focus();
+  } else {
+    const v = ta.value, add = (v && !v.endsWith("\n") ? "\n\n" : "") + block;
+    ta.insertAt(add, v.length);
+    inputEd.focus();
+  }
+  getSelection().removeAllRanges();
+  QUOTE.el.classList.remove("show"); QUOTE.q = null;
+  toast("Quoted: write your reply under it");
+}
+let quoteTimer = 0;
+document.addEventListener("selectionchange", () => { clearTimeout(quoteTimer); quoteTimer = setTimeout(placeQuote, 120); });
+addEventListener("scroll", () => QUOTE.el && QUOTE.q && placeQuote(), true);

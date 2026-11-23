@@ -5,7 +5,7 @@
    your own…) behind "N blocks" per day; a meeting opens on its own page (people, invitation, Join). Schedules: each
    with its next run and a switch (on / off); a tap: Run now, the last run, Remove. Both follow the live events. */
 TAB_ROOT.misc = () => pushPage(miscRootPage(), "misc");
-S.schedules = null; S.settings = null;
+S.schedules = null; S.settings = null; S.usage = null;
 const CAL = { data: null, at: 0, blocks: new Set(), DAYS: 7 };
 function fmtNext(t) {
   if (!t) return "";
@@ -23,6 +23,7 @@ const miscPages = () => AREA.stacks.misc.filter(p => p.refresh);
 function miscChanged() { for (const p of miscPages()) p.refresh(); }
 async function loadMisc() {
   loadPluginUi();  // (m-pviews.js: the plugins' views, listed below)
+  loadUsage();
   const [st, sc] = await Promise.all([api("GET", "/api/settings").catch(() => null), api("GET", "/api/schedules").catch(() => null)]);
   if (st) S.settings = st;
   if (sc) S.schedules = sc.schedules || [];
@@ -53,14 +54,15 @@ function miscRootPage() {
     const on = (S.schedules || []).filter(x => x.enabled && x.next).sort((a, b) => a.next - b.next);
     page.body.innerHTML = `<div class="rows">` +
       navRow({ attrs: `data-open="calendar"`, icon: I("calendar", 18), name: "Calendar", hint: calHint }) +
-      navRow({ attrs: `data-open="schedules"`, icon: I("clock", 18), name: "Schedules", hint: S.schedules == null ? "" : on.length ? esc(fmtNext(on[0].next)) : "none" }) + `</div>` +
+      navRow({ attrs: `data-open="schedules"`, icon: I("clock", 18), name: "Schedules", hint: S.schedules == null ? "" : on.length ? esc(fmtNext(on[0].next)) : "none" }) +
+      navRow({ attrs: `data-open="usage"`, icon: I("monitor", 18), name: "Usage", hint: usageHint() }) + `</div>` +
       pluginRowsHtml();
   };
   page.onShow = () => loadMisc();
   page.body.addEventListener("click", e => {
     const pv = e.target.closest("[data-pview]"); if (pv) { openPluginView(+pv.dataset.pview); return; }
     const r = e.target.closest("[data-open]"); if (!r) return;
-    pushPage(r.dataset.open === "calendar" ? calendarPage() : schedulesPage(), "misc");
+    pushPage(r.dataset.open === "calendar" ? calendarPage() : r.dataset.open === "usage" ? usagePage() : schedulesPage(), "misc");
   });
   page.refresh();
   loadMisc();
@@ -212,3 +214,55 @@ function schedulesPage() {
   page.refresh();
   return page;
 }
+
+/* ===================================================================== Usage: how much of each harness's plan is used
+   The desktop status bar's "Used" (GET /api/usage: Claude's /usage, Codex's last turn's rate limits, a plugin agent's
+   own figures and quota). The Misc row shows each harness's first limit; its page every limit, when it resets, the
+   plan and a plugin's quota line, with Refresh (the server asks the harnesses again). */
+const usageHeat = u => u >= 90 ? "hot" : u >= 75 ? "warm" : "";
+const usageShown = () => ((S.usage && S.usage.harnesses) || []).filter(h => (h.limits || []).length || h.quota);
+function resetsIn(at) {
+  if (!at) return "";
+  let m = Math.max(0, Math.round((at * 1000 - Date.now()) / 60000));
+  const d = Math.floor(m / 1440); m -= d * 1440; const h = Math.floor(m / 60); m -= h * 60;
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+}
+function usageHint() {  // "Claude 9% · Codex 89%" (the hot one in its colour)
+  if (!S.usage) return "";
+  const hs = usageShown();
+  if (!hs.length) return "none";
+  return hs.map(h => { const l = (h.limits || [])[0];
+    return `${esc(h.label)} ${l ? `<span class="${usageHeat(l.used)}">${Math.round(l.used)}%</span>` : esc(h.quota)}`; }).join(" · ");
+}
+async function loadUsage() {
+  try { S.usage = await api("GET", "/api/usage"); } catch (e) { if (e instanceof NotPaired) return; }
+  miscChanged();
+}
+const ubarHtml = u => `<span class="ubar ${usageHeat(u)}"><i style="width:${Math.min(100, Math.max(0, u))}%"></i></span>`;
+function usagePage() {
+  const page = makePage({ title: "Usage", right: navBtn("refresh", I("refresh", 20), "Ask the harnesses again") });
+  page.acts.refresh = async () => {
+    try { await api("POST", "/api/usage/refresh", {}); toast("Checking usage…"); } catch (e) { if (!(e instanceof NotPaired)) toast(e.message); return; }
+    setTimeout(loadUsage, 4000); setTimeout(loadUsage, 12000);
+  };
+  page.refresh = () => {
+    if (!S.usage) { page.body.innerHTML = loadingHtml(); return; }
+    const hs = S.usage.harnesses || [];
+    if (!hs.length) { page.body.innerHTML = emptyBox("No usage yet", "No harness has reported its usage yet. Refresh asks them (Claude: its /usage, no model call; Codex: after a turn)."); return; }
+    page.body.innerHTML = hs.map(h => {
+      const lims = h.limits || [], first = lims[0];
+      const right = first && first.resets_at ? `Resets in ${resetsIn(first.resets_at)}` : h.error ? esc(h.error) : "";
+      return `<section class="usec"><div class="shead"><span class="gn">${esc(h.label)}</span>${h.plan ? `<span class="uplan">${esc(h.plan)}</span>` : ""}<span class="cnt">${right}</span></div>` +
+        `<div class="rows">` + (lims.length ? lims.map(l =>
+          `<div class="urow"><span class="ul">${esc(l.label || "Plan")}</span>${ubarHtml(l.used)}<span class="up ${usageHeat(l.used)}">${Math.round(l.used)}%</span>` +
+          `${l.resets_at ? `<span class="ur">${resetsIn(l.resets_at)}</span>` : l.resets_text ? `<span class="ur">${esc(l.resets_text)}</span>` : ""}</div>`).join("")
+          : h.quota ? "" : `<div class="urow"><span class="ul dim">No figures reported</span></div>`) +
+        (h.quota ? `<div class="urow"><span class="ul">${esc(h.quota)}</span></div>` : "") + `</div></section>`;
+    }).join("") + `<div class="note ufoot">Claude: its /usage (no model call) · Codex: its last turn's rate limits${S.usage.at ? " · checked " + esc(ago(S.usage.at)) : ""}</div>`;
+  };
+  page.onShow = () => loadUsage();
+  page.refresh();
+  loadUsage();
+  return page;
+}
+setInterval(() => { if (AREA.cur === "misc" && !document.hidden) loadUsage(); }, 60000);

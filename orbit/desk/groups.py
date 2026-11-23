@@ -21,14 +21,14 @@ class Groups:
 
     def _check_name(self, name: str, gid: str = "") -> str:
         """The name, trimmed (inner runs of spaces as one): ValueError when empty or another group has it (case and
-        spaces ignored), Favorites and Fleet included."""
+        every space ignored: "Invest Assistant" is "InvestAssistant"), Favorites and Fleet included."""
         name = " ".join(name.split())
         if not name:
             raise ValueError("a group needs a name")
-        key = name.casefold()
+        key = "".join(name.split()).casefold()
         if key in ("favorites", "fleet"):
             raise ValueError(f"“{name}” is Orbit's own: there is a group named that already")
-        same = next((g for g in self.groups if g["id"] != gid and " ".join(g["name"].split()).casefold() == key), None)
+        same = next((g for g in self.groups if g["id"] != gid and "".join(g["name"].split()).casefold() == key), None)
         if same:
             raise ValueError(f"there is a group named “{same['name']}” already")
         return name
