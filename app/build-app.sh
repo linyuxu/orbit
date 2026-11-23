@@ -35,6 +35,7 @@ cat > "$OUT/Contents/Info.plist" <<EOF
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
   <key>NSHumanReadableCopyright</key><string>Orbit — an IDE whose documents are coding-agent sessions</string>
+  <key>NSMicrophoneUsageDescription</key><string>Orbit listens while you talk to your agents by voice (GPT Live), only during a call you start.</string>
   <key>NSCalendarsUsageDescription</key><string>Orbit shows your meetings (read-only) when Calendar is turned on in its Settings.</string>
   <key>NSCalendarsFullAccessUsageDescription</key><string>Orbit shows your meetings (read-only) when Calendar is turned on in its Settings. It never changes your calendars.</string>
 </dict>
