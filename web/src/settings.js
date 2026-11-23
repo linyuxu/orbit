@@ -143,11 +143,50 @@ const OPEN_IN_OPTIONS = [
   { value: "side", label: "Side tab", title: "Orbit's side tab; a file of another repo opens with that repo as its folder" },
   { value: "default", label: "Default app", title: "The file's default app ($ORBIT_EDITOR if set)" },
 ];
+/* One of Orbit's own API keys (GET/POST /api/keys): write-only, like a plugin's secrets. Shows whether it is set and
+   its last four characters; Save, Check (asks the provider whether it works) and Remove. This machine only. */
+async function apiKeyRow(pane, name, desc) {
+  const ctl = setRow(pane, "OpenAI API key", desc);
+  const draw = async () => {
+    let k;
+    try { k = (await api("GET", "/api/keys")).keys[name]; }
+    catch (e) { ctl.innerHTML = `<span class="set-desc">${esc(e.message)}</span>`; return; }
+    ctl.innerHTML = `<span class="keyst${k.set ? " on" : ""}">${k.set ? esc(k.hint) : "Not set"}</span>` +
+      `<input type="password" class="fin keyin" placeholder="${k.set ? "Replace…" : "sk-…"}" autocomplete="off" spellcheck="false">` +
+      `<button type="button" class="btn sm" data-a="save">Save</button>` +
+      (k.set ? `<button type="button" class="btn sm" data-a="check">Check</button><button type="button" class="btn sm" data-a="clear">Remove</button>` : "");
+  };
+  const put = async value => {
+    try { await api("POST", "/api/keys", { name, value }); toast(value ? "API key saved" : "API key removed"); draw(); }
+    catch (e) { toast(e.message); }
+  };
+  ctl.addEventListener("click", async e => {
+    const a = e.target.closest("[data-a]"); if (!a) return;
+    const inp = ctl.querySelector(".keyin");
+    if (a.dataset.a === "save") { if (inp.value.trim()) put(inp.value.trim()); else inp.focus(); }
+    else if (a.dataset.a === "clear") {  // asked in place (a dialog would close Settings): a second click within 4 s removes it
+      if (a.dataset.sure) { put(null); return; }
+      a.dataset.sure = "1"; a.textContent = "Remove?"; a.classList.add("danger");
+      setTimeout(() => { if (a.isConnected) { delete a.dataset.sure; a.textContent = "Remove"; a.classList.remove("danger"); } }, 4000);
+    } else if (a.dataset.a === "check") {
+      a.disabled = true; a.textContent = "Checking…";
+      try { const r = await api("POST", "/api/keys/check", { name }); toast(r.ok ? "The OpenAI API key works" : r.error); }
+      catch (x) { toast(x.message); }
+      a.disabled = false; a.textContent = "Check";
+    }
+  });
+  ctl.addEventListener("keydown", e => {
+    const inp = e.target.closest(".keyin");
+    if (inp && e.key === "Enter" && inp.value.trim()) { e.preventDefault(); e.stopPropagation(); put(inp.value.trim()); }
+  });
+  draw();
+}
 function settingsGeneral(pane, keys) {
   const dd = dropdown(setRow(pane, "Open files in", "Where a click on a file name in an answer, ↗ and “Open in …” open a file of this machine (with Default app, a click keeps it in Orbit's side tab; ⌘-click: an Orbit tab). Another machine's files always open in Orbit."), {
     value: (S.settings && S.settings.open_in) || "default", options: OPEN_IN_OPTIONS,
     onChange: v => api("POST", "/api/settings", { open_in: v }).then(st => { S.settings = st; renderFileHead(); }).catch(e => toast(e.message)) });
   keys.push(dd);
+  apiKeyRow(pane, "openai", "For GPT Live voice. Kept on this machine (a 0600 file in Orbit's state folder), never shown again, sent only to OpenAI.");
   toggleSwitch(setRow(pane, "Calendar", "Read macOS Calendar (read-only): today's meetings in Misc and the status bar, ⌘⇧C to join."), {
     on: !!(S.settings && S.settings.calendar), label: "Calendar", onChange: on => setCalendar(on) });
   const kb = setRow(pane, "Keyboard shortcuts", "Every key Orbit uses, searchable (⌘/).");

@@ -605,6 +605,11 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             return self._json({"version": __version__, "api": f"{API_VERSION[0]}.{API_VERSION[1]}"})
         if p == "/api/settings":
             return self._json(self.desk.settings)
+        if p == "/api/keys":  # Orbit's own API keys: whether each is set and its last four characters (this machine only)
+            if self.from_remote:
+                return self._json({"error": "only on the server's own machine"}, 403)
+            from orbit.services import keys
+            return self._json({"keys": keys.status(self.desk.state_dir)})
         if p == "/api/harnesses":
             return self._json({"harnesses": self.desk.harnesses()})
         if p == "/api/harness-server":  # whether the agents run in the Harness Server (or directly, and why)
@@ -873,6 +878,13 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json(self.desk.show(str(html or ""), str(b.get("title", "")), str(b.get("by", ""))))
             if p == "/api/settings":
                 return self._json(self.desk.set_settings(b))
+            if p in ("/api/keys", "/api/keys/check"):  # {"name", "value"} keeps a key (null / "": forgets it); check asks the provider
+                if self.from_remote:
+                    return self._json({"error": "only on the server's own machine"}, 403)
+                from orbit.services import keys
+                if p == "/api/keys/check":
+                    return self._json(keys.check(self.desk.state_dir, str(b.get("name", ""))))
+                return self._json({"keys": keys.set_key(self.desk.state_dir, str(b.get("name", "")), b.get("value"))})
             if p == "/api/schedules":
                 return self._json(self.desk.scheduler.create(b))
             if p == "/api/schedules/parse":

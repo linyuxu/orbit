@@ -80,3 +80,9 @@
 .set-pane .pl-sec { width:170px; }
 .set-pane .set-ctl .btn + .btn, .set-pane .set-ctl .fin + .btn { margin-left:6px; }
 .set-pane .mono { font-family:var(--mono); font-size:calc(11px * var(--ui-k)); }
+
+/* An API key row: its state (the last four characters), a password field, Save · Check · Remove */
+.set-ctl .keyst { font-family:var(--mono); font-size:calc(12px * var(--ui-k)); color:var(--ink-3); margin-right:8px; white-space:nowrap; }
+.set-ctl .keyst.on { color:var(--ink-2); }
+.set-ctl .keyin { width:200px; margin-right:6px; }
+.set-ctl .btn + .btn { margin-left:4px; }
