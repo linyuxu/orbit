@@ -301,7 +301,12 @@ $("#cards").addEventListener("click", e => {
   const cont = t.closest("[data-continue]");
   if (cont) { api("POST", `/api/sessions/${s.id}/continue`, { cid: +cont.dataset.continue }).catch(e => toast(e.message)); return; }
   const fr = t.closest("code.fref");
-  if (fr && !getSelection().toString()) openFileRef(fr.dataset.fref, s.cwd, e.metaKey ? "tab" : "side");
+  // A click follows "Open files in" (⌘,): JetBrains or VS Code at the line, else Orbit's side tab (Default app: a click
+  // stays in Orbit, ↗ uses the app); ⌘-click: an Orbit tab. Another machine's file always opens in Orbit.
+  if (fr && !getSelection().toString()) {
+    const oi = (S.settings && S.settings.open_in) || "default";
+    openFileRef(fr.dataset.fref, s.cwd, e.metaKey ? "tab" : oi === "jetbrains" || oi === "vscode" ? "editor" : "side");
+  }
 });
 $("#cards").addEventListener("contextmenu", e => {
   const fr = e.target.closest("code.fref"), s = cur();

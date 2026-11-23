@@ -144,7 +144,7 @@ const OPEN_IN_OPTIONS = [
   { value: "default", label: "Default app", title: "The file's default app ($ORBIT_EDITOR if set)" },
 ];
 function settingsGeneral(pane, keys) {
-  const dd = dropdown(setRow(pane, "Open files in", "Where ↗ (and “Open in …” on a file name in an answer) opens a file of this machine. Another machine's files always open in Orbit."), {
+  const dd = dropdown(setRow(pane, "Open files in", "Where a click on a file name in an answer, ↗ and “Open in …” open a file of this machine (with Default app, a click keeps it in Orbit's side tab; ⌘-click: an Orbit tab). Another machine's files always open in Orbit."), {
     value: (S.settings && S.settings.open_in) || "default", options: OPEN_IN_OPTIONS,
     onChange: v => api("POST", "/api/settings", { open_in: v }).then(st => { S.settings = st; renderFileHead(); }).catch(e => toast(e.message)) });
   keys.push(dd);
