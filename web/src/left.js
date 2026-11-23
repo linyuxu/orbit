@@ -129,7 +129,6 @@ function sessionRows() {
   const views = [{ gid: FAV, name: "Favorites", ix: "★", key: "⌘1" }, ...S.groups.map((g, i) => ({ gid: g.id, name: g.name, ix: i < 8 ? String(i + 2) : "", key: i < 8 ? `⌘${i + 2}` : "" }))];
   for (const v of views) {
     const ss = [...S.sessions.values()].filter(s => inView(s, v.gid) && machineOk(s));
-    if (!ss.length && !q && v.gid !== S.group) continue;  // an empty group is not listed (but the one you are in)
     const scored = ss.map(s => ({ s, sc: q ? Math.max(fuzzy(q, s.name), fuzzy(q, tilde(s.cwd)) - 1, fuzzy(q, v.name) - 2) : 0 })).filter(x => x.sc >= 0);
     if (q && !scored.length) continue;
     const working = ss.filter(s => s.state === "working" || s.agents > 0).length;  // (subagents at work count)
@@ -418,16 +417,27 @@ function groupMenu(gid, where) {
     { label: "Delete group…", danger: true, disabled: S.groups.length < 2, run: () => deleteGroup(gid) },
   ], where);
 }
+/* A group's name: given, and no other group's (case and spaces ignored; Favorites and the Fleet count). The server
+   checks the same. */
+const groupKey = n => String(n || "").split(/\s+/).filter(Boolean).join(" ").toLowerCase();
+function groupNameError(name, gid = "") {
+  const k = groupKey(name);
+  if (!k) return "Give the group a name.";
+  if (k === "favorites" || k === "fleet") return `“${name.trim()}” is Orbit's own: there is a group named that already.`;
+  const same = S.groups.find(g => g.id !== gid && groupKey(g.name) === k);
+  if (same) return `There is a group named “${same.name}” already.`;
+  return null;
+}
 async function newGroup() {
   const v = await dialog({ title: "New group", fields: [{ key: "name", label: "Name" }], ok: "Create",
-    validate: v => v.name.trim() ? null : "Give the group a name." });
+    validate: v => groupNameError(v.name) });
   if (!v) return;
   try { const g = await api("POST", "/api/groups", { name: v.name }); if (!S.groups.some(x => x.id === g.id)) S.groups.push(g); switchGroup(g.id, { quiet: true }); }
   catch (e) { toast(e.message); }
 }
 async function renameGroup(gid) {
   const g = S.groups.find(g => g.id === gid); if (!g) return;
-  const v = await dialog({ title: "Rename group", fields: [{ key: "name", label: "Name", value: g.name }], validate: v => v.name.trim() ? null : "Give the group a name." });
+  const v = await dialog({ title: "Rename group", fields: [{ key: "name", label: "Name", value: g.name }], validate: v => groupNameError(v.name, gid) });
   if (v) try { await api("POST", `/api/groups/${gid}/rename`, v); } catch (e) { toast(e.message); }
 }
 async function deleteGroup(gid) {

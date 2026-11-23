@@ -19,12 +19,23 @@ class Groups:
         self.save()
         self.broadcast({"t": "groups", "groups": self.all_groups()})
 
-    def group_create(self, name: str) -> dict:
-        name = name.strip()
+    def _check_name(self, name: str, gid: str = "") -> str:
+        """The name, trimmed (inner runs of spaces as one): ValueError when empty or another group has it (case and
+        spaces ignored), Favorites and Fleet included."""
+        name = " ".join(name.split())
         if not name:
             raise ValueError("a group needs a name")
-        g = {"id": "g-" + uuid.uuid4().hex[:8], "name": name}
+        key = name.casefold()
+        if key in ("favorites", "fleet"):
+            raise ValueError(f"“{name}” is Orbit's own: there is a group named that already")
+        same = next((g for g in self.groups if g["id"] != gid and " ".join(g["name"].split()).casefold() == key), None)
+        if same:
+            raise ValueError(f"there is a group named “{same['name']}” already")
+        return name
+
+    def group_create(self, name: str) -> dict:
         with self.lock:
+            g = {"id": "g-" + uuid.uuid4().hex[:8], "name": self._check_name(name)}
             self.groups.append(g)
         self._groups_changed()
         return g
@@ -36,10 +47,9 @@ class Groups:
         return g
 
     def group_rename(self, gid: str, name: str) -> dict:
-        if not name.strip():
-            raise ValueError("a group needs a name")
-        g = self._group(gid)
-        g["name"] = name.strip()
+        with self.lock:
+            g = self._group(gid)
+            g["name"] = self._check_name(name, gid)
         self._groups_changed()
         return g
 

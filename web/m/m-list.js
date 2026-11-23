@@ -39,7 +39,7 @@ function listViews() {
   if (favs.length) views.push({ gid: "fav", name: "Favorites", star: true, ss: favs });
   for (const g of S.groups) {
     const ss = all.filter(s => s.group === g.id && !s.fleet);
-    if (ss.length) views.push({ gid: g.id, name: g.name, ss });
+    views.push({ gid: g.id, name: g.name, ss });  // (an empty group too: it is the user's)
   }
   const known = new Set(S.groups.map(g => g.id));
   const lost = all.filter(s => !s.fleet && !known.has(s.group));  // (a group this server does not list: still shown)
@@ -71,17 +71,14 @@ function renderList() {
   seenInit();
   const views = listViews();
   const box = $("#slist");
-  if (!views.length) {
-    box.innerHTML = `<div class="empty"><h2>No session yet</h2>Start one with <b>+</b> above: pick a folder, an agent and what to ask.</div>`;
-    return;
-  }
+  const none = !views.some(v => v.ss.length);  // (the groups show anyway, empty ones too)
   box.innerHTML = workingStripHtml() + views.map(v => {
     const shut = S.folded.has(v.gid), working = v.ss.filter(isMoving).length;
     return `<section class="grp${shut ? " shut" : ""}"><button class="shead" data-fold="${esc(v.gid)}" aria-expanded="${!shut}">` +
       `${v.star ? `<span class="gstar">${I("star", 12)}</span>` : v.fleet ? `<span class="gstar">${I("zap", 12)}</span>` : ""}<span class="gn">${esc(v.name)}</span>` +
       `<span class="chev">${I("chevd", 12)}</span><span class="cnt">${working ? `${working}/` : ""}${v.ss.length}</span></button>` +
       (shut ? "" : `<div class="rows">${v.ss.map(rowHtml).join("")}</div>`) + `</section>`;
-  }).join("");
+  }).join("") + (none ? `<div class="empty"><h2>No session yet</h2>Start one with <b>+</b> above: pick a folder, an agent and what to ask.</div>` : "");
   updateTitleBar();
   renderTabbar();  // (its count of answers not seen yet)
 }

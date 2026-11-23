@@ -145,6 +145,18 @@ class SessionsTest(test_skeleton.SkeletonTest):
         moved = next(x for x in d["sessions"] if x["id"] == s["id"])
         self.assertEqual(moved["group"], d["groups"][0]["id"])
 
+    def test_group_names_are_unique(self):
+        _, a = self.req("POST", "/api/groups", {"name": "Research  Notes"})
+        self.assertEqual(a["name"], "Research Notes")  # (inner spaces as one)
+        for taken in ("research notes", " RESEARCH   NOTES ", "Favorites", "fleet"):
+            code, r = self.req("POST", "/api/groups", {"name": taken})
+            self.assertEqual(code, 400, taken)
+            self.assertIn("already", r["error"])
+        _, b = self.req("POST", "/api/groups", {"name": "Drafts"})
+        self.assertEqual(self.req("POST", f"/api/groups/{b['id']}/rename", {"name": "research NOTES"})[0], 400)
+        self.assertEqual(self.req("POST", f"/api/groups/{a['id']}/rename", {"name": "Research notes"})[0], 200)  # itself
+        self.assertEqual([g["name"] for g in self._all()["groups"]].count("Research notes"), 1)
+
     def test_last_group_cannot_be_deleted(self):
         for g in self._all()["groups"][1:]:
             self.req("POST", f"/api/groups/{g['id']}/delete")
