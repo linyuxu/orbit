@@ -603,3 +603,10 @@ body.kb .edta { padding-bottom:12px; }
   background:var(--ink); color:var(--bg); font-size:15px; font-weight:500; box-shadow:0 4px 14px rgba(0,0,0,.18); }
 .mquote.show { display:inline-flex; }
 .mquote:active { opacity:.8; }
+
+/* action sheet rows with a second line, and the current choice checked (the permission mode) */
+.arow.two { height:auto; min-height:64px; padding-top:10px; padding-bottom:10px; }
+.arow .atx { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.arow .asub { font-size:var(--fs-meta); line-height:1.35; color:var(--ink-3); white-space:normal; }
+.arow .acheck { flex:none; width:18px; display:grid; place-items:center; color:var(--accent); }
+.arow.on .acheck svg { color:var(--accent); }

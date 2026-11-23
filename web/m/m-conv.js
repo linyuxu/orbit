@@ -48,6 +48,7 @@ function renderNav() {
   const bits = [st.word];
   if (s.queued) bits.push(`${s.queued} queued`);
   bits.push(harnessLabel(s.harness));
+  bits.push(modeShort(s.mode));
   if (s.remote) bits.push("on " + s.remote);
   $("#cname").textContent = s.name;
   $("#csub").innerHTML = `${stateMark(s, 12)}<span class="w ${st.cls}">${esc(bits[0])}</span><span>${esc(bits.slice(1).join(" · "))}</span>`;
@@ -388,10 +389,32 @@ async function sessionAction(sid, action) {
     else if (action === "stop") toast("Stopped");
   } catch (e) { if (!(e instanceof NotPaired)) toast(`${action[0].toUpperCase() + action.slice(1)} failed: ${e.message}`); }
 }
+/* Permission mode (the desktop's mode chip, /mode): the agent restarts on the same conversation with it, so the server
+   refuses while a request runs (said in a toast). */
+const MODES_M = [
+  { id: "default", short: "ask", sub: "Tools that need approval are refused" },
+  { id: "acceptEdits", short: "accept edits", sub: "File edits approved, other tools refused" },
+  { id: "plan", short: "plan", sub: "Read only: it proposes a plan" },
+  { id: "bypassPermissions", short: "bypass", sub: "Every tool approved, no questions" },
+];
+const modeShort = m => (MODES_M.find(x => x.id === m) || { short: m || "ask" }).short;
+function modeSheet(s) {
+  actionSheet("Permission mode", MODES_M.map(m => ({ label: m.short[0].toUpperCase() + m.short.slice(1), sub: m.sub, on: (s.mode || "default") === m.id,
+    run: () => setModeM(s, m.id) })));
+}
+async function setModeM(s, mode) {
+  if ((s.mode || "default") === mode) return;
+  try {
+    const r = await api("POST", `/api/sessions/${encodeURIComponent(s.id)}/mode`, { mode });
+    S.sessions.set(s.id, { ...S.sessions.get(s.id), ...r }); renderNav();
+    toast(`Mode: ${modeShort(mode)} (the agent restarts on this conversation)`);
+  } catch (e) { if (!(e instanceof NotPaired)) toast(e.message); }
+}
 function sessionMenu() {
   const s = S.sessions.get(S.current); if (!s) return;
   const working = s.state === "working";
   actionSheet(s.name, [
+    { label: `Mode: ${modeShort(s.mode)}`, icon: "gear", disabled: working, run: () => modeSheet(s) },
     { label: "Stop", icon: "stop", disabled: !working && !s.queued, run: () => sessionAction(s.id, "stop") },
     { label: "Fork", icon: "fork", run: () => sessionAction(s.id, "fork") },
     { label: "Resume", icon: "play", disabled: s.state === "ready" || working, run: () => sessionAction(s.id, "resume") },

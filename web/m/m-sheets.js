@@ -15,7 +15,9 @@ function sheetWrap(html, cls) {
 }
 function actionSheet(title, items) {
   const w = sheetWrap(`<div class="asheet"><div class="agroup">${title ? `<div class="atitle">${esc(title)}</div>` : ""}` +
-    items.map((it, i) => `<button class="arow${it.danger ? " danger" : ""}" data-ai="${i}"${it.disabled ? " disabled" : ""}>${it.icon ? I(it.icon, 18) : ""}<span>${esc(it.label)}</span></button>`).join("") +
+    items.map((it, i) => `<button class="arow${it.danger ? " danger" : ""}${it.sub ? " two" : ""}${it.on ? " on" : ""}" data-ai="${i}"${it.disabled ? " disabled" : ""}>${it.icon ? I(it.icon, 18) : ""}` +
+      (it.sub ? `<span class="atx"><span>${esc(it.label)}</span><span class="asub">${esc(it.sub)}</span></span>` : `<span>${esc(it.label)}</span>`) +
+      `${it.on !== undefined ? `<span class="acheck">${it.on ? I("check", 18) : ""}</span>` : ""}</button>`).join("") +
     `</div><button class="arow cancel" data-dismiss>Cancel</button></div>`, "as");
   w.addEventListener("click", e => {
     const b = e.target.closest("[data-ai]"); if (!b || b.disabled) return;
