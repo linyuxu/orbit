@@ -268,7 +268,7 @@ items); `/api/events` sends `plugin-status`, `plugin-badges`, `plugin-open-tab`,
 ### Views (2.0)
 
 A plugin gives **data**; Orbit draws it in its own page with the conversation's code, so a plugin's thread reads,
-scrolls, searches and is answered exactly like a conversation, on every engine and later on the phone.
+scrolls, searches and is answered exactly like a conversation, on every engine and on the phone.
 (builddoc/plugin-views.md has the design and why.) Three views:
 
 | `view` | On | Shows |
@@ -330,7 +330,8 @@ POST http://127.0.0.1:$ORBIT_SERVICE_PORT/orbit/send
 (without a service: `[cli] send` with that on stdin, its first line `{"id"}`). When the plugin pushes the real
 message with the same `client_id` (or the `id` it answered), it takes the pending one's place. A failure shows
 "Not sent" with Retry (the same `client_id` again: de-duplicate by it) and Edit. `composer.enabled: false` shows no
-editor. Replies are typed on this machine's page only.
+editor. Replies may come from any page with the server's token (the phone, another machine's page: that is the
+user); from another machine a reply's `files[].path` must be one of the server's uploads (`/api/upload`).
 
 **A message's menu**: Copy, Copy as Markdown, Open at the source (`url`), Quote in a session… (into a session's input,
 with the thread's title), Send to a session… (the message and the thread's last 30 messages, 20 KB at most, as a
@@ -357,11 +358,19 @@ and the page never sees it. It is not a gateway:
 - GET and HEAD only; only under a declared `files` prefix, never `/orbit/`; a plain path (no `..`, `//`, `\`, no
   encoded `.` `/` `\` `%` or control characters); `http.client` to 127.0.0.1; a redirect is not followed (502);
 - only `Range` is forwarded, and Orbit adds `X-Orbit-Proxy: 1` (refuse what you never serve to a page);
-- the answer is inert: png, jpeg, gif, webp by their bytes; SVG only as an `<img>`; anything else
+- the answer is inert: png, jpeg, gif, webp by their bytes; SVG (its bytes, or the service's type) as
+  `image/svg+xml`, sandboxed (opened as a page it runs no script); html, xhtml, xml and anything else
   `application/octet-stream`, an attachment; always `X-Content-Type-Options: nosniff` and
   `Content-Security-Policy: sandbox`; only `Content-Length`, `ETag`, `Cache-Control` (and a 206's `Content-Range`)
   passed back;
 - 20 MB, 10 s, 4 at once per plugin. Other machines' pages (with the server's token) may use it.
+
+**On the phone** (the app at `/m/`): Misc lists each plugin's lists, docs and thread panels; a list opens as a page
+of the Sessions list's rows (pull to refresh when its source has a `refresh` command:
+`/api/palette?plugin=&source=&fresh=1` runs it now), an item its thread or doc. A thread reads like the phone's
+conversation and is answered with the phone's editor (photos go as files); the image viewer, live updates and older
+pages work as on the desktop. Nothing to declare: the same views and API. A message's plugin menu is the desktop's
+only.
 
 `examples/hello/` has each: a doc panel, a list of answers grouped by session, a thread per session (replies go to the
 session, its answer comes back live, pasted pictures through the proxy), a doc tab, a message menu.

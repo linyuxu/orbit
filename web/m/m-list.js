@@ -100,43 +100,48 @@ $("#slist").addEventListener("click", e => {
 });
 
 /* ===================================================================== pull to refresh
-   The list's own: the native bounce is off (overscroll-behavior), so a pull from the top moves the list down after
-   the finger (damped); past the line, letting go reloads the sessions and reconnects the live events. */
-const PULL = { y0: null, d: 0, busy: false, LINE: 64, HOLD: 52 };
-function pullSet(d, anim) {
-  PULL.d = d;
-  const inner = $("#lscroll .inner"), ind = $("#pull");
-  inner.style.transition = ind.style.transition = anim ? "transform .25s ease" : "none";
-  inner.style.transform = d ? `translateY(${d}px)` : "";
-  ind.style.transform = `translateY(${Math.min(d, PULL.HOLD + 12) - 40}px)`;
-  ind.style.opacity = Math.min(1, d / PULL.LINE);
-  ind.querySelector("svg").style.transform = PULL.busy ? "" : `rotate(${Math.round(d / PULL.LINE * 270)}deg)`;
-  ind.classList.toggle("armed", d >= PULL.LINE || PULL.busy);
+   A list's own (the Sessions list's, a plugin's list): the native bounce is off (overscroll-behavior), so a pull from
+   the top moves the list down after the finger (damped); past the line, letting go runs `refresh` (the spinner stays
+   until it is done, half a second at least). */
+const PULL_SVG = '<svg width="22" height="22" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-dasharray="24 9"/></svg>';
+function addPull(sc, refresh) {
+  const P = { y0: null, d: 0, busy: false, LINE: 64, HOLD: 52 };
+  if (!$(".pull", sc)) sc.insertAdjacentHTML("afterbegin", `<div class="pull" aria-hidden="true">${PULL_SVG}</div>`);
+  sc.classList.add("haspull");
+  const ind = $(".pull", sc), inner = $(".inner", sc);
+  const set = (d, anim) => {
+    P.d = d;
+    inner.style.transition = ind.style.transition = anim ? "transform .25s ease" : "none";
+    inner.style.transform = d ? `translateY(${d}px)` : "";
+    ind.style.transform = `translateY(${Math.min(d, P.HOLD + 12) - 40}px)`;
+    ind.style.opacity = Math.min(1, d / P.LINE);
+    ind.querySelector("svg").style.transform = P.busy ? "" : `rotate(${Math.round(d / P.LINE * 270)}deg)`;
+    ind.classList.toggle("armed", d >= P.LINE || P.busy);
+  };
+  sc.addEventListener("touchstart", e => {
+    P.y0 = !P.busy && sc.scrollTop <= 0 && e.touches.length === 1 ? e.touches[0].clientY : null;
+  }, { passive: true });
+  sc.addEventListener("touchmove", e => {
+    if (P.y0 == null) return;
+    const dy = e.touches[0].clientY - P.y0;
+    if (dy <= 0) { if (P.d) set(0); return; }
+    if (sc.scrollTop > 0) { P.y0 = null; return; }
+    e.preventDefault();
+    set(Math.round(dy < 40 ? dy * .6 : 24 + (dy - 40) * .4));
+  }, { passive: false });
+  sc.addEventListener("touchend", async () => {
+    if (P.y0 == null) return;
+    P.y0 = null;
+    if (P.d < P.LINE) { set(0, true); return; }
+    P.busy = true;
+    ind.classList.add("busy");
+    set(P.HOLD, true);
+    const t0 = Date.now();
+    try { await refresh(); } catch {}
+    await new Promise(r => setTimeout(r, Math.max(0, 500 - (Date.now() - t0))));  // (long enough to be seen)
+    P.busy = false;
+    ind.classList.remove("busy");
+    set(0, true);
+  });
 }
-$("#lscroll").addEventListener("touchstart", e => {
-  PULL.y0 = !PULL.busy && $("#lscroll").scrollTop <= 0 && e.touches.length === 1 ? e.touches[0].clientY : null;
-}, { passive: true });
-$("#lscroll").addEventListener("touchmove", e => {
-  if (PULL.y0 == null) return;
-  const dy = e.touches[0].clientY - PULL.y0;
-  if (dy <= 0) { if (PULL.d) pullSet(0); return; }
-  if ($("#lscroll").scrollTop > 0) { PULL.y0 = null; return; }
-  e.preventDefault();
-  pullSet(Math.round(dy < 40 ? dy * .6 : 24 + (dy - 40) * .4));
-}, { passive: false });
-$("#lscroll").addEventListener("touchend", () => {
-  if (PULL.y0 == null) return;
-  PULL.y0 = null;
-  if (PULL.d >= PULL.LINE) refreshList(); else pullSet(0, true);
-});
-async function refreshList() {
-  PULL.busy = true;
-  $("#pull").classList.add("busy");
-  pullSet(PULL.HOLD, true);
-  const t0 = Date.now();
-  try { await loadAll(); reconnect(); } catch {}
-  await new Promise(r => setTimeout(r, Math.max(0, 500 - (Date.now() - t0))));  // (long enough to be seen)
-  PULL.busy = false;
-  $("#pull").classList.remove("busy");
-  pullSet(0, true);
-}
+addPull($("#lscroll"), async () => { await loadAll(); reconnect(); });

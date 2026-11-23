@@ -112,7 +112,7 @@ function threadView(path, spec) {
       <div class="pinputhost" title="⌘⏎ sends · ⏎ new line · paste or drop a picture to attach it"></div>
       <div class="crow"><button class="ibtn sm pattach" title="Attach a file or image (⌘V or drop works too)">${I("clip", 14)}</button>
         <input type="file" class="pfile" multiple hidden><span class="pnote"></span><button class="psend" title="Send (⌘⏎)" disabled>${I("up", 16)}</button></div>
-    </div><div class="pnosend" hidden></div></div></div>`);
+    </div></div></div>`);
   v.box = v.el.querySelector(".pconv"); v.root = v.el.querySelector(".pcol"); v.msgs = v.el.querySelector(".pmsgs"); v.top = v.el.querySelector(".ptop");
   v.list = new MsgList({ box: v.box, items: v.root, jump: v.el.querySelector(".pjump"), itemSel: ".tmsg",
     idOf: e => e.dataset.mid, elOf: id => v.msgs.querySelector(`.tmsg[data-mid="${CSS.escape(id)}"]`),
@@ -301,11 +301,8 @@ function threadChanged(v, ev) {
 }
 /* ---- the reply editor */
 function drawComposer(v) {
-  const d = v.data || {}, wrap = v.el.querySelector(".pcomposer"), no = v.el.querySelector(".pnosend");
-  const off = d.composer && d.composer.enabled === false;
-  wrap.hidden = off || !PUI.local;
-  no.hidden = off || PUI.local;
-  if (!PUI.local) no.textContent = `Replies are written on ${v.spec.plugin}'s own machine.`;
+  const d = v.data || {}, wrap = v.el.querySelector(".pcomposer");
+  wrap.hidden = !!(d.composer && d.composer.enabled === false);  // (another machine's page too: it has the token)
   if (wrap.hidden) return;
   const ph = (d.composer && d.composer.placeholder) || `Reply in ${viewTitle(v)}`;
   if (!v.ed && window.CM) {

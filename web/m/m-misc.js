@@ -1,6 +1,6 @@
 "use strict";
-/* ===================================================================== Misc: Calendar and Schedules
-   The desktop's Misc panel: one row each, with what is next there. Calendar: today's and the coming days' meetings
+/* ===================================================================== Misc: Calendar, Schedules, the plugins' views
+   The desktop's Misc panel: one row each, with what is next there (and under them each plugin's views: m-pviews.js). Calendar: today's and the coming days' meetings
    (the macOS Calendar, read-only, through the server), the meeting now or next marked; blocks (all-day, declined,
    your own…) behind "N blocks" per day; a meeting opens on its own page (people, invitation, Join). Schedules: each
    with its next run and a switch (on / off); a tap: Run now, the last run, Remove. Both follow the live events. */
@@ -22,6 +22,7 @@ function fmtNext(t) {
 const miscPages = () => AREA.stacks.misc.filter(p => p.refresh);
 function miscChanged() { for (const p of miscPages()) p.refresh(); }
 async function loadMisc() {
+  loadPluginUi();  // (m-pviews.js: the plugins' views, listed below)
   const [st, sc] = await Promise.all([api("GET", "/api/settings").catch(() => null), api("GET", "/api/schedules").catch(() => null)]);
   if (st) S.settings = st;
   if (sc) S.schedules = sc.schedules || [];
@@ -52,10 +53,12 @@ function miscRootPage() {
     const on = (S.schedules || []).filter(x => x.enabled && x.next).sort((a, b) => a.next - b.next);
     page.body.innerHTML = `<div class="rows">` +
       navRow({ attrs: `data-open="calendar"`, icon: I("calendar", 18), name: "Calendar", hint: calHint }) +
-      navRow({ attrs: `data-open="schedules"`, icon: I("clock", 18), name: "Schedules", hint: S.schedules == null ? "" : on.length ? esc(fmtNext(on[0].next)) : "none" }) + `</div>`;
+      navRow({ attrs: `data-open="schedules"`, icon: I("clock", 18), name: "Schedules", hint: S.schedules == null ? "" : on.length ? esc(fmtNext(on[0].next)) : "none" }) + `</div>` +
+      pluginRowsHtml();
   };
   page.onShow = () => loadMisc();
   page.body.addEventListener("click", e => {
+    const pv = e.target.closest("[data-pview]"); if (pv) { openPluginView(+pv.dataset.pview); return; }
     const r = e.target.closest("[data-open]"); if (!r) return;
     pushPage(r.dataset.open === "calendar" ? calendarPage() : schedulesPage(), "misc");
   });

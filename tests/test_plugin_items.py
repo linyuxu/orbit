@@ -338,6 +338,9 @@ class ItemsTest(test_skeleton.SkeletonTest):
         for _ in range(20):
             self.items("feed")
         self.assertEqual(len(self.spawns()), 1)  # within its every: not again
+        src = self.req("GET", "/api/palette?plugin=inbox&source=feed&fresh=1")[1]["sources"][0]  # asked (a pull on the phone)
+        self.assertEqual(len(src["items"]), 2)  # (what it has, at once)
+        self.assertTrue(wait_for(lambda: len(self.spawns()) == 2, timeout=10))
         # the list is replaced; a failure keeps the one it had, and says why
         (self.inbox / "feed.sleep").write_text("0")
         (self.inbox / "feed.jsonl").write_text(json.dumps({"key": "u3", "label": "Three"}) + "\n")

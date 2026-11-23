@@ -296,14 +296,15 @@ def change(plugin: str, sid: str, upsert: Any = None, remove: Any = None) -> dic
     return out
 
 
-def palette(plugin: str = "", sid: str = "") -> list[dict[str, Any]]:
+def palette(plugin: str = "", sid: str = "", fresh: bool = False) -> list[dict[str, Any]]:
     """GET /api/palette: the [[ui.palette]] sources (not `conversations`), with their items; a refresh source whose
-    list is older than its `every` is refreshed in the background (the caller never waits)."""
+    list is older than its `every` (or, fresh: the user asked, a pull on the phone's list) is refreshed in the
+    background (the caller never waits; one run at a time)."""
     with _lock:
         srcs = [s for (p, i), s in sorted(SOURCES.items()) if not s.decl.get("conversations")
                 and (not plugin or p == plugin) and (not sid or i == sid)]
     for s in srcs:
-        kick(s)
+        kick(s, force=fresh)
     with _lock:
         return [s.public() for s in srcs]
 

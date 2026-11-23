@@ -302,9 +302,9 @@ class Handler(Forward, Streams, BaseHTTPRequestHandler):
                 return self._json({"error": f"larger than {pv.PROXY_MAX // 1024 // 1024} MB"}, 502)
             body = b""
             if not head_only:  # the first bytes say what it is; without a length, all of it (up to the cap)
-                while (n is None or len(body) < min(n, 64)) and time.time() < deadline:
+                while (n is None or len(body) < min(n, pv.SNIFF)) and time.time() < deadline:
                     sock.settimeout(max(0.05, deadline - time.time()))
-                    chunk = r.read1(65536) if n is None or len(body) < 64 else b""
+                    chunk = r.read1(65536) if n is None or len(body) < pv.SNIFF else b""
                     if not chunk:
                         break
                     body += chunk
@@ -312,8 +312,7 @@ class Handler(Forward, Streams, BaseHTTPRequestHandler):
                         return self._json({"error": f"larger than {pv.PROXY_MAX // 1024 // 1024} MB"}, 502)
                 if time.time() >= deadline:
                     return self._json({"error": f"{name}'s service: not within {pv.PROXY_TIMEOUT:g} s"}, 504)
-            ctype, attach = pv.inert_type(None if head_only else body[:512], r.getheader("Content-Type") or "",
-                                          self.headers.get("Sec-Fetch-Dest") or "")
+            ctype, attach = pv.inert_type(None if head_only else body[:pv.SNIFF], r.getheader("Content-Type") or "")
             self.send_response(r.status)
             self.send_header("Content-Type", ctype)
             self.send_header("X-Content-Type-Options", "nosniff")
@@ -354,11 +353,17 @@ class Handler(Forward, Streams, BaseHTTPRequestHandler):
             sem.release()
 
     def _view_action(self, route: tuple[str, str, str, str], action: str, b: dict) -> None:
-        """POST …/threads/KIND/KEY/send {markdown, files, client_id} or …/discard {client_id}: this machine's page."""
+        """POST …/threads/KIND/KEY/send {markdown, files, client_id} or …/discard {client_id}: a reply from the page,
+        this machine's or another's (the phone: token-checked by _guard, so the user). Another machine's files are
+        only its uploads (it has no other path here); the plugin's own actions stay this machine's."""
         from orbit.services import plugin_views
         name, _, kind, key = route
-        if self.from_remote:
-            return self._json({"error": "only on the server's own machine"}, 403)
+        if self.from_remote and action == "send":
+            up = (Path(self.desk.state_dir) / "uploads").resolve()
+            for f in b.get("files") or []:
+                p = f.get("path") if isinstance(f, dict) else None
+                if not isinstance(p, str) or up not in Path(p).resolve().parents:
+                    return self._json({"error": "files: another machine sends only what it uploaded (/api/upload)"}, 400)
         try:
             if action == "send":
                 return self._json(plugin_views.send(name, kind, key, b.get("markdown"), b.get("files") or [],
@@ -619,7 +624,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
         if p == "/api/palette":  # (1.3) the plugins' item sources with their items (⌘O); ?plugin=&source=: one
             from orbit.services import plugin_items
             qs = {k: v[0] for k, v in parse_qs(u.query).items()}
-            return self._json({"sources": plugin_items.palette(qs.get("plugin", ""), qs.get("source", "")),
+            return self._json({"sources": plugin_items.palette(qs.get("plugin", ""), qs.get("source", ""),
+                                                               fresh=qs.get("fresh") == "1"),
                                "local": not self.from_remote})
         if p == "/api/palette/search":  # (1.3) ?plugin=&source=&q=: a live search, answered by the plugin's service
             return self._palette_search({k: v[0] for k, v in parse_qs(u.query).items()})
@@ -827,7 +833,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             return self._json({"error": "the svc: proxy takes GET and HEAD only"}, 405)
         m = re.fullmatch(r"(/api/plugins/[a-z0-9_-]+/threads/[a-z0-9_-]+/[^/]+)/(send|discard)", p)
         route = self._view_route(m.group(1)) if m else None
-        if route:  # (2.0) a reply typed in a native thread (this machine's page)
+        if route:  # (2.0) a reply typed in a native thread (any page with the token: the phone's too)
             return self._view_action(route, m.group(2), self._body())
         b = self._body()
         if p in FILE_ROUTES and federation.machine_in(b):

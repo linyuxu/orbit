@@ -869,19 +869,47 @@ IMAGE_MAGIC = ((b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jpe
                (b"GIF89a", "image/gif"))
 
 
-def inert_type(head: bytes | None, upstream: str, dest: str) -> tuple[str, bool]:
-    """(the Content-Type to serve, whether as an attachment): png, jpeg, gif, webp by their bytes; SVG only as an
-    <img> (Sec-Fetch-Dest: image); anything else application/octet-stream, an attachment. The service's own type is
-    never passed through. head None (a HEAD): its declared image type, nothing else."""
+SNIFF = 1024  # the bytes the proxy reads first to tell what a file is
+
+
+def svg_root(head: bytes) -> bool | None:
+    """Whether these first bytes are an SVG document (its first element <svg, after an optional BOM, XML prolog,
+    comments, whitespace and a DOCTYPE without an internal subset): True, False (another element, or not markup),
+    None (cut off before the first element)."""
+    h = head[3:] if head.startswith(b"\xef\xbb\xbf") else head
+    while True:
+        h = h.lstrip()
+        for start, end in ((b"<?xml", b"?>"), (b"<!--", b"-->"), (b"<!DOCTYPE", b">")):
+            if h.startswith(start):
+                at = h.find(end, len(start))
+                if at < 0:
+                    return None
+                if start == b"<!DOCTYPE" and b"[" in h[:at]:
+                    return False  # (an internal subset: entities; not what a picture needs)
+                h = h[at + len(end):]
+                break
+        else:
+            if len(h) < 5:
+                return None if b"<svg".startswith(h) else False
+            return h.startswith(b"<svg") and h[4:5] in (b" ", b"\t", b"\r", b"\n", b">", b"/")
+
+
+def inert_type(head: bytes | None, upstream: str) -> tuple[str, bool]:
+    """(the Content-Type to serve, whether as an attachment): png, jpeg, gif, webp by their bytes; SVG (its bytes, or
+    the service's type unless the bytes are another document) as image/svg+xml, which the proxy sends with
+    `Content-Security-Policy: sandbox`: opened as a page it runs no script and has an opaque origin, as /api/raw's
+    SVG; anything else (html, xhtml, xml) application/octet-stream, an attachment. The service's own type is never
+    passed through. head None (a HEAD): its declared image type, nothing else."""
     up = (upstream or "").split(";")[0].strip().lower()
     if head is None:
-        return (up, False) if up in ("image/png", "image/jpeg", "image/gif", "image/webp") else ("application/octet-stream", True)
+        return (up, False) if up in ("image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml") \
+            else ("application/octet-stream", True)
     for magic, t in IMAGE_MAGIC:
         if head.startswith(magic):
             return t, False
     if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return "image/webp", False
-    svg = up == "image/svg+xml" or head.lstrip()[:5].lower() in (b"<svg ", b"<svg>", b"<?xml") and b"<svg" in head.lower()
-    if svg and dest == "image":
+    root = svg_root(head)
+    if root or (root is None and up == "image/svg+xml"):
         return "image/svg+xml", False
     return "application/octet-stream", True

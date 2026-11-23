@@ -60,6 +60,7 @@ function setOnline(v) {
   document.body.classList.toggle("offline", !v);
 }
 function onEvent(m) {
+  if (m.t === "hello" || m.t.startsWith("plugin-")) pviewEvent(m);  // (m-pviews.js: a plugin's thread, doc or list on screen)
   if (m.t === "hello") {
     setOnline(true);
     S.machines = m.machines || [];

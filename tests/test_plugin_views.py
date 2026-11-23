@@ -88,6 +88,15 @@ class H(BaseHTTPRequestHandler):
             return self.out(200, b"<?xml version='1.0'?><html xmlns='http://www.w3.org/1999/xhtml'><script>x</script></html>", "application/xhtml+xml")
         if p == "/files/pic.svg":
             return self.out(200, b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>", "image/svg+xml")
+        if p == "/files/prolog.svg":  # (a BOM, a prolog, a comment, a doctype; any type)
+            return self.out(200, b"\xef\xbb\xbf<?xml version='1.0'?>\n<!-- by hand -->\n<!DOCTYPE svg PUBLIC '-//W3C//DTD SVG 1.1//EN' 'x'>\n"
+                                 b"<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'/>", "application/octet-stream")
+        if p == "/files/plain":  # (an SVG by its bytes only)
+            return self.out(200, b"  <svg xmlns='http://www.w3.org/2000/svg'/>", "text/plain")
+        if p == "/files/fake.svg":  # (says svg, is html)
+            return self.out(200, b"<html><script>alert(1)</script></html>", "image/svg+xml")
+        if p == "/files/note.xml":
+            return self.out(200, b"<?xml version='1.0'?><note><svg/></note>", "text/xml")
         if p == "/files/fake.png":  # (says png, is html)
             return self.out(200, b"<html><script>alert(1)</script>", "image/png")
         if p == "/files/redirect":
@@ -518,11 +527,50 @@ class ViewsTest(test_skeleton.SkeletonTest):
         h.trust_loopback = False  # another machine, with the server's token
         try:
             self.assertEqual(self.req("PUT", self.tpath("k"), {"messages": []}, headers={**tok, "X-Orbit-Plugin-Token": self.token()})[0], 403)
-            code, r = self.req("POST", self.tpath("k") + "/send", {"markdown": "hi", "files": [], "client_id": "c1"}, headers=tok)
-            self.assertEqual(code, 403)  # sending: this machine only
             self.assertEqual(self.req("GET", self.tpath("k"), headers=tok)[1]["messages"][0]["id"], "1")  # reading: fine
         finally:
             h.trust_loopback = True
+
+    def test_a_reply_from_another_machine_with_the_token(self):
+        """The phone (or another machine's page) replies with the server's token: that is the user. Without it,
+        refused; its files are only what it uploaded; the plugin's own actions stay this machine's."""
+        self.service()
+        self.push("PUT", "W", {"messages": [self.m(1)]})
+        h = type(self).srv.RequestHandlerClass
+        from orbit.machines import remote
+        tok = {"Authorization": "Bearer " + remote.token(self.state)}
+        body = lambda cid, files=(): {"markdown": "from the phone", "files": list(files), "client_id": cid}
+        h.trust_loopback = False
+        try:
+            code, r = self.req("POST", self.tpath("W") + "/send", body("p0"))
+            self.assertEqual(code, 401, r)  # no token: not the user
+            code, r = self.req("POST", self.tpath("W") + "/send", body("p0"), headers={"Authorization": "Bearer nope"})
+            self.assertEqual(code, 401, r)
+            code, up = self.req("POST", "/api/upload", {"name": "shot.png", "data": __import__("base64").b64encode(PNG).decode()}, headers=tok)
+            self.assertEqual(code, 200, up)
+            code, r = self.req("POST", self.tpath("W") + "/send", body("p1", [{"name": "shot.png", "path": up["path"]}]), headers=tok)
+            self.assertEqual(code, 200, r)
+            self.assertEqual((r["message"]["pending"], r["message"]["files"]), ("sending", [{"name": "shot.png"}]))
+            secret = Path(self.work) / "secret.txt"
+            secret.write_text("x")
+            for path in (str(secret), str(Path(up["path"]).parent / ".." / ".." / "x"), "/etc/hosts"):
+                code, r = self.req("POST", self.tpath("W") + "/send", body("p2", [{"name": "x", "path": path}]), headers=tok)
+                self.assertEqual(code, 400, path)  # (another machine has no path here but its uploads)
+                self.assertIn("uploaded", r["error"])
+            self.assertEqual(self.req("POST", "/api/plugins/chat/run", {"args": ["x"]}, headers=tok)[0], 403)  # its [cli]: here only
+        finally:
+            h.trust_loopback = True
+        self.assertTrue(wait_for(lambda: any(x["path"] == "/orbit/send" for x in self.svc_log()), timeout=10))
+        sent = next(x for x in self.svc_log() if x["path"] == "/orbit/send")
+        self.assertEqual((sent["body"]["markdown"], sent["body"]["client_id"], sent["body"]["files"]),
+                         ("from the phone", "p1", [{"name": "shot.png", "path": up["path"]}]))
+        self.assertEqual([x["id"] for x in self.msgs("W")], ["1", "pending:p1"])
+        h.trust_loopback = False
+        try:  # Edit of one not sent: discard, from there too
+            self.assertEqual(self.req("POST", self.tpath("W") + "/discard", {"client_id": "p1"}, headers=tok)[1], {"ok": True})
+        finally:
+            h.trust_loopback = True
+        self.assertEqual([x["id"] for x in self.msgs("W")], ["1"])
 
     # ------------------------------------------------------------------ asked for in the background
     def test_fetched_from_the_service_never_blocking(self):
@@ -691,18 +739,26 @@ class ViewsTest(test_skeleton.SkeletonTest):
         got = [x for x in self.svc_log() if x["path"] == "/files/a.png"][-1]["headers"]
         self.assertEqual(got["X-Orbit-Proxy"], "1")
         self.assertEqual(got["X-Orbit-Plugin-Token"], self.token())
-        for path in ("/files/page.html", "/files/page.xhtml", "/files/fake.png", "/files/pic.svg"):
-            code, h, body = self.raw("GET", base + path)
-            self.assertEqual(code, 200, path)
-            self.assertEqual(h["content-type"], "application/octet-stream", path)  # never active content
-            self.assertTrue(h["content-disposition"].startswith("attachment"), path)
-            self.assertEqual((h["x-content-type-options"], h["content-security-policy"]), ("nosniff", "sandbox"))
-        code, h, _ = self.raw("GET", base + "/files/pic.svg", {"Sec-Fetch-Dest": "image"})  # an <img>: SVG, sandboxed
-        self.assertEqual(h["content-type"], "image/svg+xml")
-        self.assertIn("sandbox", h["content-security-policy"])
-        self.assertIn("default-src 'none'", h["content-security-policy"])
-        code, h, _ = self.raw("GET", base + "/files/page.html", {"Sec-Fetch-Dest": "image"})
-        self.assertEqual(h["content-type"], "application/octet-stream")
+        for path in ("/files/page.html", "/files/page.xhtml", "/files/fake.png", "/files/fake.svg", "/files/note.xml"):
+            for dest in ({}, {"Sec-Fetch-Dest": "image"}):
+                code, h, body = self.raw("GET", base + path, dest)
+                self.assertEqual(code, 200, path)
+                self.assertEqual(h["content-type"], "application/octet-stream", path)  # never active content
+                self.assertTrue(h["content-disposition"].startswith("attachment"), path)
+                self.assertEqual((h["x-content-type-options"], h["content-security-policy"]), ("nosniff", "sandbox"))
+        # SVG: by its bytes (or the service's type), whatever the browser says it is for (Safari sends no
+        # Sec-Fetch-Dest), always sandboxed: opened as a page it runs no script, in an opaque origin
+        for path in ("/files/pic.svg", "/files/prolog.svg", "/files/plain"):
+            for dest in ({}, {"Sec-Fetch-Dest": "image"}, {"Sec-Fetch-Dest": "document"}):
+                code, h, body = self.raw("GET", base + path, dest)
+                self.assertEqual((code, h["content-type"]), (200, "image/svg+xml"), (path, dest))
+                self.assertNotIn("content-disposition", h)
+                csp = [x.strip() for x in h["content-security-policy"].split(";")]
+                self.assertIn("sandbox", csp)  # (sandbox alone: no allow-scripts, no allow-same-origin)
+                self.assertNotIn("allow-scripts", h["content-security-policy"])
+                self.assertIn("default-src 'none'", csp)
+                self.assertEqual(h["x-content-type-options"], "nosniff")
+        self.assertEqual(self.raw("HEAD", base + "/files/pic.svg")[1]["content-type"], "image/svg+xml")
         self.assertEqual(self.raw("GET", base + "/files/close.png")[2], PNG)
         code, h, body = self.raw("HEAD", base + "/files/a.png")
         self.assertEqual((code, body), (200, b""))

@@ -288,7 +288,7 @@ beside the server (a chat bridge, a webhook: they send requests to sessions with
 card, and take the answers back), a **command** for agents (`orbit-agent p NAME …`), a sentence on the agents'
 `[orbit]` line, **secrets** kept on this machine, and things on the page, all drawn by Orbit from the data it gives
 (plugin API 2.0: no iframes): **threads** that read and reply like a conversation (a Slack thread: Orbit's Markdown,
-editor, ⌘F, image viewer, quote menu), **lists** drawn like the Sessions list (an inbox in the left panel), **docs**
+editor, ⌘F, image viewer, quote menu; on the phone too, under Misc), **lists** drawn like the Sessions list (an inbox in the left panel), **docs**
 (Markdown it pushes, in a tab or the side pane), **status items**, **actions** in the More menu and on answers,
 **notifications**, **shortcuts** for its tab and panels, **⌘O tabs** of items it keeps in Orbit (searched live through
 its service); an agent may show a quota in the status bar, and its conversations join Resume another session. [builddoc/plugins.md](builddoc/plugins.md) is the guide and the

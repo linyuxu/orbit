@@ -229,8 +229,7 @@ kbd { font-family:var(--font); font-size:calc(11px * var(--ui-k)); padding:1px 5
 .pchip .x { border:0; background:none; color:var(--ink-3); padding:2px; display:grid; place-items:center; border-radius:4px; }
 .pchip .x:hover { color:var(--ink); background:var(--btn-hover); }
 .pcomposer .pnote { flex:1; }
-.pnosend { width:var(--col); max-width:100%; margin:0 auto; text-align:center; color:var(--ink-3); font-size:calc(12px * var(--ui-k)); padding:8px 0; }
-.pnosend[hidden], .pcomposer[hidden] { display:none; }
+.pcomposer[hidden] { display:none; }
 /* A doc: the answers' type in the conversation's column; a list: the Sessions list's rows */
 .pdocv { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
 .pdocbox { flex:1; min-height:0; overflow-y:auto; outline:none; }

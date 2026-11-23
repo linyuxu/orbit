@@ -127,9 +127,8 @@ Its rows have the Sessions list's keys and context menu (Open, Open in the side 
 
 ## 5. Phone
 
-The phone app gets the same views from the same API: Misc → the plugin's inbox → a thread. It has the phone's
-input editor and image viewer. Since this needs no new API, it can follow later, but the data shapes above are what
-it uses.
+Done (§9.11). The phone app gets the same views from the same API: Misc → the plugin's inbox → a thread. It has the
+phone's input editor and image viewer, and replies from there.
 
 ## 6. Compatibility
 
@@ -159,7 +158,7 @@ it uses.
 
 1. **The `svc:` proxy serves only inert content in Orbit's origin.** The Content-Type is never passed through:
    - png, jpeg, gif and webp are served as images, with the sniffed type checked against the bytes;
-   - SVG is allowed only as an `<img>` source;
+   - SVG is allowed only as an `<img>` source (§9.12: always SVG, sandboxed, instead);
    - anything else is `application/octet-stream` with `Content-Disposition: attachment`.
 
    Always sent: `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox` (and the same `nosniff` is
@@ -225,8 +224,8 @@ it uses.
    - "Quote in a session…" uses `quoteTo` with the thread's title as the reference.
    - "Send to a session…" is a new session picker plus `/send` with `origin` (`{plugin, label: thread title, url}`):
      the message and the thread's last 30 messages, capped at 20 KB.
-10. **Phone** (§5): not in this round. Reading a thread and proxied images work remotely; sending from a remote
-    client is decided when the phone view is built.
+10. **Phone** (§5): built after 2.0 (§9.11). Reading a thread and proxied images work remotely, and so does sending
+    (decided then: a client with the server's token is the user).
 
 ## 9. As built (where it differs from §1–§8)
 
@@ -249,15 +248,16 @@ it uses.
    replaces it) → replaced; or `failed` with the error. One that was `sending` when the server stopped comes back as
    "Not sent". Retry sends the stored message again (its markdown and files), with the same `client_id`, whatever the
    page sends. A reply's `files[].path` may be any file of this machine (a drop in the app gives real paths), not only
-   an upload.
+   an upload; from another machine (§9.11), only an upload.
 5. **Events** carry `rev` and the change: `append`, `update`, `remove`, `replace` (the real message in a pending one's
    place), the thread's fields, `error`; `whole` for a PUT or a fetch (the page fetches it). `plugin-doc` carries only
    `rev` (the page fetches). Older messages are never kept by the server (all of them stay in the page).
 6. **The proxy**: the service is the one whose `files` prefix the path starts with (the URL names none); Orbit sends
    the plugin's token besides `X-Orbit-Proxy: 1`; a 206 also passes `Content-Range` (Range is forwarded: a partial
-   answer needs it); SVG counts as an `<img>` when the browser says `Sec-Fetch-Dest: image`; a HEAD answers the
-   declared image type (no bytes to check) else octet-stream; the answer is streamed when the service gives a length,
-   else read up to the cap first. A request over 1 MB to the push routes is 413.
+   answer needs it); SVG is SVG, sandboxed, whatever the browser asks for (§9.12; it was only for
+   `Sec-Fetch-Dest: image`); a HEAD answers the declared image type (no bytes to check) else octet-stream; the
+   answer is streamed when the service gives a length, else read up to the cap first. A request over 1 MB to the push
+   routes is 413.
 7. **Links**: a thread's and a message's `url` may also use the plugin's `schemes` (Open at the source in Slack), not
    only https and http as items'.
 8. **Store**: `<state>/plugin-threads/<plugin>/` holds an index and a file per thread or doc; 64 views stay in memory,
@@ -270,7 +270,36 @@ it uses.
    the pointer gets the browser's menu (Copy), as an answer does. Drafts live in `localStorage` (`orbit.threadDrafts`,
    by tab path), shared by the main page and side tabs. A side tab of a view is the embed kind `pview` with the view's
    path; a panel's doc or list has the path `plugin:<p>/~doc/<id>` or `…/~list/<source>`. In the left panel a list's
-   detail shows in the strip under the list, as a session's preview does. Another machine's page shows the thread
-   without the editor ("Replies are written on … own machine").
+   detail shows in the strip under the list, as a session's preview does. Another machine's page showed the thread
+   without the editor; since §9.11 it has the editor too.
 10. **Manifest**: a view whose service is ambiguous (several services, none named) is a warning, and `[cli]` is used.
-
+11. **The phone** (§5, after 2.0; `web/m/m-pviews.js`), no new API:
+    - Misc lists each plugin's left tabs and panels it can draw (lists, docs, threads with a key), under the plugin's
+      name; a list's row counts its unread items.
+    - A list is a page of the Sessions list's rows (label, tag, an unread dot, time; the detail under it), grouped by
+      `group`; pull to refresh when its source has a `refresh` command (`/api/palette?…&fresh=1` runs it now, one run
+      at a time). An item opens its `open` (a thread or doc page; a URL in Safari), else its source's tab kind.
+    - A thread is a page over the tab bar, drawn with the conversation's classes (`.md`, `.ans .head`, `.req .bubble`,
+      the foot): the same computed type as an answer (measured, WebKit and Chromium). Its scroll rule is the
+      conversation's (m-conv.js: a scroll the page made is told apart by where it lands), not `MsgList` (its
+      wheel-and-touch timing loses iOS momentum). Older messages page in at the top, the message in view kept.
+    - Replies: a `CM.createEditor` per thread page (a draft per thread in `orbit.m.threadDrafts`), photos and pasted
+      images shrunk as the conversation's, uploaded to the server's machine and sent as `files[]` chips; Sending… /
+      Not sent with Retry and Edit as on the desktop. No Steer, Queue or Stop.
+    - The server takes `…/send` and `…/discard` from any client with its token (`_guard` checks every remote
+      request): that is the user. Another machine's `files[].path` must be one of the server's uploads (it has no
+      other path there; 400 otherwise). `[[ui.message.menu]]` and every `[cli]` action stay this machine's (403).
+      Another machine's desktop page shows the editor too.
+    - Unread: an item opened, and every item that opens a thread while that thread was on screen, is read on this
+      phone (until the plugin changes its time). Avatars are the message's or initials (`/api/people` runs the
+      plugins' commands: this machine only).
+    - The phone has no notifications (its service worker's push handler is a stub), so a plugin's `notify` /
+      `open-tab` do not open a thread there.
+    - One history entry is kept (replaceState only); back is the page stack's (the chevron, the edge swipe, which
+      never reveals the conversation layer).
+12. **SVG through the proxy** (after 2.0): `Sec-Fetch-Dest` is not relied on (a browser that does not send it showed
+    SVG broken). An SVG by its bytes (`<svg` first, after an optional BOM, XML prolog, comments, whitespace and a
+    DOCTYPE without an internal subset), or by the service's type when the bytes are not another document, is always
+    `image/svg+xml` with `Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline'` and
+    `nosniff`: opened as a page it runs no script and has an opaque origin (as `/api/raw`'s SVG). HTML, XHTML, XML
+    and anything else stay `application/octet-stream` attachments. The proxy reads the first 1 KB to tell.
