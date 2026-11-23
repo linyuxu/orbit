@@ -1,0 +1,116 @@
+"use strict";
+/* ===================================================================== state */
+const FAV = "fav";  // the ★ Favorites view (⌘1): every favorite session, whatever its group
+const S = {
+  sessions: new Map(),            // open sessions, in tab order (the server's order)
+  groups: [],                     // [{id, name}] in left-panel order: ⌘2…⌘9
+  cards: new Map(),               // sid → [card], loaded on first view
+  cardState: new Map(),           // "sid:cid" → last seen state (notifications)
+  current: LS.get("current", null),   // the session tab of this group (the folder files belong to)
+  file: LS.get("file", null),         // the main tab is this file (null: the session)
+  group: LS.get("group", null),   // the group whose tabs the title bar shows (or FAV)
+  lastTab: LS.get("lastTab", {}), // group → "s:<sid>" | "f:<path>"
+  ftabs: LS.get("ftabs", {}),     // group → [{path, pinned}]
+  tabOrder: LS.get("tabOrder", {}), // group → ["s:<sid>" | "f:<path>"]: sessions and files mixed, as the user arranged them
+  closedFiles: LS.get("closedFiles", []),  // [{path, t, gid}] for ⌘⇧T
+  openSteps: new Set(),
+  machines: [],                  // other machines: [{name, ok, error}] (Settings → Machines)
+  machine: LS.get("machine", ""), // the Sessions panel shows every machine ("") or one ("local", NAME)
+  closedSteps: new Set(),         // running cards whose steps the user folded
+  atEnd: true,
+  pendingScroll: null,
+  drafts: LS.get("drafts", {}),
+  zoom: LS.get("zoom", ZOOM_DEFAULT),
+  hist: [], histPos: -1,          // visited tabs (⌘- ⌘=): "s:<sid>" | "f:<path>"
+  recent: LS.get("recent", []),   // [{id: "s:…"|"f:…", t}] (⌘R)
+  notes: LS.get("notes", []),
+  unread: new Set(LS.get("unread", [])),
+  left: LS.get("left", { shown: false, tab: "sessions", w: 240 }),
+  follow: LS.get("follow", true),
+  filter: "",
+  pcursor: null,
+  expanded: LS.get("expanded", {}),  // root → [dir] unfolded in the Files tree
+  trees: new Map(),               // root → {files, status, git, branch, at, index, dirty}
+  sides: LS.get("sides", {}),     // main tab key → {list: [spec], i}: that tab's side tabs and the shown one
+  legacySide: LS.get("side", null), // a single side tab saved before side tabs were per main tab
+  tabFocus: LS.get("tabFocus", {}), // main tab key → "main" | "side": where the keyboard was in it
+  shownKey: null,                 // the main tab key the page shows now
+  sideW: LS.get("sideW", 0.45),
+  review: { count: 0, root: null, git: false },
+  vault: null,                    // the notes vault folder (absolute)
+  noteNames: [],                  // note names for [[ completion
+  reveal: null,                   // {path, line}: put the cursor on this line once the file shows
+  harnesses: [{ id: "claude", label: "Claude Code", models: [] }],  // what /api/harnesses says a session can run
+  editing: null,                  // {sid, cid}: the request being edited (✎); sending replaces it
+};
+const cur = () => S.sessions.get(S.current);
+/* The side tab the pane shows: the current main tab's chosen one ({kind, sid?, path?, root?, url?, id}) or null. */
+Object.defineProperty(S, "side", { get() { const e = sideEntry(); return e && e.list[e.i] || null; } });
+const harnessLabel = id => (S.harnesses.find(h => h.id === id) || { label: id }).label;
+const ACTIVE = new Set(["thinking", "running"]);
+const groupName = gid => gid === FAV ? "Favorites" : (S.groups.find(g => g.id === gid) || { name: "?" }).name;
+/* Other machines (from the server): their sessions carry "remote": NAME and sit in this server's groups. The
+   Sessions panel can show one machine only (S.machine: "" every machine, "local" this one, or NAME). */
+const machineOk = s => !S.machine || (S.machine === "local" ? !s.remote : s.remote === S.machine);
+const machineUp = name => !(S.machines || []).some(m => m.name === name && !m.ok);
+const machineTag = s => s && s.remote ? `<span class="mtag${machineUp(s.remote) ? "" : " off"}" title="${machineUp(s.remote) ? `On ${esc(s.remote)}` : `${esc(s.remote)} is unreachable`}">${esc(s.remote)}</span>` : "";
+const inView = (s, gid = S.group) => gid === FAV ? s.favorite : s.group === gid;
+function tabIds(gid = S.group) { return [...S.sessions.values()].filter(s => inView(s, gid)).map(s => s.id); }
+const fileTabs = (gid = S.group) => (S.ftabs[gid] = S.ftabs[gid] || []);
+const tabKey = () => S.file ? "f:" + S.file : S.current ? "s:" + S.current : null;
+/* The folder the Files tree, ⌘O Files and ± Review work in: the session tab's folder. */
+/* The tree follows what is in front: the session's folder, or, for a file outside it (a note, another repo), that
+   file's own root: the vault for a note, its git repo, else its folder. */
+const FILE_ROOTS = new Map();  // folder → root, learned from the server
+function fileRoot(path) {
+  if (S.vault && path.startsWith(S.vault + "/")) return S.vault;
+  const dir = dirname(path);
+  if (FILE_ROOTS.has(dir)) return FILE_ROOTS.get(dir);
+  FILE_ROOTS.set(dir, dir);
+  api("GET", "/api/file-root?path=" + encodeURIComponent(path)).then(r => {
+    if (!r.root || r.root === dir) return;
+    FILE_ROOTS.set(dir, r.root);
+    if (S.file === path && S.left.shown && S.left.tab === "files") { refreshTree(panelRoot()); revealFile(path); renderLeft(); }
+  }).catch(() => {});
+  return dir;
+}
+const inFolder = (p, root) => !!root && (p === root || p.startsWith(root.replace(/\/$/, "") + "/"));
+/* A view tab: a main tab like a file's, showing one of Orbit's own views (orbit:calendar) instead of a file. */
+const VIEWS = { "orbit:calendar": { kind: "calendar", title: "Calendar", icon: "calendar" },
+                "orbit:schedules": { kind: "schedules", title: "Schedules", icon: "clock" } };
+const isPluginTab = p => typeof p === "string" && p.startsWith("plugin:");  // a plugin's main tab (plugins.js)
+const isView = p => typeof p === "string" && (Object.prototype.hasOwnProperty.call(VIEWS, p) || isPluginTab(p));
+const viewInfo = p => isPluginTab(p) ? pluginTabInfo(p) : VIEWS[p];
+const ctxRoot = () => EMBED && EMBED.root && S.file && S.file.startsWith(EMBED.root + "/") ? EMBED.root  // a side tab's own repo
+  : isView(S.file) ? (cur() ? cur().cwd : null)
+  : S.file && !(cur() && (inFolder(S.file, cur().cwd) || inFolder(S.file.replace(/^\/private/, ""), cur().cwd.replace(/^\/private/, "")))) ? fileRoot(S.file)
+  : cur() ? cur().cwd : S.file ? dirname(S.file) : null;
+const isNote = p => !!(S.vault && p && p.startsWith(S.vault + "/") && /\.md$/i.test(p));
+const noteTitle = p => basename(p).replace(/\.md$/i, "");
+/* The folder the left panel's tree shows: the vault on the Notes tab, else the session's folder. */
+const panelRoot = () => S.left.tab === "notes" ? S.vault : ctxRoot();
+
+function setSessions(list, groups) {
+  S.sessions = new Map(list.filter(s => !s.closed).map(s => [s.id, s]));
+  if (groups) S.groups = groups;
+  if (EMBED) { if (EMBED.sid) S.current = EMBED.sid; return; }
+  const asked = PARAMS.get("session");  // ?session=ID: opened on that session (a remote's page opened from another machine)
+  if (asked && !setSessions.done && S.sessions.has(asked)) {
+    setSessions.done = true;
+    S.group = S.sessions.get(asked).group || S.group; S.current = asked;
+  }
+  if (S.group !== FAV && !S.groups.some(g => g.id === S.group)) S.group = S.groups[0] ? S.groups[0].id : null;
+  if (!S.sessions.has(S.current) || !inView(S.sessions.get(S.current))) {
+    const want = String(S.lastTab[S.group] || "");
+    const sid = want.startsWith("s:") ? want.slice(2) : want.startsWith("f:") ? null : want;
+    S.current = sid && S.sessions.has(sid) && inView(S.sessions.get(sid)) ? sid : (tabIds()[0] || null);
+  }
+  if (S.file && !fileTabs().some(t => t.path === S.file)) S.file = null;
+}
+function saveUi() {
+  if (EMBED) return;
+  LS.set("current", S.current); LS.set("file", S.file); LS.set("group", S.group); LS.set("lastTab", S.lastTab);
+  LS.set("left", S.left); LS.set("follow", S.follow); LS.set("ftabs", S.ftabs); LS.set("tabOrder", S.tabOrder); LS.set("sides", S.sides); LS.set("tabFocus", S.tabFocus); LS.set("sideW", S.sideW);
+  LS.set("expanded", S.expanded); LS.set("closedFiles", S.closedFiles);
+  reportCtx();
+}

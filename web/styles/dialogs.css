@@ -1,0 +1,100 @@
+/* ===================================================================== toast / dialog / menu */
+#toast { position:fixed; left:50%; bottom:110px; transform:translateX(-50%); background:var(--ink); color:var(--bg);
+  font-size:calc(12px * var(--ui-k)); padding:7px 12px; border-radius:var(--r-s); opacity:0; pointer-events:none; z-index:100; max-width:70vw; }
+#toast.show { opacity:.92; pointer-events:auto; }
+.backdrop { position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:50; }
+.dialog { position:fixed; top:18vh; left:50%; transform:translateX(-50%); width:380px; max-width:calc(100vw - 32px);
+  background:var(--surface); border-radius:var(--r-m); box-shadow:var(--shadow), 0 0 0 1px var(--line); padding:14px 16px; z-index:51; }
+.dialog { top:calc(18vh / var(--zoom, 1)); max-height:calc(82vh / var(--zoom, 1) - 24px); overflow-y:auto; overscroll-behavior:contain; }  /* never past the screen's foot (vh is not zoomed: divide) */
+.dialog .btns { position:sticky; bottom:-14px; background:var(--surface); padding:8px 0 14px; margin-bottom:-14px; }
+.dialog.wide { width:860px; }
+.dialog.mid { width:580px; }  /* a form: wide enough for its labels, not a line of 900px fields */
+.segc { display:inline-flex; flex:none; background:var(--bg); border-radius:var(--r-s); padding:2px; gap:2px; box-shadow:0 0 0 1px var(--line); }
+.segc button { height:26px; padding:0 11px; border:0; background:none; border-radius:5px; color:var(--ink-2); font-size:calc(12px * var(--ui-k)); cursor:default; white-space:nowrap; }
+.segc button:hover { color:var(--ink); }
+.segc button.on { background:var(--surface); color:var(--ink); font-weight:600; box-shadow:0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,.06); }
+.segc:focus-within { box-shadow:0 0 0 1px var(--focus); }
+.dialog .btns .hintl { margin-right:auto; align-self:center; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); white-space:nowrap; }
+.dialog .title { font-size:calc(12px * var(--ui-k)); font-weight:600; margin-bottom:10px; }
+.dialog .body { font-size:calc(12px * var(--ui-k)); color:var(--ink-2); margin-bottom:10px; line-height:1.5; white-space:pre-wrap; }
+.field { margin-bottom:10px; position:relative; }
+.field label { display:block; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); margin-bottom:4px; }
+.field input { width:100%; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-s); padding:7px 10px; font:calc(12px * var(--ui-k)) var(--font); color:var(--ink); }
+.field input:focus, .field input:focus-visible { border-color:var(--accent); outline:none; }
+.dialog .error { font-size:calc(11px * var(--ui-k)); color:var(--err); margin:-4px 0 8px; }
+.dialog .error:empty { display:none; }
+.dialog .btns { display:flex; justify-content:flex-end; gap:8px; margin-top:4px; }
+.btn { height:30px; padding:0 14px; border-radius:var(--r-s); border:1px solid var(--line); background:var(--surface); color:var(--ink-2); font-family:var(--font); font-size:calc(12px * var(--ui-k)); font-weight:600; cursor:default; white-space:nowrap; }
+.btn:hover { color:var(--ink); border-color:var(--ink-3); }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:600; }
+.btn.danger { background:var(--err); border-color:var(--err); color:#fff; font-weight:600; }
+.btn.sm { height:26px; padding:0 9px; font-size:calc(12px * var(--ui-k)); }
+.btn.quiet { border-color:transparent; background:none; font-weight:500; }  /* a button in a row: text, its border on hover */
+.btn.quiet:hover { border-color:var(--line); background:var(--surface); }
+.btn:disabled { opacity:.45; }
+.dd { width:100%; display:flex; align-items:center; justify-content:space-between; background:var(--bg); border:1px solid var(--line);
+  border-radius:var(--r-s); padding:6px 10px; font-size:calc(12px * var(--ui-k)); color:var(--ink); cursor:default; text-align:left; }
+.dd svg, .field .ddbtn svg { color:var(--ink-3); }
+.field .ddbtn { position:absolute; right:4px; bottom:4px; width:24px; height:22px; border:0; background:none; border-radius:4px; display:grid; place-items:center; cursor:default; }
+.field .ddbtn:hover { background:var(--btn-hover); }
+.field.combo input { padding-right:30px; }
+.dd:focus-visible { border-color:var(--accent); outline:none; }
+/* Menus, after Chrome's on macOS: a translucent, blurred sheet (10px corners, a fine edge, a soft shadow), 24px rows
+   of 13px text set 16px in, separators inset to the text; the row under the pointer or the keys a quiet grey. */
+.menu { position:fixed; background:var(--menu-bg); -webkit-backdrop-filter:blur(30px) saturate(1.6); backdrop-filter:blur(30px) saturate(1.6);
+  border-radius:10px; padding:5px; box-shadow:var(--menu-shadow); z-index:60; min-width:220px; max-height:60vh; overflow-y:auto;
+  font-size:calc(13px * var(--ui-k)); }
+.menu .row { height:calc(24px * var(--ui-k)); display:flex; align-items:center; gap:8px; padding:0 calc(11px * var(--ui-k)); border-radius:5px;
+  cursor:default; white-space:nowrap; color:var(--ink); }
+.menu .row.sel { background:var(--menu-sel); }
+#mentionpop { position:absolute; left:12px; bottom:100%; margin-bottom:6px; min-width:260px; max-width:min(560px, 90%); max-height:280px;
+  overflow:auto; background:var(--surface); border-radius:var(--r-m); padding:4px; box-shadow:var(--menu-shadow); z-index:20; }
+#mentionpop .row { height:28px; display:flex; align-items:center; gap:8px; padding:0 8px; border-radius:var(--r-s); white-space:nowrap; color:var(--ink); cursor:default; }
+#mentionpop .row.sel { background:var(--sel); }
+#mentionpop .row .sub { margin-left:auto; padding-left:14px; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); flex:none; max-width:32%; overflow:hidden; text-overflow:ellipsis; }
+#mentionpop .q { font-size:calc(11px * var(--ui-k)); color:var(--ink-3); padding:4px 8px 6px; }
+.md a.mention { font-weight:500; }
+#editing { display:flex; align-items:center; gap:6px; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); padding:0 2px 6px; }
+#editing[hidden] { display:none; }
+#editing button { border:0; background:none; color:var(--link); padding:0; cursor:default; font-size:calc(11px * var(--ui-k)); }
+.menu .row .lbl { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.menu .row .k { margin-left:auto; padding-left:24px; font-size:calc(12px * var(--ui-k)); color:var(--ink-3); }
+.menu .row .sub { margin-left:auto; padding-left:24px; color:var(--ink-2); display:flex; }
+/* A row's letter key: underlined only in a menu opened from the keyboard (⌘E); the letters work in every menu. */
+.menu .row u { text-decoration:none; }
+.menu.keys .row u { text-decoration:underline; text-decoration-color:var(--ink-3); text-decoration-thickness:1.5px; text-underline-offset:2px; }
+.menu .q { font-size:calc(11px * var(--ui-k)); color:var(--ink-3); padding:4px calc(11px * var(--ui-k)) 6px; }
+.menu hr { border:0; border-top:1px solid var(--menu-line); margin:5px calc(11px * var(--ui-k)); }
+.finder { width:600px; padding:10px; }
+.finder .ftabs { display:flex; background:var(--bg); border-radius:var(--r-s); padding:2px; gap:2px; margin-bottom:8px; width:max-content; }
+.finder .fq { width:100%; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-s); padding:7px 10px; font:calc(12px * var(--ui-k)) var(--font); color:var(--ink); }
+.finder .fq:focus { border-color:var(--accent); outline:none; }
+.finder .flist { max-height:52vh; overflow-y:auto; margin-top:6px; }
+.frow { min-height:28px; display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:var(--r-s); cursor:default; font-size:calc(12px * var(--ui-k)); }
+.frow.sel { background:var(--sel); }
+.frow .fl { color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:none; max-width:45%; }
+.frow .fd { color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1; }
+.frow .fk { color:var(--ink-3); font-size:calc(11px * var(--ui-k)); flex:none; }
+.frow .tag { font-size:calc(11px * var(--ui-k)); color:var(--ink-3); border:1px solid var(--line); border-radius:4px; padding:0 4px; flex:none; }
+.fempty { color:var(--ink-3); padding:18px 8px; text-align:center; }
+.fdiv { display:flex; gap:8px; align-items:baseline; margin:6px 8px 2px; padding-top:6px; border-top:1px solid var(--line); color:var(--ink-3); font-size:calc(11px * var(--ui-k)); }
+.fdiv .fds { margin-left:auto; }
+.sheet { max-height:calc(62vh / var(--zoom, 1)); overflow-y:auto; columns:2; column-gap:28px; font-size:calc(12px * var(--ui-k)); }
+.sheet h4 { font-size:calc(11px * var(--ui-k)); color:var(--ink-3); font-weight:600; margin:10px 0 4px; break-after:avoid; }
+.sheet .r.sel { background:var(--sel-focus); border-radius:var(--r-s); }
+.sheet .r { display:flex; gap:10px; padding:3px 0; break-inside:avoid; border-bottom:1px solid var(--line); }
+.sheet .r .kk { flex:none; width:118px; color:var(--ink); font-weight:500; }
+.sheet .r .aa { color:var(--ink-2); }
+#lightbox { position:fixed; inset:0; background:rgba(20,20,22,.86); z-index:90; display:none; place-items:center; cursor:zoom-out; }
+#lightbox.show { display:grid; }
+#lightbox img { max-width:94vw; max-height:94vh; border-radius:var(--r-s); }
+/* A cut-off name's whole text (tooltip.js): the menu's surface, small */
+#tip { position:fixed; z-index:58; max-width:min(640px, 80vw); padding:4px 8px; background:var(--surface); color:var(--ink);
+  border-radius:var(--r-s); box-shadow:var(--menu-shadow); font:calc(12px * var(--ui-k))/1.45 var(--font); word-break:break-all; white-space:pre-line; pointer-events:none;
+  opacity:0; transition:opacity .08s; }
+#tip.show { opacity:1; }
+
+/* the schedule dialog's Advanced toggle (U9) */
+.dialog .advtog { display:flex; align-items:center; gap:6px; margin:2px 0 10px; padding:0; border:0; background:none; color:var(--ink-2); font-size:calc(12px * var(--ui-k)); cursor:default; }
+.dialog .advtog:hover { color:var(--ink); }
+.dialog .field .segc { display:flex; width:max-content; }

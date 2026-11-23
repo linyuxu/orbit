@@ -1,0 +1,15 @@
+.DS_Store
+.idea/
+__pycache__/
+*.pyc
+.ruff_cache/
+/build/
+/dist/
+/*.egg-info/
+/.venv/
+/app/target/
+/app/gen/
+/.claude/
+
+# a private service (not part of Orbit)
+/shared_chat/

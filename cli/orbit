@@ -1,0 +1,8 @@
+#!/bin/sh
+# orbit: run and manage Orbit itself (people, not agents).
+#   orbit serve            the server (the backend the app and the agents talk to)
+#   orbit tools install    make orbit-agent and Orbit's skill available to every harness, in any terminal
+# `orbit --help` lists them. Code: orbit/cli.py.
+self=$0
+while [ -L "$self" ]; do l=$(readlink "$self"); case "$l" in /*) self=$l ;; *) self=$(dirname "$self")/$l ;; esac; done
+exec "$(dirname "$self")/_run" "$self" orbit.cli.orbit "$@"

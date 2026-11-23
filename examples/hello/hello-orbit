@@ -1,0 +1,303 @@
+#!/usr/bin/env python3
+"""hello: the plugin's one program (examples/hello/plugin.toml).
+
+    hello-orbit pulse   the service: every 20 s ($HELLO_EVERY) the status item "N working", the item source "answers"
+                        (every finished request) and the doc "sessions"; it appends the new requests and answers of the
+                        threads Orbit opened. On $ORBIT_SERVICE_PORT it answers Orbit: GET /orbit/search (a live search
+                        in the answers' text), /orbit/thread (a session as a thread), /orbit/doc, POST /orbit/send (a
+                        reply typed in a thread: sent to the session), and GET /files/<id> (pictures sent along)
+    hello-orbit words   an answer action: the card (JSON on stdin) → how many words its answer has
+    hello-orbit where   a menu action: what the page acts on (JSON on stdin) → one line
+    hello-orbit tab-words   the thread tab's ⌘E item: {"kind", "key": "<session>"} → its answers' words
+    hello-orbit msg-words   a thread message's menu item: {"kind", "key", "message"} → its words
+    hello-orbit msg-doc     another: opens the message's request and answer as an "answer" doc tab
+    hello-orbit people  [people] (API 1.2): {"names": [...]} → {name: {"avatar", "handle"}}; any name, offline
+"""
+
+import base64
+import hashlib
+import json
+import mimetypes
+import os
+import re
+import sys
+import threading
+import time
+import urllib.parse
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+ORBIT = os.environ.get("ORBIT_URL", "http://127.0.0.1:8770")
+TOKEN = os.environ.get("ORBIT_PLUGIN_TOKEN", "")
+EVERY = float(os.environ.get("HELLO_EVERY", "20"))
+PAGE = 20  # requests per page of a thread (older ones: ?before=)
+STARTED = time.time()
+
+
+def orbit(method, path, body=None):
+    req = urllib.request.Request(ORBIT + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Content-Type": "application/json", "X-Orbit-Plugin-Token": TOKEN})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.loads(r.read() or b"{}")
+
+
+def thread_path(sid):
+    return f"/api/plugins/hello/threads/thread/{urllib.parse.quote(sid, safe='')}"
+
+
+ANSWERS = []  # [(item, the answer's text)]: what the live search looks in
+OPENED = {}  # session → when Orbit last asked for its thread (its answers since are unread)
+PUSHED = {}  # session → the message ids Orbit has of its thread
+FILES = {}  # id → a path on this machine: the pictures of a request, served at /files/<id>
+LOCK = threading.Lock()
+HARNESS = {"claude": "Claude Code", "codex": "Codex"}
+
+
+def file_id(path):
+    fid = hashlib.sha1(path.encode()).hexdigest()[:16] + os.path.splitext(path)[1].lower()
+    FILES[fid] = path
+    return fid
+
+
+def request_message(s, c):
+    """A request as the user's own message: its pictures (![name](/path)) as files the service serves."""
+    files = []
+
+    def pic(m):
+        path = m.group(2).strip("<>")
+        if path.startswith("/") and os.path.isfile(path):
+            files.append({"name": m.group(1) or os.path.basename(path), "url": f"svc:/files/{file_id(path)}", "image": True})
+            return ""
+        return m.group(0)
+    text = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", pic, c["text"]).strip()
+    return {"id": f"q{c['id']}", "author": {"name": "", "me": True}, "time": c.get("time"), "markdown": text,
+            **({"files": files} if files else {})}
+
+
+def answer_message(s, c):
+    return {"id": f"a{c['id']}", "author": {"name": HARNESS.get(s.get("harness"), s.get("harness") or "Agent")},
+            "time": c.get("finished") or c.get("time"), "markdown": c.get("answer") or c.get("error") or ""}
+
+
+def thread_of(sid, before=""):
+    """(2.0) A session's requests and answers as a thread: the newest PAGE requests, or those before one."""
+    s = orbit("GET", f"/api/sessions/{sid}/cards")
+    cards = [c for c in s["cards"] if c["state"] in ("completed", "error")]
+    if before:
+        n = int(re.sub(r"\D", "", before) or 0)
+        cards = [c for c in cards if c["id"] < n]
+    page = cards[-PAGE:]
+    ss = {x["id"]: x for x in orbit("GET", "/api/sessions?local=1")["sessions"]}
+    me = ss.get(sid, {"name": sid, "harness": "", "cwd": ""})
+    msgs = [m for c in page for m in (request_message(me, c), answer_message(me, c))]
+    out = {"messages": msgs, "more": len(cards) > len(page)}
+    if not before:
+        out.update(title=me["name"], sub=f"{len(cards)} answered · {me.get('cwd', '')}",
+                   composer={"placeholder": f"Ask {me['name']}… (⌘⏎)"})
+    return out
+
+
+def answers(ss):
+    """(API 1.3) Every finished request of the 30 newest sessions, as items of the source "answers" (2.0: grouped by
+    session, unread when it finished since that session's thread was opened, opening that thread)."""
+    out = []
+    for s in ss[:30]:
+        for c in orbit("GET", f"/api/sessions/{s['id']}/cards")["cards"]:
+            if c["state"] == "completed" and c.get("answer"):
+                first = " ".join(c["answer"].split())[:100]
+                done = c.get("finished") or c.get("time") or 0
+                seen = OPENED.get(s["id"], STARTED)
+                out.append(({"key": f"{s['id']}:{c['id']}", "label": " ".join(c["text"].split())[:80] or f"#{c['id']}",
+                             "detail": f"{s['name']} · {first}", "time": done, "match": s["name"], "icon": "quote",
+                             "group": s["name"], "unread": done > seen,
+                             "open": {"kind": "thread", "key": s["id"]}}, c["answer"]))
+    return out
+
+
+def sessions_doc(ss):
+    """(2.0) The panel's doc: the sessions as a Markdown table."""
+    rows = "\n".join(f"| {s['name']} | {s['state']} | `{s.get('cwd', '')}` |" for s in ss) or "| (none) | | |"
+    busy = sum(1 for s in ss if s["state"] == "working")
+    return {"title": "Sessions", "markdown": f"## {len(ss)} sessions, {busy} working\n\n| Session | State | Folder |\n|---|---|---|\n"
+                                             f"{rows}\n\n*Updated {time.strftime('%H:%M:%S')}.*"}
+
+
+def push_new(sid):
+    """The thread's messages Orbit does not have yet, appended (a request answered since it was opened)."""
+    try:
+        t = thread_of(sid)
+    except OSError:
+        return
+    with LOCK:
+        have = PUSHED.setdefault(sid, set())
+        new = [m for m in t["messages"] if m["id"] not in have]
+        have.update(m["id"] for m in new)
+    if new:
+        orbit("PATCH", thread_path(sid), {"append": new, "sub": t["sub"]})
+
+
+def pulse():
+    threading.Thread(target=serve, daemon=True).start()
+    last_doc = None
+    while True:
+        try:
+            ss = orbit("GET", "/api/sessions?local=1")["sessions"]
+            busy = [s["name"] for s in ss if s["state"] == "working"]
+            orbit("POST", "/api/plugins/hello/status", {
+                "id": "pulse", "text": f"{len(busy)} working", "panel": "sessions",
+                "level": "warn" if len(busy) > 3 else "info",
+                "title": ("Working: " + ", ".join(busy)) if busy else "No session is working"})
+            global ANSWERS
+            ANSWERS = answers(ss)
+            orbit("PUT", "/api/plugins/hello/items/answers", {"items": [it for it, _ in ANSWERS]})  # the whole list
+            doc = sessions_doc(ss)
+            if doc["markdown"].split("*Updated")[0] != (last_doc or "").split("*Updated")[0]:
+                orbit("PUT", "/api/plugins/hello/docs/sessions", doc)
+                last_doc = doc["markdown"]
+            for sid in list(OPENED):
+                push_new(sid)
+        except OSError as e:
+            print(f"hello: {e}", flush=True)
+        time.sleep(EVERY)
+
+
+def answer_later(sid, cid):
+    """A request sent from the thread: its answer appended when it is done."""
+    try:
+        c = orbit("GET", f"/api/sessions/{sid}/cards/{cid}?wait=600")["card"]
+        if c["state"] in ("completed", "error"):
+            push_new(sid)
+    except OSError as e:
+        print(f"hello: {e}", flush=True)
+
+
+class Service(BaseHTTPRequestHandler):
+    """What Orbit asks (with the plugin's token): live search (1.3), threads, docs and replies (2.0); files through
+    Orbit's svc: proxy (it adds X-Orbit-Proxy: 1)."""
+    def do_GET(self):
+        u = urllib.parse.urlparse(self.path)
+        q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
+        if self.headers.get("X-Orbit-Plugin-Token") != TOKEN:  # only Orbit asks
+            return self.answer(403, {"error": "not Orbit"})
+        try:
+            if u.path == "/orbit/search":
+                words, limit = q.get("q", "").lower().split(), int(q.get("limit", "30"))
+                hits = []
+                for it, text in ANSWERS:
+                    low = text.lower()
+                    if words and all(w in low for w in words):
+                        at = low.find(words[0])
+                        hits.append({**it, "detail": "…" + " ".join(text[max(0, at - 30):at + 70].split()) + "…"})
+                return self.answer(200, {"items": hits[:limit]})
+            if u.path == "/orbit/thread" and q.get("kind") == "thread":
+                t = thread_of(q.get("key", ""), q.get("before", ""))
+                if not q.get("before"):
+                    with LOCK:
+                        OPENED[q["key"]] = time.time()
+                        PUSHED[q["key"]] = {m["id"] for m in t["messages"]}
+                return self.answer(200, t)
+            if u.path == "/orbit/doc":
+                d = q.get("id", "")
+                if d == "sessions":
+                    return self.answer(200, sessions_doc(orbit("GET", "/api/sessions?local=1")["sessions"]))
+                sid, _, cid = d.rpartition(":")
+                c = orbit("GET", f"/api/sessions/{sid}/cards/{cid}")["card"]
+                quote = "\n".join("> " + x for x in c["text"].splitlines())
+                return self.answer(200, {"title": f"Answer #{c['id']}", "markdown": f"{quote}\n\n{c.get('answer') or c.get('error') or ''}"})
+            m = re.fullmatch(r"/files/([0-9a-f]{16}\.\w{1,5})", u.path)
+            if m and m.group(1) in FILES:
+                with open(FILES[m.group(1)], "rb") as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", mimetypes.guess_type(FILES[m.group(1)])[0] or "application/octet-stream")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "max-age=3600")
+                self.end_headers()
+                return self.wfile.write(data)
+        except (OSError, ValueError, KeyError) as e:
+            return self.answer(502, {"error": str(e)})
+        self.answer(404, {"error": "not found"})
+
+    def do_POST(self):
+        if self.headers.get("X-Orbit-Plugin-Token") != TOKEN or self.path != "/orbit/send":
+            return self.answer(403 if self.headers.get("X-Orbit-Plugin-Token") != TOKEN else 404, {"error": "no"})
+        b = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        sid, text = b.get("key", ""), b.get("markdown", "")
+        pics = " ".join(f"![{f['name']}]({f['path']})" for f in b.get("files") or [])
+        try:  # the reply is a request to the session; the thread shows it as the user's message, the answer follows
+            c = orbit("POST", f"/api/sessions/{sid}/send", {"text": (text + ("\n\n" + pics if pics else "")).strip(),
+                                                          "origin": {"label": "Hello thread", "plugin": "hello"}})
+        except OSError as e:
+            return self.answer(502, {"error": f"the session did not take it: {e}"})
+        s = {"name": "", "harness": ""}
+        msg = {**request_message(s, c), "client_id": b.get("client_id")}
+        with LOCK:
+            PUSHED.setdefault(sid, set()).add(msg["id"])
+        orbit("PATCH", thread_path(sid), {"append": [msg]})  # (it replaces the pending one: same client_id)
+        threading.Thread(target=answer_later, args=(sid, c["id"]), daemon=True).start()
+        self.answer(200, {"id": msg["id"]})
+
+    def answer(self, code, d):
+        body = json.dumps(d).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+def serve():
+    port = int(os.environ.get("ORBIT_SERVICE_PORT") or 0)
+    if port:  # (Orbit before 1.3 gives none)
+        ThreadingHTTPServer(("127.0.0.1", port), Service).serve_forever()
+
+
+def people(names):
+    """A toy directory: each name's initials on a colour derived from the name (an SVG data: URI), and its first name
+    lower-cased as a handle. A real provider asks a directory and leaves out the names it does not know."""
+    out = {}
+    for name in names:
+        words = name.split()
+        if not words:
+            continue
+        initials = "".join(w[0] for w in words[:2]).upper()
+        initials = initials.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        hue = int(hashlib.sha256(name.encode()).hexdigest()[:4], 16) % 360
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">'
+               f'<rect width="64" height="64" rx="8" fill="hsl({hue},55%,45%)"/>'
+               f'<text x="32" y="41" font-family="-apple-system,Helvetica,Arial,sans-serif" font-size="26" '
+               f'font-weight="600" fill="#fff" text-anchor="middle">{initials}</text></svg>')
+        out[name] = {"avatar": "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode(),
+                     "handle": words[0].lower()}
+    return out
+
+
+if __name__ == "__main__":
+    what = sys.argv[1:2]
+    if what == ["pulse"]:
+        pulse()
+    elif what == ["words"]:
+        card = json.load(sys.stdin)["card"]
+        print(f"#{card['id']}'s answer has {len(card['answer'].split())} words")
+    elif what == ["tab-words"]:
+        sid = json.load(sys.stdin)["key"]
+        cards = orbit("GET", f"/api/sessions/{sid}/cards")["cards"]
+        print(f"its answers have {sum(len((c.get('answer') or '').split()) for c in cards)} words")
+    elif what == ["msg-words"]:
+        m = json.load(sys.stdin)["message"]
+        print(f"{len((m.get('markdown') or '').split())} words")
+    elif what == ["msg-doc"]:
+        d = json.load(sys.stdin)
+        cid = re.sub(r"\D", "", d["message"]["id"])
+        orbit("POST", "/api/plugins/hello/open-tab", {"kind": "answer", "key": f"{d['key']}:{cid}", "title": f"Answer #{cid}"})
+        print(f"opened #{cid}")
+    elif what == ["people"]:
+        print(json.dumps(people(json.load(sys.stdin).get("names") or []), ensure_ascii=False))
+    elif what == ["where"]:
+        ctx = json.load(sys.stdin)
+        print(f"file {ctx['file']}" if ctx.get("file") else f"session {ctx.get('session') or '(none)'}")
+    else:
+        sys.exit(__doc__)

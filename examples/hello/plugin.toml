@@ -1,0 +1,90 @@
+# hello: an example of what a plugin can add to Orbit's page (builddoc/plugins.md §5), standard library only. Orbit
+# draws all of it (plugin API 2.0: no iframes; the plugin gives data, builddoc/plugin-views.md):
+#   a status item   the service `pulse` keeps "N working" at the right of the status bar (a click opens the panel)
+#   a panel         a doc in the side pane: the sessions, as a Markdown table the service pushes as they change
+#   actions         right-click an answer → "Count words"; More menu → "Hello: where am I"
+#   a left tab      "Answers": every session's finished requests, grouped by session, an unread dot (and the tab's
+#                   count) on those finished since you last opened that session's thread (a list of an item source)
+#   a thread        a session's requests and answers as a chat thread (the tab kind "thread"): reply below and the
+#                   service sends it to the session; its answer comes in live. Pictures you paste go along as files
+#                   the service serves (files = "/files/", through Orbit's svc: proxy)
+#   a doc tab       "answer": one request and its answer (right-click a message → Open as a doc)
+#   people          (API 1.2) who a name is: any name gets its initials on a colour of its own, and a handle (offline;
+#                   a real one asks a company directory); the thread's authors get these avatars
+#   a ⌘O tab        (API 1.3) "Answers": the same items; typing also searches their text through the running service
+#
+#   plugin_paths = ["<this folder>"] in ~/.orbit/config.toml, then restart Orbit's server
+
+[plugin]
+name = "hello"
+version = "0.2.0"
+requires_api = ">=2,<3"
+description = "A status item, a doc panel, actions, a list, a thread, people and a ⌘O source: what a plugin can add"
+
+[service.pulse]
+command = ["hello-orbit", "pulse"]
+files = "/files/"              # (2.0) the svc: proxy may fetch its paths under /files/ (the pictures sent in a thread)
+
+[cli]
+command = ["hello-orbit"]
+
+[[ui.panel]]                   # (2.0) a doc in the side pane: PUT /api/plugins/hello/docs/sessions
+id = "sessions"
+title = "Hello: sessions"
+view = "doc"
+
+[[ui.action]]
+id = "words"
+title = "Count words"
+where = "answer"
+args = ["words"]
+
+[[ui.action]]
+id = "where"
+title = "Hello: where am I"
+where = "menu"
+args = ["where"]
+
+[[ui.sidebar]]                 # (2.0) a left tab drawn like the Sessions list, from the item source below
+id = "answers"
+title = "Answers"
+icon = "quote"
+view = "list"
+source = "answers"
+
+[[ui.tab]]                     # (2.0) a native thread: key = a session's id
+kind = "thread"
+title = "Thread"
+icon = "quote"
+view = "thread"
+
+[[ui.tab.menu]]
+id = "words"
+title = "Count words"
+args = ["tab-words"]
+
+[[ui.tab]]                     # (2.0) a doc tab: key = <session>:<request>
+kind = "answer"
+title = "Answer"
+icon = "quote"
+view = "doc"
+
+[[ui.message.menu]]            # (2.0) right-click a thread's message: [cli] with {"kind", "key", "message"} on stdin
+id = "words"
+title = "Count words"
+args = ["msg-words"]
+
+[[ui.message.menu]]
+id = "doc"
+title = "Open as a doc"
+args = ["msg-doc"]
+
+[people]
+args = ["people"]
+
+[[ui.palette]]                 # (API 1.3) a ⌘O tab: the items the service pushes (PUT /api/plugins/hello/items/answers)
+id = "answers"
+title = "Answers"
+open = "tab"                   # an item's own `open` (its session's thread), else the "answer" doc of its key
+kind = "answer"
+search = true                  # pulse (its only service) answers live searches on $ORBIT_SERVICE_PORT

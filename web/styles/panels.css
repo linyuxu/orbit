@@ -1,0 +1,212 @@
+/* ===================================================================== left panel */
+.phead { flex:none; height:calc(40px * var(--ui-k)); display:flex; align-items:center; gap:calc(4px * var(--ui-k));
+  padding:0 calc(6px * var(--ui-k)) 0 8px; }
+.ptabs { display:flex; flex-wrap:nowrap; gap:calc(2px * var(--ui-k)); min-width:0; flex:1; }  /* flat: no track (ui.md §6) */
+.ptab { height:calc(26px * var(--ui-k)); flex:0 1 auto; min-width:0; border:0; background:none; border-radius:var(--r-s); color:var(--ink-3);
+  font:600 calc(12px * var(--ui-k)) var(--font); padding:0 calc(6px * var(--ui-k));
+  cursor:default; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-flex; align-items:center; }
+.ptab.picon { flex:none; overflow:visible; }
+.ptab:hover { color:var(--ink-2); }
+.ptab.cur { background:var(--surface); color:var(--ink); box-shadow:0 0 0 1px var(--line); }
+.pfrow { --filter-height:calc(28px * var(--ui-k)); flex:none; display:flex; align-items:center; gap:calc(2px * var(--ui-k));
+  margin:calc(7px * var(--ui-k)) 4px calc(4px * var(--ui-k)) 8px; }
+.pfrow .ibtn { width:var(--filter-height); height:var(--filter-height); }  /* as tall as the box beside them; the icon in the middle */
+.pfbox .caret:first-child { margin:0 -1px 0 0; }  /* before the hint: it takes no room (the text starts at the padding) */
+.pfbox .ph { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }  /* the hint stays inside the padding, both sides alike */
+.pfbox { height:var(--filter-height); flex:1; min-width:0; display:flex; align-items:center; padding:calc(4px * var(--ui-k)) 8px; background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r-s); color:var(--ink-3); font-size:calc(12px * var(--ui-k)); overflow:hidden; white-space:nowrap; cursor:text; }
+.pfbox.has { color:var(--ink); }
+.pfbox .caret { width:1px; height:14px; background:var(--ink); margin:0 1px; visibility:hidden; animation:blink 1s steps(1) infinite; flex:none; }
+#left.kb .pfbox.has { border-color:var(--ink); }  /* typing: the filter takes the keys (the keyboard stays in the list) */
+#left.kb .pfbox .caret { visibility:visible; }
+@keyframes blink { 50% { opacity:0 } }
+.plist { flex:1; min-height:0; overflow-y:auto; padding:4px 4px 12px; -webkit-user-select:none; user-select:none; }
+.prow { height:var(--row); display:flex; align-items:center; gap:7px; padding:0 8px 0 28px; border-radius:var(--r-s); color:var(--ink-2);
+  font-size:calc(12px * var(--ui-k)); cursor:default; white-space:nowrap; }
+.prow .nm { overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1; }
+/* A session: its name line, and under it a faint preview (the last answer, or what it is doing) */
+.prow.ss { height:auto; min-height:40px; align-items:flex-start; padding-top:5px; padding-bottom:5px; }
+.prow.ss > .dot { margin-top:5px; }
+/* a session row, one line: [status] [agent's mark] name … when (the preview, model and folder are its tooltip) */
+/* under its group: the status mark starts where the group's name starts (8 + 18 + 8): the rows read as the group's */
+.prow.ss { height:var(--row); min-height:0; align-items:center; padding:0 8px 0 34px; gap:7px; }
+.hlogo { flex:none; display:block; }
+.hletter { border-radius:3px; background:var(--hc); color:#fff; font:700 calc(9px * var(--ui-k))/14px var(--font); text-align:center; }
+.prow.ss.stopped .hlogo { opacity:.45; }
+.prow.ss .tm { margin-left:auto; flex:none; padding-left:6px; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); font-weight:400; font-variant-numeric:tabular-nums; }
+.prow.ss.unread .nm { font-weight:650; color:var(--ink); }
+.si { flex:none; width:12px; height:12px; display:inline-grid; place-items:center; font:700 calc(10px * var(--ui-k))/1 var(--font); border-radius:50%; }
+.si.ok { color:var(--ok); }
+.si.err { color:var(--err); }
+.si.warn { color:var(--run); }
+.si.quiet { color:var(--ink-3); font-weight:400; }
+.si.attn { color:#fff; background:var(--run); font-size:calc(9px * var(--ui-k)); }
+.si svg { stroke-width:2; }
+.si.stopped::before { content:""; width:7px; height:7px; border-radius:50%; box-shadow:inset 0 0 0 1.5px var(--ink-3); }
+.si.idle::before { content:""; width:5px; height:5px; border-radius:50%; background:var(--ink-3); opacity:.7; }
+.si.run::before { content:""; width:8px; height:8px; border-radius:50%; border:1.5px solid var(--run); border-top-color:transparent; animation:spin .9s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg) } }
+.prow .sx { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+.prow .l1 { display:flex; align-items:center; gap:7px; min-width:0; height:16px; }
+.prow .pv { font-size:calc(11px * var(--ui-k)); line-height:15px; color:var(--ink-3); font-weight:400; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.prow .pv.none { opacity:.75; }
+.prow .fd { color:var(--ink-3); font-size:calc(11px * var(--ui-k)); flex:none; max-width:45%; overflow:hidden; text-overflow:ellipsis; }
+.prow.grp { height:var(--row); padding-left:8px; gap:8px; font-weight:600; color:var(--ink); margin-top:6px; }
+.prow.grp:first-child { margin-top:0; }
+.prow.newgrp { margin-top:8px; color:var(--ink-3); padding-left:8px; gap:8px; }
+.prow.newgrp .ix { width:18px; height:18px; flex:none; display:inline-grid; place-items:center; }
+.prow.newgrp:hover { color:var(--ink); }
+/* the group's key (⌘2 …) as a small key cap; ★ ⚡ + take the same cell without one, so every name starts alike */
+.prow.grp .ix { width:18px; height:18px; flex:none; display:inline-grid; place-items:center; color:var(--ink-3); font-weight:400; }
+.prow.grp .ix.num { border:1px solid var(--line); border-radius:5px; background:var(--surface); box-shadow:0 1px 0 var(--line);
+  font:600 calc(10.5px * var(--ui-k))/16px var(--font); font-variant-numeric:tabular-nums; color:var(--ink-2); }
+.prow.grp.curgrp .ix.num { border-color:var(--ink-3); color:var(--ink); }
+.prow.grp .cnt { font-weight:400; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); }
+/* a group folds: the chevron right after its name (the key caps keep their column, the sessions their indent) */
+.prow.grp .nm { flex:0 1 auto; }
+.prow.grp .fold { width:18px; height:18px; flex:none; margin:0 auto 0 -4px; display:grid; place-items:center; color:var(--ink-3); border-radius:4px;
+  opacity:.5; transition:opacity .12s; }
+.prow.grp .fold svg { transition:transform .12s; transform:rotate(90deg); }
+.prow.grp.shut .fold svg { transform:none; }
+.prow.grp:hover .fold, .prow.grp.kc .fold, .prow.grp.shut .fold { opacity:1; }
+.prow.grp .fold:hover { background:var(--btn-hover); color:var(--ink); }
+.prow:hover { background:var(--hover); }
+.prow.cur { background:var(--sel); color:var(--ink); font-weight:500; }
+#left.kb .prow.kc { box-shadow:inset 0 0 0 1px var(--focus); }  /* the keyboard cursor: one look on every row */
+#left.kb .prow.cur.kc { box-shadow:none; background:var(--sel-focus); }  /* on the current row: one layer, a deeper tint (U7) */
+/* a stopped session: a hollow dot, its name italic and quiet */
+.prow.ss.stopped .nm { font-style:italic; color:var(--ink-3); }
+.prow.grp.curgrp { background:var(--sel); }
+.prow .tw { width:12px; flex:none; color:var(--ink-3); display:grid; place-items:center; }
+.prow .tw.open svg { transform:rotate(90deg); }
+.prow.dir .nm { color:var(--ink); }
+.prow .stl { margin-left:auto; }
+.prow .dd2 { width:5px; height:5px; border-radius:50%; background:var(--ink-3); flex:none; margin-left:auto; margin-right:4px; }
+.star { color:#d4a017; display:inline-flex; align-items:center; }
+.star svg { fill:currentColor; }
+.udot { display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--ink); margin-left:5px; vertical-align:middle; flex:none; }
+.pempty { color:var(--ink-3); text-align:center; padding:40px 16px; line-height:1.7; }
+.pempty h3 { font-size:calc(12px * var(--ui-k)); font-weight:600; color:var(--ink-2); margin:0 0 2px; }
+
+/* ===================================================================== status bar */
+#statusbar { height:26px; flex:none; display:flex; align-items:center; background:var(--surface); border-top:1px solid var(--line);
+  color:var(--ink-2); font-size:calc(12px * var(--ui-k)); padding:0 6px 0 10px; -webkit-user-select:none; user-select:none; min-width:0; }
+#statusbar .seg { display:flex; align-items:center; gap:6px; padding:0 10px; position:relative;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+#statusbar .seg + .seg::before { content:""; position:absolute; left:0; top:50%; height:14px; margin-top:-7px; border-left:1px solid var(--line); }
+#statusbar .seg:first-child { padding-left:0; }
+#statusbar .right { margin-left:auto; display:flex; align-items:center; gap:2px; flex:0 1 auto; min-width:0; padding-left:10px; }
+#sb-state .sw { font-family:var(--mono); font-size:calc(11px * var(--ui-k)); line-height:16px; background:var(--bg); color:var(--ink-2); border-radius:4px; padding:0 6px; }
+#sb-state .sw:empty { display:none; }
+#statusbar .right #sb-folder { border-left:0; padding:0 10px 0 0; height:auto; }
+#sb-folder { min-width:0; overflow:hidden; color:var(--ink-2); } #sb-folder span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sbmeet { height:22px; display:inline-flex; align-items:center; gap:5px; padding:0 6px; border:0; background:none; border-radius:var(--r-s);
+  color:var(--ink-2); font-size:calc(12px * var(--ui-k)); max-width:34vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:default; }
+.sbmeet:hover { background:var(--btn-hover); color:var(--ink); }
+.sbmeet .tt { overflow:hidden; text-overflow:ellipsis; }
+.sbmeet.now { color:var(--run); }
+/* Plan usage per harness: "Used  Claude ▬▬ 94% 12h 25m · 86% Fable   Codex ▬ 40% 5d 8h" */
+#statusbar > .seg { flex:none; }  /* state and harness stay whole; the folder, then the usage, give way */
+#statusbar .right #sb-folder { flex:0 4 auto; }
+#sb-usage { flex:0 1 auto; height:22px; display:inline-flex; align-items:center; gap:12px; padding:0 8px; border:0; background:none; border-radius:var(--r-s);
+  color:var(--ink-2); font-size:calc(12px * var(--ui-k)); cursor:default; white-space:nowrap; overflow:hidden; min-width:0; margin-right:6px; }
+#sb-usage:hover { background:var(--btn-hover); }
+#sb-usage .lbl { color:var(--ink-3); }
+#sb-usage .h { display:inline-flex; align-items:center; gap:6px; flex:none; }
+#sb-usage .h:last-child { flex:0 1 auto; min-width:0; overflow:hidden; }
+#sb-usage .h:last-child > :last-child { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+@media (max-width: 1100px) { #sb-usage .rs { display:none; } }
+#sb-usage .hn { color:var(--ink-3); font-weight:600; }
+#sb-usage .h.mine .hn { color:var(--ink-2); }  /* the session in front runs on this one */
+.ubar { width:44px; height:5px; border-radius:3px; background:var(--line); overflow:hidden; flex:none; display:inline-block; }
+.ubar i { display:block; height:100%; background:var(--ink-3); border-radius:3px; }
+.ubar.hot i { background:var(--err); } .ubar.warm i { background:var(--run); }
+#sb-usage .hot { color:var(--err); }
+#sb-usage .uq { white-space:nowrap; }  /* a plugin agent's quota (plugin API 1.3), plain text after its meter */
+#usagepop { position:fixed; z-index:60; width:380px; background:var(--surface); border-radius:var(--r-m); box-shadow:var(--menu-shadow); padding:12px 14px; font-size:calc(12px * var(--ui-k)); }
+#usagepop .uh { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+#usagepop .uh b { font-size:calc(13px * var(--ui-k)); } #usagepop .uh .sub { color:var(--ink-3); }
+#usagepop .uh button { margin-left:auto; }
+#usagepop .ur { padding:8px 0; border-top:1px solid var(--line); }
+#usagepop .ur .t { display:flex; gap:8px; align-items:baseline; margin-bottom:6px; }
+#usagepop .ur .t b { font-size:calc(13px * var(--ui-k)); } #usagepop .ur .t .plan, #usagepop .ur .t .rs { color:var(--ink-3); }
+#usagepop .ur .t .rs { margin-left:auto; }
+#usagepop .lim { display:inline-flex; align-items:center; gap:6px; margin-right:14px; color:var(--ink-2); }
+#usagepop .lim .k { color:var(--ink-3); }
+#usagepop .foot { color:var(--ink-3); font-size:calc(11px * var(--ui-k)); margin-top:6px; }
+#bellbtn { position:relative; }
+#bellbtn .badge { position:absolute; top:-3px; right:-4px; min-width:14px; height:14px; padding:0 3px; border-radius:999px;
+  background:var(--err); color:#fff; font-size:var(--fs-xs); line-height:14px; text-align:center; font-weight:600; }
+#bellbtn .badge:empty { display:none; }
+/* Other machines: a session's machine as a small tag; the panel's machine filter */
+.mtag { flex:none; font-size:calc(10px * var(--ui-k)); line-height:14px; padding:0 6px; border-radius:8px; background:none; border:1px solid var(--line); color:var(--ink-2);
+  margin-left:4px; white-space:nowrap; }
+.mtag.off { opacity:.5; text-decoration:line-through; }
+.tab .mtag { margin-left:calc(5px * var(--ui-k)); line-height:calc(14px * var(--ui-k)); padding:0 calc(6px * var(--ui-k)); }
+.tab .udot { margin-left:calc(5px * var(--ui-k)); }
+.pmach { display:flex; flex-wrap:wrap; gap:4px; padding:2px 4px 6px 8px; }
+.pmach[hidden] { display:none; }
+.pmach .mchip { height:22px; padding:0 8px; border:1px solid var(--line); border-radius:11px; background:none; color:var(--ink-2); font-size:calc(11px * var(--ui-k)); cursor:default; }
+.pmach .mchip:hover { color:var(--ink); border-color:var(--ink-3); }
+.pmach .mchip.on { background:var(--ink); color:var(--surface); border-color:var(--ink); }
+.pmach .mchip.off { opacity:.55; }
+/* File tree (Files / Notes, ui.md §6): 30px rows, 13.5px; indent guides; twisty and icon cells; git status tint */
+.thead { display:flex; align-items:baseline; gap:8px; padding:2px 8px 6px; font:calc(11px * var(--ui-k)) var(--mono); color:var(--ink-3); min-width:0; }
+.thead .tp { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
+.thead .tc { flex:none; }
+.prow.ft { height:var(--row); font-size:calc(13.5px * var(--ui-k)); gap:0; padding:0 8px 0 2px; }  /* top-level names at 34px, the column of the Sessions and Misc names (U6) */
+.prow.ft .ig { width:14px; align-self:stretch; flex:none; background:linear-gradient(var(--guide), var(--guide)) 6px 0 / 1px 100% no-repeat; }
+.prow.ft .tw { width:12px; }
+.prow.ft .tw svg { transition:transform .12s; }
+.prow.ft .ic { width:18px; flex:none; display:grid; place-items:center; margin-right:2px; color:var(--ink-3); }
+.prow.ft .nm { color:var(--ink-2); }
+.prow.ft.dir .nm, .prow.ft.cur .nm { color:var(--ink); }
+.prow.ft.st-M .nm, .prow.ft.st-R .nm { color:var(--warn); }
+.prow.ft.st-A .nm, .prow.ft.st-U .nm { color:var(--add); }
+.prow.ft.st-D .nm { color:var(--del); text-decoration:line-through; }
+.dicon path { fill:var(--folder); stroke:var(--folder-line); }
+.dicon.open path { fill:var(--folder-open); stroke:var(--folder-open-line); }
+.ficon { display:block; }
+/* the filter's text around its caret (the part after it gives way when long) */
+.pfbox .fb { white-space:pre; flex:0 1 auto; min-width:0; overflow:hidden; display:flex; justify-content:flex-end; }  /* long: it gives way at its start, the caret and what you just typed stay in sight */
+.pfbox .fa { white-space:pre; overflow:hidden; text-overflow:ellipsis; flex:0 1 auto; min-width:0; }
+#sb-plugins { display:inline-flex; gap:4px; }
+#sb-plugins[hidden] { display:none; }
+.plst { border:0; background:none; font:calc(11px * var(--ui-k)) var(--font); color:var(--ink-2); padding:1px 6px; border-radius:4px; cursor:default; }
+.plst:hover { background:var(--btn-hover); color:var(--ink); }
+.plst.lv-warn { color:var(--run); }
+.plst.lv-error { color:var(--err); }
+/* plugin pages (API 1.1): a left-panel tab, main tabs */
+#pside { flex:1; min-height:0; display:flex; }
+#pside[hidden], #pview[hidden] { display:none; }
+#pview { flex:1; min-height:0; display:flex; background:var(--bg); }
+.ptab .pbadge { margin-left:4px; flex:none; font:600 calc(9.5px * var(--ui-k))/14px var(--font); min-width:14px; text-align:center; padding:0 4px; border-radius:7px; background:var(--accent); color:var(--bg); }
+.ptab .pbadge.lv-warn { background:var(--run); }
+.ptab .pbadge.lv-error { background:var(--err); }
+.tab .attn { font:700 calc(10px * var(--ui-k)) var(--font); color:#fff; background:var(--run); border-radius:7px;
+  padding:0 calc(5px * var(--ui-k)); margin-left:calc(4px * var(--ui-k)); }
+/* Misc: one row per tab (Calendar, Schedules): its icon, name, and what is next there */
+.prow.misc { padding-left:8px; gap:8px; }
+.prow.misc .mi { width:18px; flex:none; display:grid; place-items:center; color:var(--ink-2); }
+.prow.misc .fd { max-width:60%; }
+
+/* U12: a stopped session's Resume, where its time is, on hover */
+.prow.ss .rsm { display:none; flex:none; height:22px; padding:0 8px; border:1px solid var(--line); border-radius:var(--r-s); background:var(--surface);
+  color:var(--ink-2); font:500 calc(11px * var(--ui-k)) var(--font); cursor:default; margin-left:auto; }
+.prow.ss .rsm:hover { color:var(--ink); border-color:var(--ink-3); }
+.prow.ss.stopped:hover .rsm, #left.kb .prow.ss.stopped.kc .rsm { display:block; }
+.prow.ss.stopped:hover .tm, #left.kb .prow.ss.stopped.kc .tm { display:none; }
+/* U15: the details strip at the panel's foot */
+#ppeek { flex:none; padding:7px 12px 8px; border-top:1px solid var(--line); font-size:calc(11.5px * var(--ui-k)); line-height:16px; color:var(--ink-2); }
+#ppeek[hidden] { display:none; }
+#ppeek .p1 { display:flex; align-items:center; gap:6px; min-width:0; }
+#ppeek .p1 .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+#ppeek .p2 { color:var(--ink-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-left:18px; }
+/* dragging (drag.js) */
+body.dragsort, body.dragsort * { cursor:grabbing !important; }
+
+/* dragging rows (drag.js): the row (or a group with its rows) follows the pointer, lifted; the others slide aside */
+.plist { position:relative; }
+.prow.dragpeer { transition:transform .15s ease; }
+.prow.dragging { position:relative; z-index:5; transition:none; background:var(--surface); box-shadow:0 2px 10px rgba(0,0,0,.12); }
+.prow.settling { transition:transform .16s ease; }

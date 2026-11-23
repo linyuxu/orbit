@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orbit</title>
+<style>
+  :root { --bg:#f9f9f8; --ink:#1d1d1f; --ink-2:#545458; --ink-3:#8e8e93; --err:#c4292d; --line:#d8d8dc; --field:#fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#17181b; --ink:#e8e9eb; --ink-2:#b4b8bf; --ink-3:#7d838c; --err:#ff7b72; --line:#3a3d43; --field:#202226; } }
+  html, body { margin:0; height:100%; background:var(--bg); }
+  body { font:12px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; color:var(--ink-3);
+    display:flex; flex-direction:column; align-items:center; padding-top:18vh; box-sizing:border-box; -webkit-user-select:none; cursor:default; }
+  h2 { font-size:15px; font-weight:600; color:var(--ink-2); margin:0 0 4px; }
+  #msg.err { color:var(--err); white-space:pre-wrap; text-align:center; max-width:560px; }
+  form { display:none; margin-top:22px; width:440px; flex-direction:column; gap:8px; }
+  form.on { display:flex; }
+  label { color:var(--ink-2); }
+  input { font:inherit; color:var(--ink); background:var(--field); border:1px solid var(--line); border-radius:6px; padding:6px 8px; -webkit-user-select:text; }
+  .row { display:flex; gap:8px; justify-content:flex-end; }
+  button { font:inherit; border:1px solid var(--line); background:var(--field); color:var(--ink); border-radius:6px; padding:4px 12px; }
+  button.primary { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+</style>
+</head>
+<body>
+  <h2>Starting Orbit…</h2>
+  <div id="msg">Waiting for the orbit server</div>
+  <form id="connect">
+    <label for="url">Connect to an orbit server (on it: <code>orbit url</code>), or leave empty for this Mac's</label>
+    <input id="url" placeholder="http://100.x.y.z:8770/?token=…" spellcheck="false" autocomplete="off">
+    <div class="row"><button type="button" id="local">Use this Mac's server</button><button class="primary">Connect</button></div>
+  </form>
+  <script>
+    // The shell's bridge: a navigation it cancels and handles (see app/src/main.rs, shell_request).
+    const shell = (what, url) => { const f = document.createElement("iframe"); f.style.display = "none";
+      f.src = `http://orbit-shell.invalid/${what}?url=${encodeURIComponent(url)}`; document.body.append(f); setTimeout(() => f.remove(), 2000); };
+    const form = document.getElementById("connect");
+    window.orbitConnectForm = () => { form.classList.add("on"); document.getElementById("url").focus(); };
+    form.addEventListener("submit", e => { e.preventDefault(); document.querySelector("h2").textContent = "Connecting…"; shell("connect", document.getElementById("url").value); });
+    document.getElementById("local").addEventListener("click", () => { document.querySelector("h2").textContent = "Starting Orbit…"; shell("connect", ""); });
+    // The shell calls this when the server could not start or be reached.
+    window.orbitFailed = text => {
+      document.querySelector("h2").textContent = "Orbit could not reach its server";
+      const m = document.getElementById("msg");
+      m.className = "err";
+      m.textContent = text + "\n\nFix it, then press ⌘⇧R, or connect to another server:";
+      orbitConnectForm();
+    };
+  </script>
+</body>
+</html>

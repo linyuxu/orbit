@@ -1,0 +1,6 @@
+/* ===================================================================== embedded page (side tab): one tab, no chrome */
+body.embed #shell, body.embed #hsplit, body.embed #titlebar, body.embed #left, body.embed #lsplit, body.embed #statusbar, body.embed #side, body.embed #ssplit { display:none !important; }
+
+/* A side tab's file: one slim row under the side tab strip (its name is already on the tab): 32px, the path, Save, ⋯ (U5) */
+body.embed .fhead { height:32px; padding:0 4px 0 10px; }
+body.embed .fhead > span:first-child { display:none; }

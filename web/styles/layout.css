@@ -1,0 +1,115 @@
+/* ===================================================================== title bar + tabs */
+/* Interface size scales the tab strip and its insets. At the default size and zoom the bar is 38pt. */
+#titlebar { --bar:max(calc(30px * var(--ui-k)), calc(38px * var(--ui-k) / var(--zoom, 1)));
+  --tab-top:calc(6px * var(--ui-k)); --tab-lift:calc(3px * var(--ui-k)); --tab-radius:calc(9px * var(--ui-k));
+  --tab-height:calc(var(--bar) - var(--tab-top)); --tab-pill:calc(var(--tab-height) - 2 * var(--tab-lift));
+  --tab-close:max(16px, calc(18px * var(--ui-k)));
+  min-height:var(--bar); display:flex; align-items:flex-start; gap:calc(6px * var(--ui-k)); padding:0 calc(10px * var(--ui-k)) 0 calc(8px * var(--ui-k));
+  background:var(--strip); border-bottom:1px solid var(--line); flex:none; -webkit-user-select:none; user-select:none; }
+/* In the app the window has no native title bar: the window buttons sit over the row's left end (80pt, whatever the zoom). */
+body.app #titlebar { --bar:max(calc(30px * var(--ui-k)), calc(max(32px, 38px * var(--ui-k)) / var(--zoom, 1)));
+  padding-left:calc(80px / var(--zoom, 1)); }
+#titlebar > .lead { display:flex; align-items:center; gap:calc(4px * var(--ui-k)); height:var(--bar); flex:none; }
+#titlebar .ibtn { width:calc(28px * var(--ui-k)); height:calc(28px * var(--ui-k)); }
+#logo { width:calc(17px * var(--ui-k)); height:calc(17px * var(--ui-k)); margin:0 calc(10px * var(--ui-k)) 0 calc(5px * var(--ui-k)); display:block; }  /* (room around it: ☰ · logo · the group) */
+#grouppill { height:calc(28px * var(--ui-k)); display:flex; align-items:center; gap:calc(6px * var(--ui-k)); padding:0 calc(10px * var(--ui-k)); border:0; border-radius:var(--r-s);
+  background:var(--surface); color:var(--ink); font-weight:600; cursor:default; max-width:180px; box-shadow:0 0 0 1px var(--line); }
+#grouppill .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#grouppill:hover { background:var(--bg); }
+/* Tabs: the row is white (the surface); the active tab is the page's own colour, rounded on top, outlined by a
+   hairline on three sides and open at its foot into the content below; the others are bare, a hairline between them,
+   a soft tint on hover;
+   every tab has its × (the unsaved dot in its place) at its right. Dragged with the mouse to reorder. */
+#tabs { display:flex; flex-wrap:wrap; align-items:flex-end; gap:0; flex:1; min-width:0; padding:var(--tab-top) 0 0 calc(8px * var(--ui-k)); }
+.tab { display:flex; align-items:center; gap:calc(7px * var(--ui-k)); height:var(--tab-height);
+  padding:0 calc(var(--tab-close) + 12px * var(--ui-k)) 0 calc(12px * var(--ui-k)); max-width:calc(210px * var(--ui-k)); min-width:0; border:0;
+  background:none; color:var(--ink-2); cursor:default; border-radius:var(--tab-radius) var(--tab-radius) 0 0; position:relative; font-size:calc(12.5px * var(--ui-k)); }
+.tab::before { content:""; position:absolute; left:0; top:50%; transform:translateY(-50%); height:calc(14px * var(--ui-k));
+  border-left:1px solid color-mix(in srgb, var(--ink-3) 45%, transparent); }  /* the hairline between tabs */
+.tab:first-child::before, .tab.active::before, .tab.active + .tab::before, .tab:hover::before, .tab:hover + .tab::before, .addtab::before { display:none; }
+.tab:hover:not(.active) { background:var(--hover); border-radius:var(--tab-radius); height:var(--tab-pill); margin-bottom:var(--tab-lift); }
+.tab .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.tab.active { color:var(--ink); font-weight:500; background:var(--bg); z-index:1;
+  box-shadow:inset 1px 0 0 var(--line), inset -1px 0 0 var(--line), inset 0 1px 0 var(--line); }
+.tab.active::after { content:""; position:absolute; left:1px; right:1px; bottom:-1px; height:1px; background:var(--bg); pointer-events:none; }  /* it opens into the page: the strip's foot line stops at its sides */
+#tabs.wrapped .tab.active::after { display:none; }
+#tabs.wrapped .tab.active { border-radius:var(--tab-radius); height:var(--tab-pill); margin-bottom:var(--tab-lift); box-shadow:0 0 0 1px var(--line); }  /* in a wrapped row it cannot join the page: a lifted pill */
+.tab.preview .name { font-style:italic; }
+.tab .x { position:absolute; right:calc(7px * var(--ui-k)); top:50%; transform:translateY(-50%);
+  width:var(--tab-close); height:var(--tab-close); display:grid; place-items:center; border-radius:50%; color:var(--ink-3); }
+.tab .x svg.i { width:calc(12px * var(--ui-k)); height:calc(12px * var(--ui-k)); }
+.tab:not(.active):not(:hover) .x { opacity:.7; }
+.tab.dirty:not(:hover) .x svg { display:none; }
+.tab.dirty:not(:hover) .x::after { content:""; width:7px; height:7px; border-radius:50%; background:var(--ink-2); }
+.tab .x:hover { background:var(--btn-hover); color:var(--ink); }
+#tabs .addtab { align-self:center; margin:0 0 0 calc(4px * var(--ui-k)); }
+.tab .unr { color:var(--ink); margin-left:-2px; }
+.tab .fi { color:var(--ink-3); }
+.tab.active .fi { color:var(--ink-2); }
+#tabs .addtab { height:min(calc(28px * var(--ui-k)), calc(var(--bar) - 8px * var(--ui-k))); }
+#revbadge { height:calc(28px * var(--ui-k)); margin-top:calc((var(--bar) - 28px * var(--ui-k)) / 2);
+  padding:0 calc(8px * var(--ui-k)); border:0; border-radius:var(--r-s); background:none;
+  color:var(--ink-3); font-size:calc(12px * var(--ui-k)); font-weight:600; font-variant-numeric:tabular-nums; cursor:default; flex:none; display:flex; align-items:center; gap:6px; }
+#revbadge:hover { color:var(--ink-2); background:var(--btn-hover); }
+#revbadge.on { background:var(--btn-hover); color:var(--ink-2); }
+.ibtn { width:30px; height:30px; display:grid; place-items:center; padding:0; border:0; background:none; color:var(--ink-3);
+  border-radius:var(--r-s); flex:none; cursor:default; }
+.ibtn:hover { background:var(--btn-hover); color:var(--ink); }
+.ibtn.sm { width:26px; height:26px; }
+.ibtn.on { color:var(--ink); background:var(--btn-hover); }
+.qbtn { height:26px; padding:0 8px; border:0; background:none; border-radius:var(--r-s); color:var(--ink-2); font-size:calc(12px * var(--ui-k));
+  cursor:default; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+.qbtn:hover { background:var(--btn-hover); color:var(--ink); }
+.qbtn:disabled { opacity:.4; }
+
+/* ===================================================================== dots (state → color) */
+.dot { width:7px; height:7px; border-radius:50%; flex:none; background:var(--ink-3); display:inline-block; }
+.dot.ready { background:var(--ok); } .dot.working { background:var(--run); } .dot.notready { background:var(--err); }
+.dot.stopped { background:transparent; box-shadow:inset 0 0 0 1.5px var(--ink-3); } .dot.starting { background:var(--ink-3); animation:pulse 1.2s infinite; }
+@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.25 } }
+
+/* ===================================================================== body: left panel | split | main (pane | split | side) */
+#body { flex:1; min-height:0; display:flex; }
+#left { width:var(--leftw, 240px); flex:none; display:flex; flex-direction:column; background:var(--panel); min-width:0; }
+.vsplit { width:1px; flex:none; background:var(--line); position:relative; cursor:col-resize; z-index:4; }
+.vsplit::before { content:""; position:absolute; top:0; bottom:0; left:-3px; right:-3px; }
+#work { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
+#main { flex:1; min-width:0; min-height:0; display:flex; }
+/* ⌘J shell: below the status bar, as tall as --shellh (a share of the column) */
+.hsplit { height:1px; flex:none; background:var(--line); position:relative; cursor:row-resize; z-index:4; }
+.hsplit::before { content:""; position:absolute; left:0; right:0; top:-3px; bottom:-3px; }
+#shell { height:var(--shellh, 38%); min-height:48px; flex:none; display:flex; flex-direction:column; background:var(--note-bg); }
+#shell .shhead { height:30px; flex:none; display:flex; align-items:center; gap:6px; padding:0 4px 0 12px; border-bottom:1px solid var(--line);
+  background:var(--surface); color:var(--ink-2); }
+#shell .shhead .t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#shell .btn.sm { padding:0 8px; display:inline-flex; align-items:center; gap:5px; }
+#term { flex:1; min-height:0; padding:6px 0 0 10px; }
+#term .xterm { height:100%; }
+#term .xterm-viewport { background:transparent !important; }
+#pane { flex:1; min-width:48px; min-height:0; display:flex; flex-direction:column; position:relative; }
+#side { width:var(--sidew, 45%); min-width:120px; flex:none; display:flex; flex-direction:column; background:var(--bg); }
+#side .shead { height:calc(30px * var(--ui-k)); flex:none; display:flex; align-items:center; gap:calc(6px * var(--ui-k)); padding:0 calc(4px * var(--ui-k)); border-bottom:1px solid var(--line);
+  background:var(--surface); font-size:calc(12px * var(--ui-k)); color:var(--ink-2); }
+#side .shead .ibtn { width:calc(26px * var(--ui-k)); height:calc(26px * var(--ui-k)); }
+#sidetabs { flex:1; min-width:0; display:flex; align-items:center; gap:calc(2px * var(--ui-k)); overflow-x:auto; scrollbar-width:none; }
+#sidetabs::-webkit-scrollbar { display:none; }
+.stab { display:flex; align-items:center; gap:calc(4px * var(--ui-k)); height:calc(22px * var(--ui-k));
+  padding:0 calc(2px * var(--ui-k)) 0 calc(8px * var(--ui-k)); max-width:calc(180px * var(--ui-k)); flex:none; border-radius:5px;
+  color:var(--ink-3); cursor:default; }
+.stab:hover { background:var(--hover); }
+.stab .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.stab.active { color:var(--ink-2); background:var(--bg); box-shadow:0 0 0 1px var(--line); }
+#side.focused .stab.active { color:var(--ink); font-weight:600; }
+.stab .x { width:16px; height:16px; display:grid; place-items:center; border-radius:4px; visibility:hidden; flex:none; }
+.stab:hover .x, .stab.active .x { visibility:visible; }
+.stab .x:hover { background:var(--hover); color:var(--ink); }
+#sideframes { flex:1; min-height:0; display:flex; flex-direction:column; }
+#side iframe { flex:1; border:0; width:100%; background:var(--bg); }
+#side iframe[hidden] { display:none; }
+
+/* dragging a tab (drag.js): it follows the pointer, lifted; the others slide aside */
+#tabs { position:relative; }
+#tabs .tab.dragpeer { transition:transform .15s ease; }
+#tabs .tab.dragging { z-index:5; transition:none; }  /* the active tab as it is (its flares go with it): it stays joined to the page */
+#tabs .tab.dragging::before { display:none; }
+#tabs .tab.settling { transition:transform .16s ease; }

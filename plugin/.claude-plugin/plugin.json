@@ -1,0 +1,5 @@
+{
+  "name": "orbit",
+  "description": "Orbit's own skills for agents it starts (working with other sessions through orbit-agent)",
+  "version": "0.1.0"
+}

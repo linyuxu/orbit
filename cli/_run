@@ -1,0 +1,15 @@
+#!/bin/sh
+# Shared launcher for the commands in cli/: find the repository (through symlinks, e.g. ~/.local/bin/orbit-agent →
+# <repo>/cli/orbit-agent), then run the Python module with the repository's own environment. Standard library only.
+#   usage (from a sibling script): exec "$(dirname "$0")/_run" <python module> "$@"
+self=$1; shift
+mod=$1; shift
+while [ -L "$self" ]; do
+  link=$(readlink "$self")
+  case "$link" in /*) self=$link ;; *) self=$(dirname "$self")/$link ;; esac
+done
+ROOT=$(cd "$(dirname "$self")/.." && pwd)
+if [ -x "$ROOT/.venv/bin/python" ]; then
+  PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" exec "$ROOT/.venv/bin/python" -m "$mod" "$@"
+fi
+exec uv run --quiet --project "$ROOT" python -m "$mod" "$@"

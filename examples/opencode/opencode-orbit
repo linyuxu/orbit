@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""opencode (https://opencode.ai) as an Orbit harness: the Orbit Harness Protocol v1 around `opencode run`.
+
+Orbit runs this script (builddoc/harness-protocol.md); it runs `opencode run --format json` once per request, on the
+same opencode session (`-s`), and turns opencode's JSON events into the protocol's. Standard library only.
+
+Modes: opencode cannot ask for permission without its own terminal, so `default`, `acceptEdits` and
+`bypassPermissions` all run with `--auto` (approve what opencode's config does not deny); `plan` runs opencode's
+read-only `plan` agent. Efforts are opencode's `--variant`.
+"""
+
+import json
+import os
+import queue
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+
+OPENCODE = os.environ.get("OPENCODE_BIN", "opencode")
+argv = sys.argv[1:]
+
+
+def arg(name):
+    return argv[argv.index(name) + 1] if name in argv and argv.index(name) + 1 < len(argv) else None
+
+
+def run_json(*args, timeout=60):
+    """An opencode command's JSON output (it may print a banner first), or None."""
+    try:
+        r = subprocess.run([OPENCODE, *args], capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    out = r.stdout
+    starts = [i for i in (out.find("{"), out.find("[")) if i >= 0]
+    if r.returncode != 0 or not starts:
+        return None
+    try:
+        return json.loads(out[min(starts):])
+    except ValueError:
+        return None
+
+
+def emit(**m):
+    sys.stdout.write(json.dumps(m) + "\n")
+    sys.stdout.flush()
+
+
+# ------------------------------------------------------------------ questions (Orbit asks, we answer, we exit)
+if "--describe" in argv:
+    models = []
+    try:
+        r = subprocess.run([OPENCODE, "models"], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+        models = [line.strip() for line in r.stdout.splitlines() if "/" in line and " " not in line.strip()]
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    emit(protocol=1, label="opencode", models=[{"value": m, "label": m} for m in models],
+         efforts=["minimal", "low", "medium", "high", "max"], modes=["default", "plan", "bypassPermissions"],
+         capabilities={"steer": False, "thinking": True, "subagents": False})
+    sys.exit(0 if shutil.which(OPENCODE) else 1)
+
+if "--list-conversations" in argv:
+    limit = int(arg("--limit") or 40)
+    for s in (run_json("session", "list", "--format", "json") or [])[:limit]:
+        emit(id=s["id"], cwd=s.get("directory", ""), first=s.get("title", ""), name="", title=s.get("title", ""),
+             time=(s.get("updated") or s.get("created") or 0) / 1000)
+    sys.exit(0)
+
+if "--history" in argv:
+    d = run_json("export", arg("--history")) or {}
+    turn = None
+    for m in d.get("messages") or []:
+        info, parts = m.get("info") or {}, m.get("parts") or []
+        if info.get("role") == "user":
+            if turn:
+                emit(**turn)
+            text = "\n".join(p.get("text", "") for p in parts if p.get("type") == "text")
+            turn = {"text": text, "time": (info.get("time") or {}).get("created", 0) / 1000, "answer": "", "steps": [],
+                    "state": "cancelled"}  # until an answer completes (an interrupted turn never does)
+        elif turn is not None:
+            for p in parts:
+                if p.get("type") == "text" and p.get("text"):
+                    if turn["answer"]:  # text before more steps: a note
+                        turn["steps"].append({"id": "", "kind": "note", "name": "", "summary": turn["answer"][:300], "text": turn["answer"]})
+                    turn["answer"] = p["text"]
+                elif p.get("type") == "tool":
+                    st = p.get("state") or {}
+                    turn["steps"].append({"id": p.get("callID", ""), "kind": "tool", "name": p.get("tool", ""),
+                                          "summary": st.get("title") or "", "error": st.get("status") == "error"})
+            done = (info.get("time") or {}).get("completed")
+            if done:
+                turn["finished"] = done / 1000
+                turn["state"] = "error" if info.get("error") else "completed"
+    if turn:
+        emit(**turn)
+    sys.exit(0)
+
+if "--usage" in argv:
+    sys.exit(2)  # opencode has no plan limits to show
+
+# ------------------------------------------------------------------ a session
+conversation = arg("--conversation") or ""
+fork_from = arg("--fork") or ""
+model, mode, effort = arg("--model"), arg("--mode") or "default", arg("--effort")
+inbox: "queue.Queue[dict | None]" = queue.Queue()
+
+
+def read_stdin():
+    for line in sys.stdin:
+        try:
+            inbox.put(json.loads(line))
+        except ValueError:
+            pass
+    inbox.put(None)
+
+
+threading.Thread(target=read_stdin, daemon=True).start()
+emit(type="hello", conversation=conversation or None, model=model or "")
+
+
+def command():
+    cmd = [OPENCODE, "run", "--format", "json", "--thinking"]
+    if model:
+        cmd += ["-m", model]
+    if effort:
+        cmd += ["--variant", effort]
+    cmd += ["--agent", "plan"] if mode == "plan" else ["--auto"]
+    if conversation:
+        cmd += ["-s", conversation]
+    elif fork_from:
+        cmd += ["-s", fork_from, "--fork"]
+    return cmd
+
+
+def run_request(rid, text):
+    """One request: `opencode run`, its events turned into the protocol's; returns False when stdin closed."""
+    global conversation, fork_from
+    try:
+        proc = subprocess.Popen(command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except OSError as e:
+        emit(type="result", request=rid, ok=False, text="", error=f"cannot run opencode: {e}")
+        return True
+    proc.stdin.write(text)  # the request on stdin (no argument-length limit, no quoting)
+    proc.stdin.close()
+    events: "queue.Queue[str | None]" = queue.Queue()
+    err: list[str] = []
+
+    def pump():
+        for line in proc.stdout:
+            events.put(line)
+        events.put(None)
+    threading.Thread(target=pump, daemon=True).start()
+    threading.Thread(target=lambda: err.extend(proc.stderr.read().splitlines()[-6:]), daemon=True).start()
+    answer, cancelled, alive = "", False, True
+    while True:
+        try:
+            line = events.get(timeout=0.1)
+        except queue.Empty:
+            try:  # Orbit says something while opencode works: only interrupt matters (no steer)
+                m = inbox.get_nowait()
+            except queue.Empty:
+                continue
+            if m is None:
+                alive = False
+                proc.send_signal(signal.SIGINT)
+            elif m.get("type") == "interrupt":
+                cancelled = True
+                proc.send_signal(signal.SIGINT)
+            continue
+        if line is None:
+            break
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        sid = ev.get("sessionID")
+        if sid and sid != conversation:
+            conversation, fork_from = sid, ""
+            emit(type="hello", conversation=sid, model=model or "")
+        p = ev.get("part") or {}
+        t = ev.get("type")
+        if t == "reasoning" and p.get("text"):
+            emit(type="thinking", text="", start=True)
+            emit(type="thinking", text=p["text"])
+        elif t == "text" and p.get("text"):
+            answer = p["text"]
+            emit(type="text", text=p["text"])
+        elif t == "tool_use":
+            st = p.get("state") or {}
+            emit(type="tool_start", id=p.get("callID", ""), name=p.get("tool", "tool"), summary=st.get("title") or "",
+                 input=st.get("input") if isinstance(st.get("input"), dict) else None)
+            emit(type="tool_end", id=p.get("callID", ""), error=st.get("status") == "error")
+        elif t == "step_finish":
+            tok = p.get("tokens") or {}
+            ctx = int(tok.get("input") or 0) + int((tok.get("cache") or {}).get("read") or 0)
+            if ctx:
+                emit(type="usage", context=ctx, model=model or "")
+        elif t == "error":
+            err.append(json.dumps(ev.get("error") or ev)[:400])
+    code = proc.wait()
+    if cancelled:
+        emit(type="result", request=rid, ok=False, cancelled=True, text=answer)
+    elif code == 0 and answer:
+        emit(type="result", request=rid, ok=True, text=answer)
+    else:
+        emit(type="result", request=rid, ok=False, text=answer,
+             error="\n".join(err) or f"opencode ended with {code} and no answer")
+    return alive
+
+
+while True:
+    m = inbox.get()
+    if m is None:
+        break
+    if m.get("type") == "request" and not run_request(m.get("id", ""), m.get("text", "")):
+        break

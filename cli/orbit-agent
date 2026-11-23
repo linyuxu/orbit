@@ -1,0 +1,7 @@
+#!/bin/sh
+# orbit-agent: the agents' command (any harness, any terminal): talk to the sessions a server runs.
+#   orbit-agent sessions · send · steer · read · mention · wait · history · search · ask · note · open · show · ctx …
+# `orbit-agent --help` lists them. Code: orbit/agent.py.
+self=$0
+while [ -L "$self" ]; do l=$(readlink "$self"); case "$l" in /*) self=$l ;; *) self=$(dirname "$self")/$l ;; esac; done
+exec "$(dirname "$self")/_run" "$self" orbit.cli.agent "$@"

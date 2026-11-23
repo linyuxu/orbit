@@ -1,0 +1,13 @@
+# opencode as an Orbit harness: an example of a plugin that adds one (builddoc/harness-protocol.md).
+# Use it: add this folder to plugin_paths in ~/.orbit/config.toml (or copy it to ~/.orbit/plugins/opencode/),
+# then restart Orbit's server; "opencode" joins the harnesses of ⌘N.
+
+[plugin]
+name = "opencode"
+version = "0.1.0"
+requires_api = ">=1,<3"
+description = "opencode (https://opencode.ai) sessions, through `opencode run --format json`"
+
+[harness.opencode]
+label = "opencode"
+command = ["opencode-orbit"]   # the script beside this file

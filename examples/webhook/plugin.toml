@@ -1,0 +1,24 @@
+# A webhook into Orbit: an example of a plugin with a service, a secret, a command and an agent hint
+# (builddoc/plugins.md). The same shape fits a chat bridge (Slack, …): a service that receives messages, sends them
+# to sessions with an origin, and takes the answers back.
+#
+#   plugin_paths = ["<this folder>"]                  in ~/.orbit/config.toml, then restart Orbit's server
+#   orbit plugin secret webhook WEBHOOK_SECRET        (the service starts once it has it)
+#   curl -s localhost:8790/hook -H 'X-Webhook-Secret: …' -d '{"session": "NAME", "text": "hi", "wait": true}'
+
+[plugin]
+name = "webhook"
+version = "0.1.0"
+requires_api = ">=1,<3"
+description = "Requests to sessions over HTTP; answers back to a callback URL"
+secrets = ["WEBHOOK_SECRET"]
+
+[service.listener]
+command = ["webhook-orbit", "serve"]
+env = { WEBHOOK_PORT = "8790" }
+
+[cli]
+command = ["webhook-orbit", "cli"]
+
+[agent]
+hint = "requests marked “via webhook” came over HTTP; `orbit-agent p webhook recent` lists the latest"

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orbit</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Orbit">
+<!-- "default": the status bar's text follows the page (dark on light, light on dark); black-translucent would force
+     white text, unreadable on the light theme. The safe areas are handled anyway (landscape, Safari). -->
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f9f9f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17181b" media="(prefers-color-scheme: dark)">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="/m/manifest.webmanifest{{TOKEN_QS}}" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="/m/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/m/icon-192.png">
+<script>/* Opened here on purpose: the Mac's page goes back to sending this phone to /m/ (Settings → Desktop layout set it). */
+try { localStorage.removeItem("orbit.forceDesktop"); } catch (e) {}</script>
+<link rel="stylesheet" href="/styles/base.css">
+<link rel="stylesheet" href="/vendor/hljs-light.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="/vendor/hljs-dark.min.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="/vendor/katex.min.css">
+<link rel="stylesheet" href="/m/m.css">
+<script defer src="/vendor/markdown-it.min.js"></script>
+<script defer src="/vendor/highlight.min.js"></script>
+<script defer src="/vendor/katex.min.js"></script>
+<script defer src="/m/m-core.js"></script>
+<script defer src="/src/markdown-base.js"></script>
+<script defer src="/src/markdown.js"></script>
+<script defer src="/src/brands.js"></script>
+<script defer src="/src/fileicons.js"></script>
+<script defer src="/vendor/cm.js"></script>
+<script defer src="/m/m-cards.js"></script>
+<script defer src="/m/m-list.js"></script>
+<script defer src="/m/m-conv.js"></script>
+<script defer src="/m/m-sheets.js"></script>
+<script defer src="/m/m-tabs.js"></script>
+<script defer src="/m/m-files.js"></script>
+<script defer src="/m/m-notes.js"></script>
+<script defer src="/m/m-misc.js"></script>
+<script defer src="/m/m.js"></script>
+</head>
+<body>
+<div id="app">
+  <!-- ============================================================ the four areas (the tab bar's); each a stack of pages -->
+  <div class="tabarea on" id="a-sessions" data-tab="sessions">
+  <section class="view page" id="vlist">
+    <header class="nav">
+      <span class="nbtn ghost" aria-hidden="true"></span><span class="nbtn ghost" aria-hidden="true"></span>
+      <div class="ntitle"><span class="small">Sessions</span></div>
+      <button class="nbtn" id="newbtn" aria-label="New session"><svg class="i" width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>
+      <button class="nbtn" id="setbtn" aria-label="Settings"><svg class="i" width="21" height="21" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="8" cy="8" r="2.3"/><path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M3.5 12.5l1.3-1.3M11.2 4.8l1.3-1.3"/></svg></button>
+    </header>
+    <div class="offline-bar">Reconnecting to Orbit…</div>
+    <div class="scroll" id="lscroll">
+      <div id="pull" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-dasharray="24 9"/></svg></div>
+      <div class="inner">
+        <h1 class="bigtitle" id="bigtitle">Sessions</h1>
+        <div id="slist"><div class="loading"><svg width="20" height="20" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.75" fill="none" stroke-linecap="round" stroke-dasharray="24 9"/></svg></div></div>
+      </div>
+    </div>
+  </section>
+  </div>
+  <div class="tabarea" id="a-files" data-tab="files" inert></div>
+  <div class="tabarea" id="a-notes" data-tab="notes" inert></div>
+  <div class="tabarea" id="a-misc" data-tab="misc" inert></div>
+  <nav id="tabbar" role="tablist" aria-label="Areas"></nav>
+
+  <!-- ============================================================ Conversation (over the tab bar) -->
+  <section class="view" id="vconv" aria-hidden="true">
+    <header class="nav conv">
+      <button class="nbtn" id="cback" aria-label="Back to Sessions"><svg class="i" width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5L4.5 8l5.5 5.5"/></svg></button>
+      <div class="ntitle"><span id="cname"></span><span id="csub"></span></div>
+      <button class="nbtn" id="cmore" aria-label="Session actions"><svg class="i" width="22" height="22" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.2" cy="8" r="1.15"/><circle cx="8" cy="8" r="1.15"/><circle cx="12.8" cy="8" r="1.15"/></svg></button>
+    </header>
+    <div class="offline-bar">Reconnecting to Orbit…</div>
+    <div class="scroll" id="conv"><div id="cards"></div></div>
+    <footer id="foot">
+      <button id="jump"><svg class="i" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5"/></svg><span>Latest</span></button>
+      <div id="agentbar" hidden></div>
+      <div class="crow">
+        <button class="cbtn" id="attach" aria-label="Attach a photo"><svg class="i" width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.6"/><circle cx="5.8" cy="6.4" r="1.1"/><path d="M2.5 11.5l3.4-3.2 2.6 2.4 2-1.8 3 2.6"/></svg></button>
+        <input type="file" id="photo" accept="image/*" multiple hidden>
+        <!-- MIC (next phase: voice): its .cbtn goes here, beside Attach, the same 44px cell. Nothing is drawn until it works. -->
+        <div class="cfield" id="composer">
+          <div id="inputhost"></div>
+          <button class="cbtn round stop" id="stop" hidden aria-label="Stop the request"><span class="disc"><svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" rx="2" fill="currentColor"/></svg></span></button>
+          <button class="cbtn round send" id="send" disabled aria-label="Send"></button>
+        </div>
+      </div>
+    </footer>
+  </section>
+</div>
+
+<!-- ============================================================ not paired (a 401) -->
+<div id="unpaired">
+  <img src="/m/icon-192.png" alt="" width="72" height="72">
+  <h2>Not paired with Orbit</h2>
+  <p>This phone needs Orbit's link once. On the Mac, open Orbit's <b>Settings → Machines → iPhone…</b> and scan its code with the Camera (or open the link from <code>orbit https status</code> on that machine).</p>
+  <button class="pill" id="retry">Try again</button>
+</div>
+<div id="toast" role="status"></div>
+</body>
+</html>

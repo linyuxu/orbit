@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""A webhook into Orbit: an example of a plugin service (builddoc/plugins.md). Standard library only.
+
+    webhook-orbit serve   the service: listens on 127.0.0.1:$WEBHOOK_PORT for
+                          POST /hook  {"text", "session"? (name or id), "folder"? (a new session there), "harness"?,
+                                       "label"?, "callback"? (a URL the answer is POSTed to), "wait"? (answer now)}
+                          with the header X-Webhook-Secret: $WEBHOOK_SECRET. The request goes to the session with
+                          an origin (the card shows "via <label>"); the answer goes to the callback, or back at once.
+    webhook-orbit cli …   `orbit-agent p webhook …`: `recent` (the last requests and how they ended), `url`
+
+What a plugin service gets from Orbit (environment): ORBIT_URL, ORBIT_PLUGIN_TOKEN (sent as X-Orbit-Plugin-Token: the
+requests it sends are marked as the plugin's), ORBIT_PLUGIN_DATA (its folder), and its declared secrets.
+"""
+
+import hmac
+import json
+import os
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+ORBIT = os.environ.get("ORBIT_URL", "http://127.0.0.1:8770")
+TOKEN = os.environ.get("ORBIT_PLUGIN_TOKEN", "")
+DATA = os.environ.get("ORBIT_PLUGIN_DATA", ".")
+SECRET = os.environ.get("WEBHOOK_SECRET", "")
+RECENT = os.path.join(DATA, "recent.jsonl")
+
+
+def orbit(method, path, body=None, timeout=30):
+    req = urllib.request.Request(ORBIT + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Content-Type": "application/json", "X-Orbit-Plugin-Token": TOKEN})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        raise ValueError(json.loads(e.read() or b"{}").get("error") or str(e)) from None
+
+
+def session_for(body):
+    """The session a hook names (id or name), or a new one in its folder."""
+    want = str(body.get("session") or "")
+    if want:
+        for s in orbit("GET", "/api/sessions?local=1")["sessions"]:
+            if want in (s["id"], s["name"]):
+                return s["id"]
+        raise ValueError(f"no session {want}")
+    if body.get("folder"):
+        s = orbit("POST", "/api/sessions", {"cwd": str(body["folder"]), "name": str(body.get("name") or "webhook"),
+                                            "harness": str(body.get("harness") or "claude")})
+        return s["id"]
+    raise ValueError("give session (a name or id) or folder")
+
+
+def answer_of(sid, cid, limit=3600):
+    """Wait for the request to end (Orbit follows a paused request to the one that continues it)."""
+    end = time.time() + limit
+    while True:
+        d = orbit("GET", f"/api/sessions/{sid}/cards/{cid}?wait=60", timeout=90)
+        if d["final"] or time.time() > end:
+            c = d["card"]
+            return {"session": sid, "request": c["id"], "state": c["state"], "answer": c.get("answer", ""),
+                    "error": c.get("error", "")}
+
+
+def remember(entry):
+    with open(RECENT, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def deliver(sid, cid, callback, label):
+    out = answer_of(sid, cid)
+    out["label"] = label
+    if callback:
+        try:
+            urllib.request.urlopen(urllib.request.Request(callback, data=json.dumps(out).encode(), method="POST",
+                                                          headers={"Content-Type": "application/json"}), timeout=30)
+            out["delivered"] = True
+        except OSError as e:
+            out["delivered"] = False
+            print(f"webhook: callback {callback} failed: {e}", flush=True)
+    remember({**out, "time": time.time()})
+    return out
+
+
+class Hook(BaseHTTPRequestHandler):
+    def _send(self, code, obj):
+        b = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    def do_POST(self):
+        if self.path != "/hook":
+            return self._send(404, {"error": "POST /hook"})
+        if not hmac.compare_digest(self.headers.get("X-Webhook-Secret", ""), SECRET):
+            return self._send(401, {"error": "wrong or missing X-Webhook-Secret"})
+        try:
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            text = str(body.get("text") or "").strip()
+            if not text:
+                raise ValueError("text is empty")
+            label = str(body.get("label") or "webhook")[:60]
+            sid = session_for(body)
+            card = orbit("POST", f"/api/sessions/{sid}/send", {"text": text, "origin": {
+                "label": label, "data": {"callback": body.get("callback") or ""}}})
+        except (ValueError, OSError) as e:
+            return self._send(400, {"error": str(e)})
+        print(f"webhook: {label} → {sid} #{card['id']}", flush=True)
+        if body.get("wait"):
+            return self._send(200, deliver(sid, card["id"], "", label))
+        threading.Thread(target=deliver, args=(sid, card["id"], str(body.get("callback") or ""), label), daemon=True).start()
+        return self._send(202, {"session": sid, "request": card["id"]})
+
+    def log_message(self, *a):
+        pass
+
+
+def serve():
+    if not SECRET:
+        sys.exit("webhook: no WEBHOOK_SECRET (orbit plugin secret webhook WEBHOOK_SECRET)")
+    srv = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("WEBHOOK_PORT", "8790"))), Hook)
+    port = srv.server_address[1]
+    tmp = os.path.join(DATA, "port.tmp")
+    with open(tmp, "w") as f:
+        f.write(str(port))
+    os.replace(tmp, os.path.join(DATA, "port"))  # whole or not at all: a reader never sees it half written
+    print(f"webhook: listening on http://127.0.0.1:{port}/hook", flush=True)
+    srv.serve_forever()
+
+
+def cli(args):
+    if args[:1] == ["url"]:
+        try:
+            print(f"http://127.0.0.1:{open(os.path.join(DATA, 'port')).read().strip()}/hook")
+        except OSError:
+            sys.exit("webhook: the service has not started (orbit plugin logs webhook)")
+    elif args[:1] == ["recent"]:
+        try:
+            lines = open(RECENT).read().splitlines()[-10:]
+        except OSError:
+            lines = []
+        for x in map(json.loads, lines):
+            print(f"{time.strftime('%m-%d %H:%M', time.localtime(x['time']))} {x['label']} → {x['session'][:8]} "
+                  f"#{x['request']} {x['state']}: {(x['answer'] or x['error'])[:80]!r}")
+        if not lines:
+            print("No webhook requests yet.")
+    else:
+        print("orbit-agent p webhook recent | url")
+
+
+if __name__ == "__main__":
+    if sys.argv[1:2] == ["serve"]:
+        serve()
+    elif sys.argv[1:2] == ["cli"]:
+        cli(sys.argv[2:])
+    else:
+        sys.exit(__doc__)
+

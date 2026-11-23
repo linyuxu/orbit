@@ -1,0 +1,162 @@
+/* ===================================================================== Schedules · Calendar (side tabs, Misc panel) */
+#xview { flex:1; min-height:0; display:flex; flex-direction:column; }
+#xbody { flex:1; min-height:0; overflow:auto; padding:6px max(8px, calc((100% - 900px) / 2)) 30vh; outline:none; }  /* the list centred, 900px at most */
+.xfoot { flex:none; padding:6px 14px; border-top:1px solid var(--line); font-size:calc(11px * var(--ui-k)); color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.xrow { display:flex; align-items:flex-start; gap:9px; padding:7px 10px; border-radius:var(--r-s); cursor:default; }
+.xrow:hover { background:color-mix(in srgb, var(--hover) 55%, transparent); }
+.xrow.kc, #xbody:focus .xrow.kc { background:color-mix(in srgb, var(--focus) 9%, transparent); box-shadow:inset 3px 0 0 var(--focus); border-radius:0 8px 8px 0; }  /* the keyboard row: a bar and a tint, never a fill */
+.xrow .dot { margin-top:6px; }
+.xrow .m { flex:1; min-width:0; }
+.xrow .l1 { display:flex; gap:8px; align-items:baseline; min-width:0; }
+.xrow .nm { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
+.xrow .r { color:var(--ink-3); font-size:calc(12px * var(--ui-k)); white-space:nowrap; flex:none; }
+.xrow .racts { display:none; gap:2px; margin:-4px -4px -4px 4px; flex:none; }  /* a row's actions, on hover or the keyboard row (U11) */
+.xrow:hover .racts, .xrow.kc .racts { display:flex; }
+.xrow.mrow .racts { display:flex; visibility:hidden; margin:0 -6px 0 0; }  /* (its room kept: the row doesn't shift on hover) */
+.xrow.mrow:hover .racts, .xrow.mrow.kc .racts { visibility:visible; }
+.xrow .l2 { color:var(--ink-3); font-size:calc(12px * var(--ui-k)); overflow:hidden; margin-top:1px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow-wrap:anywhere; }
+.xrow .l2 .err { color:var(--err); }
+.xrow.off .nm { color:var(--ink-3); }
+.xrow .tm { font:500 calc(12px * var(--ui-k)) var(--font); font-variant-numeric:tabular-nums; color:var(--ink-2); width:46px; flex:none; padding-top:1px; white-space:nowrap; }
+.xrow.past { opacity:.55; }
+.xrow.now .tm { color:var(--run); font-weight:600; }
+.xrow .cbar { width:3px; align-self:stretch; border-radius:2px; flex:none; }
+.xday { font-size:calc(12px * var(--ui-k)); font-weight:600; color:var(--ink-2); padding:12px 10px 4px; }
+.xday.today { color:var(--accent); }
+.xempty { color:var(--ink-3); padding:24px 14px; line-height:1.6; }
+.xempty h3 { color:var(--ink); margin:0 0 6px; font-size:calc(14px * var(--ui-k)); }
+.dialog .hint { font-size:calc(11px * var(--ui-k)); color:var(--ink-3); margin-top:4px; min-height:14px; }
+.dialog .hint.bad { color:var(--err); }
+
+/* ===================================================================== ± Review */
+#reviewview { flex:1; min-height:0; display:flex; flex-direction:column; }
+.rvhead { height:40px; flex:none; display:flex; align-items:center; gap:8px; padding:0 8px 0 14px; border-bottom:1px solid var(--line); background:var(--surface); overflow:hidden; }
+.rvhead .t { font-weight:600; white-space:nowrap; flex:none; }
+.rvhead .s { color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1 1 0; }
+.rvhead .acts { margin-left:auto; display:flex; gap:4px; align-items:center; flex:none; }  /* the path gives way first */
+.rvhead .acts .btn { max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+#rvbody { flex:1; min-height:0; overflow:auto; padding:10px 14px 40vh; }
+.rvfile { margin-bottom:14px; border:1px solid var(--line); border-radius:var(--r-m); background:var(--surface); overflow:hidden; }
+.rvfh { height:32px; display:flex; align-items:center; gap:8px; padding:0 6px 0 10px; border-bottom:1px solid var(--line); background:var(--surface); }
+.rvfh .p { font-family:var(--mono); font-size:calc(12px * var(--ui-k)); color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1 1 auto; cursor:default; }
+.rvfh .p:hover { text-decoration:underline; }
+.rvfh .n { font-size:calc(11px * var(--ui-k)); white-space:nowrap; }
+.rvfh .n .a { color:var(--add); } .rvfh .n .d { color:var(--del); }
+.rvfh .acts { margin-left:auto; display:flex; gap:2px; }
+.stl { font:600 calc(11px * var(--ui-k)) var(--mono); width:14px; text-align:center; flex:none; }
+.st-M, .st-R { color:var(--warn); } .st-A, .st-U { color:var(--add); } .st-D { color:var(--del); }
+.hunk { border-top:1px solid var(--line); }
+.hh { display:flex; align-items:center; gap:8px; background:var(--code-bg); color:var(--ink-3); font:11px var(--mono); padding:3px 6px 3px 10px; }
+.hh .h { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dl { display:flex; font:12px/1.55 var(--mono); min-width:max-content; }
+.dl .no { width:44px; flex:none; text-align:right; padding-right:8px; color:var(--ink-3); -webkit-user-select:none; user-select:none; cursor:pointer; }
+.dl .no:hover { color:var(--ink); background:var(--sel); }
+.dl .sg { width:16px; flex:none; text-align:center; color:var(--ink-3); -webkit-user-select:none; user-select:none; }
+.dl .tx { white-space:pre; padding-right:16px; }
+.dl.add { background:var(--ok-soft); } .dl.add .sg { color:var(--add); }
+.dl.del { background:var(--err-soft); } .dl.del .sg { color:var(--del); }
+.dl.cmt .no { color:var(--ink); font-weight:600; }
+.hlines { overflow-x:auto; }
+.cbox { margin:4px 10px 8px 60px; max-width:640px; border:1px solid var(--line); border-radius:var(--r-s); background:var(--surface); padding:8px; font-family:var(--font); }
+.cbox textarea { width:100%; min-height:54px; border:1px solid var(--line); border-radius:var(--r-s); background:var(--bg); color:var(--ink);
+  font:calc(12px * var(--ui-k))/1.5 var(--font); padding:6px 8px; resize:vertical; }
+.cbox textarea:focus { border-color:var(--accent); outline:none; }
+.cbox .row { display:flex; justify-content:flex-end; gap:6px; margin-top:6px; align-items:center; }
+.cbox .row .h { margin-right:auto; color:var(--ink-3); font-size:calc(11px * var(--ui-k)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.cbox .row .btn { flex:none; }
+.cmtv { margin:2px 10px 6px 60px; max-width:640px; padding:6px 10px; border-left:2px solid var(--accent); background:var(--surface); font:calc(12px * var(--ui-k))/1.5 var(--font); color:var(--ink-2);
+  display:flex; gap:8px; align-items:flex-start; }
+.cmtv .tx { flex:1; white-space:pre-wrap; }
+.rvnote { color:var(--ink-3); padding:10px; font-size:calc(12px * var(--ui-k)); }
+
+/* The Calendar tab's meeting note, under the list (calnote.js) */
+#xnote { margin:2px 10px 12px 96px; border:1px solid var(--line); border-radius:var(--r-m); background:var(--surface);
+  overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04); }  /* under the meeting it belongs to (calnote.js) */
+.xnhead { display:flex; align-items:center; gap:10px; padding:6px 8px 6px 14px; border-bottom:1px solid var(--line); font-size:calc(12px * var(--ui-k)); }
+.xnhead .s { color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.xnhead .acts { margin-left:auto; display:flex; gap:6px; flex:none; }
+.xnbody { position:relative; max-height:min(60vh, 640px); overflow:auto; }
+.xnbody.editing { height:min(50vh, 460px); max-height:none; overflow:hidden; resize:vertical; }  /* drag its corner */
+.xnbody > .host { position:absolute; inset:0; }
+.xnview { padding:10px 16px 16px; font-size:calc(13px * var(--ui-k)); }
+.xnempty { padding:12px 14px; color:var(--ink-3); font-size:calc(12px * var(--ui-k)); }
+.xrow.open { background:var(--sel); }
+.xhid { padding:10px 10px 0; color:var(--ink-3); font-size:calc(11px * var(--ui-k)); }
+
+/* ---------- the Calendar's meetings (calview.js): one 44px row each, opened in place */
+#xhead .t { font-weight:600; display:flex; align-items:center; gap:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+#xhead .acts { margin-left:auto; display:flex; gap:6px; flex:none; }
+/* Calmer (content carries the colour; chrome is hairlines and tints): no boxes, a hairline between rows; the keyboard
+   row is a 3px --focus bar on the left and a faint tint; times in the UI font; badges as coloured text; Join a quiet
+   text button. Every rule is scoped to .xrow.mrow (the left panel has rows of its own). */
+.mday { display:flex; align-items:center; gap:10px; margin:18px 12px 4px; font-size:calc(11px * var(--ui-k)); font-weight:600; letter-spacing:.06em; color:var(--ink-3); }
+.mday:first-child { margin-top:8px; }
+.mblk { font-weight:400; letter-spacing:0; cursor:pointer; padding:1px 6px; border-radius:4px; }
+.mblk:hover { background:var(--hover); color:var(--ink-2); }
+.mnone { padding:8px 12px 8px 138px; color:var(--ink-3); font-size:calc(12px * var(--ui-k)); }
+.xrow.mrow { height:44px; align-items:center; gap:10px; padding:0 12px; border-radius:0; border-bottom:1px solid var(--hover); }
+.xrow.mrow:hover { background:color-mix(in srgb, var(--hover) 55%, transparent); }
+.xrow.mrow.kc, #xbody:focus .xrow.mrow.kc { background:color-mix(in srgb, var(--focus) 9%, transparent); box-shadow:inset 3px 0 0 var(--focus); border-radius:0 8px 8px 0; }
+.xrow.mrow.open { background:color-mix(in srgb, var(--hover) 45%, transparent); }
+.xrow.mrow .tm { width:84px; padding:0; flex:none; font:500 calc(12px * var(--ui-k)) var(--font); font-variant-numeric:tabular-nums; color:var(--ink-2); white-space:nowrap; }
+.mav { width:22px; height:22px; flex:none; border-radius:var(--r-s); background:var(--sel); color:var(--av-fg); display:grid; place-items:center;
+  font-size:calc(11px * var(--ui-k)); font-weight:600; overflow:hidden; }
+.mav img { width:100%; height:100%; object-fit:cover; }
+.mav.sm { width:16px; height:16px; font-size:calc(9.5px * var(--ui-k)); border-radius:4px; }
+.xrow.mrow .nm { font-size:calc(13.5px * var(--ui-k)); font-weight:600; color:var(--ink); flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mb { flex:none; font-size:calc(11px * var(--ui-k)); font-weight:600; }
+.mb.now { color:var(--ok); }
+.mb.ov { color:var(--warn); }
+.xrow.mrow .mt { flex:none; margin-left:auto; font-size:calc(12px * var(--ui-k)); color:var(--ink-3); white-space:nowrap; max-width:34%; overflow:hidden; text-overflow:ellipsis; }
+.xrow.mrow .mjoin, .xrow.mrow .mjoin0 { flex:none; width:52px; }
+.xrow.mrow.next .tm { color:var(--accent); font-weight:600; }  /* the meeting now (or next): its time, nothing louder */
+.xrow.mrow.past .nm, .xrow.mrow.past .tm, .xrow.mrow.past .mt { color:var(--ink-3); font-weight:500; }
+.xrow.mrow.block .nm { font-weight:400; color:var(--ink-3); font-style:italic; }
+.mopen { margin:0 0 4px; padding:8px 12px 10px 138px; display:flex; flex-direction:column; gap:8px; font-size:calc(12px * var(--ui-k));
+  background:color-mix(in srgb, var(--hover) 45%, transparent); border-bottom:1px solid var(--hover); }  /* its body starts under the title */
+.mline { color:var(--ink-3); }
+.mpeople { display:flex; flex-wrap:wrap; gap:6px; }
+.mpeople .mchip { display:inline-flex; align-items:center; gap:5px; padding:2px 8px 2px 3px; border-radius:12px; background:var(--surface); border:1px solid var(--line); color:var(--ink-2); }
+.mpeople .mchip.accepted { border-color:color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.mpeople .mchip.declined { opacity:.45; text-decoration:line-through; }
+.mdesc summary { cursor:pointer; color:var(--ink-2); }
+.mdesc > div { margin-top:6px; white-space:pre-wrap; color:var(--ink-2); max-height:220px; overflow:auto; overflow-wrap:anywhere; }
+.mdesc a { color:var(--link, #2563eb); }
+.mrel { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.mrel .ml { color:var(--ink-3); margin-right:2px; }
+.mses { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:6px; background:var(--hover); cursor:pointer; }
+.mses:hover { background:var(--sel); }
+.macts { display:flex; gap:6px; }
+#xnote { margin-left:138px; }
+/* the status bar's meeting: a countdown chip */
+.mchipc { margin-left:6px; font-size:calc(10.5px * var(--ui-k)); padding:0 5px; border-radius:8px; background:var(--hover); color:var(--ink-2); }
+.mchipc.soon { background:var(--run-soft); color:var(--warn); font-weight:600; }
+.mchipc.now { background:var(--ok-soft); color:var(--ok); font-weight:600; }
+/* the reminder, 10 minutes before */
+#remind { position:fixed; right:18px; bottom:42px; z-index:60; display:flex; align-items:center; gap:8px; padding:8px 8px 8px 12px;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r-m); box-shadow:var(--menu-shadow); font-size:calc(12.5px * var(--ui-k)); max-width:min(560px, 90vw); }
+#remind .tx { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#remind .in { color:var(--ink-3); margin-left:8px; }
+#remind .x { border:0; background:none; color:var(--ink-3); cursor:pointer; padding:4px; }
+.xrow .watch { font:600 calc(10px * var(--ui-k)) var(--font); color:var(--run); border:1px solid currentColor; border-radius:4px; padding:0 3px; }
+.xrow .jl { text-decoration:underline dotted; }
+
+/* ⌘⇧C / the status bar's meeting: today's and tomorrow's meetings in a popover above it (the Calendar's rows, compact) */
+#meetpop { position:fixed; z-index:60; width:min(520px, calc(100vw - 16px)); background:var(--surface); border-radius:var(--r-m); box-shadow:var(--menu-shadow);
+  padding:4px; font-size:calc(12px * var(--ui-k)); display:flex; flex-direction:column; max-height:min(420px, 70vh); }
+#meetpop .mplist { overflow-y:auto; min-height:0; }
+#meetpop .mphead { margin:8px 10px 2px; font-size:calc(10.5px * var(--ui-k)); font-weight:600; letter-spacing:.06em; color:var(--ink-3); }
+#meetpop .mphead:first-child { margin-top:4px; }
+#meetpop .mprow { height:34px; display:flex; align-items:center; gap:8px; padding:0 4px 0 10px; border-radius:var(--r-s); cursor:default; }
+#meetpop .mprow.sel { background:color-mix(in srgb, var(--focus) 10%, transparent); }
+#meetpop .mprow .tm { width:78px; flex:none; font:500 calc(12px * var(--ui-k)) var(--font); font-variant-numeric:tabular-nums; color:var(--ink-2); white-space:nowrap; }
+#meetpop .mprow .nm { font-size:calc(12.5px * var(--ui-k)); font-weight:600; color:var(--ink); min-width:0; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#meetpop .mprow .mpin { flex:none; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); }
+#meetpop .mprow .mt { margin-left:auto; flex:0 1 auto; min-width:0; max-width:34%; font-size:calc(11.5px * var(--ui-k)); color:var(--ink-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-left:8px; }
+#meetpop .mprow .btn, #meetpop .mprow .mj0 { flex:none; width:48px; }
+#meetpop .mprow.past .nm, #meetpop .mprow.past .tm { color:var(--ink-3); font-weight:500; }
+#meetpop .mav { width:20px; height:20px; }
+#meetpop .mpnone { padding:14px 12px; color:var(--ink-3); }
+#meetpop .mpfoot { display:flex; align-items:center; gap:8px; margin-top:4px; padding:4px 6px 2px 2px; border-top:1px solid var(--line); }
+#meetpop .mpfoot .k { margin-left:auto; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); white-space:nowrap; }
+#sbmeet.on { background:var(--btn-hover); color:var(--ink); }
