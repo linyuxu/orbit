@@ -179,6 +179,8 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
             raise ValueError(f"unknown harness: {harness}")
         if mode not in MODES:
             raise ValueError(f"unknown mode: {mode}")
+        if mode not in DRIVERS[harness].modes:
+            raise ValueError(f"{DRIVERS[harness].label} has no {mode} mode (it has {', '.join(DRIVERS[harness].modes)})")
         if effort and effort not in DRIVERS[harness].efforts:
             raise ValueError(f"unknown effort for {harness}: {effort}")
         s = Session({"id": str(uuid.uuid4()), "name": name.strip(), "cwd": cwd, "model": model.strip(),

@@ -157,6 +157,28 @@ class SessionsTest(test_skeleton.SkeletonTest):
         self.assertEqual(self.req("POST", f"/api/groups/{a['id']}/rename", {"name": "Research notes"})[0], 200)  # itself
         self.assertEqual([g["name"] for g in self._all()["groups"]].count("Research notes"), 1)
 
+    def test_auto_mode_only_where_the_harness_has_it(self):
+        from orbit.drivers.claude import ClaudeDriver
+        from orbit.drivers.codex import CodexDriver
+        self.assertIn("auto", ClaudeDriver.modes)
+        self.assertNotIn("auto", CodexDriver.modes)
+        d = ClaudeDriver(session_id="x", cwd=self.work, model="", mode="auto", resume=False, emit=lambda e: None)
+        cmd = d.command()
+        self.assertEqual(cmd[cmd.index("--permission-mode") + 1], "auto")
+        self.assertNotIn("--permission-mode", ClaudeDriver(session_id="y", cwd=self.work, model="", mode="default",
+                                                           resume=False, emit=lambda e: None).command())  # (the user's own)
+        code, s = self.req("POST", "/api/sessions", {"cwd": self.work, "mode": "auto"})
+        self.assertEqual((code, s["mode"]), (200, "auto"))
+        code, r = self.req("POST", "/api/sessions", {"cwd": self.work, "harness": "codex", "mode": "auto"})
+        self.assertEqual(code, 400)
+        self.assertIn("no auto mode", r["error"])
+        _, c = self.req("POST", "/api/sessions", {"cwd": self.work, "harness": "codex", "mode": "plan"})
+        code, r = self.req("POST", f"/api/sessions/{c['id']}/mode", {"mode": "auto"})
+        self.assertEqual(code, 400)
+        _, h = self.req("GET", "/api/harnesses")
+        self.assertEqual({x["id"]: "auto" in x["modes"] for x in h["harnesses"] if x["id"] in ("claude", "codex")},
+                         {"claude": True, "codex": False})
+
     def test_last_group_cannot_be_deleted(self):
         for g in self._all()["groups"][1:]:
             self.req("POST", f"/api/groups/{g['id']}/delete")

@@ -187,15 +187,15 @@ function mentionTargets(text, self) {
 }
 /* `/mode NAME` in the input switches the permission mode (the agent restarts on the same conversation). */
 const MODE_ALIAS = { bypass: "bypassPermissions", bypasspermissions: "bypassPermissions", accept: "acceptEdits", "accept-edits": "acceptEdits",
-  acceptedits: "acceptEdits", edits: "acceptEdits", plan: "plan", ask: "default", default: "default" };
+  acceptedits: "acceptEdits", edits: "acceptEdits", auto: "auto", plan: "plan", ask: "default", default: "default" };
 async function setMode(s, name) {
   const mode = MODE_ALIAS[String(name || "").toLowerCase()];
-  if (!mode) { toast(`Modes: ${Object.values(MODE_SHORT).join(" · ")}`); return false; }
+  if (!mode || !modesFor(s.harness).includes(mode)) { toast(`Modes for ${harnessLabel(s.harness)}: ${modesFor(s.harness).map(m => MODE_SHORT[m]).join(" · ")}`); return false; }
   try { const r = await api("POST", `/api/sessions/${s.id}/mode`, { mode }); S.sessions.set(s.id, { ...s, ...r }); renderStatus(); toast(`Mode: ${MODE_LABELS[mode]}`); return true; }
   catch (e) { toast(e.message); return false; }
 }
 function modeMenu(s) {
-  menu(Object.keys(MODE_LABELS).map(m => ({ label: MODE_LABELS[m], key: s.mode === m ? "current" : "", run: () => setMode(s, MODE_SHORT[m].split(" ")[0]) })), { anchor: $("#modechip") });
+  menu(modesFor(s.harness).map(m => ({ label: MODE_LABELS[m], key: s.mode === m ? "current" : "", run: () => setMode(s, m) })), { anchor: $("#modechip") });
 }
 /* Steering: a message for the request that is running joins that turn (Claude Code; others queue it). */
 const canSteer = sid => { const s = S.sessions.get(sid); return !!(s && s.steers && s.state === "working"); };

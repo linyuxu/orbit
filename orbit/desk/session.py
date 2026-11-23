@@ -80,7 +80,7 @@ def clip(text: str, n: int) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
-MODES = ["default", "acceptEdits", "plan", "bypassPermissions"]
+MODES = ["default", "acceptEdits", "auto", "plan", "bypassPermissions"]  # every mode Orbit knows; a harness says which it maps (Driver.modes)
 ORIGINS_KEPT = 500  # a session remembers where its last 500 plugin-sent requests came from
 DEFAULT_GROUPS = [{"id": "main", "name": "Main"}, {"id": "projects", "name": "Projects"}, {"id": "personal", "name": "Personal"}]
 FLEET_GROUP = "fleet"  # helper sessions live outside the user's groups: no tab, no left-panel row

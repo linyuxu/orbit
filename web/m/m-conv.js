@@ -392,14 +392,16 @@ async function sessionAction(sid, action) {
 /* Permission mode (the desktop's mode chip, /mode): the agent restarts on the same conversation with it, so the server
    refuses while a request runs (said in a toast). */
 const MODES_M = [
-  { id: "default", short: "ask", sub: "Tools that need approval are refused" },
+  { id: "default", short: "default", sub: "The agent's own setting (Claude Code: your defaultMode)" },
   { id: "acceptEdits", short: "accept edits", sub: "File edits approved, other tools refused" },
+  { id: "auto", short: "auto", sub: "Claude Code's classifier approves what is safe" },
   { id: "plan", short: "plan", sub: "Read only: it proposes a plan" },
   { id: "bypassPermissions", short: "bypass", sub: "Every tool approved, no questions" },
 ];
-const modeShort = m => (MODES_M.find(x => x.id === m) || { short: m || "ask" }).short;
+const modeShort = m => (MODES_M.find(x => x.id === m) || { short: m || "default" }).short;
 function modeSheet(s) {
-  actionSheet("Permission mode", MODES_M.map(m => ({ label: m.short[0].toUpperCase() + m.short.slice(1), sub: m.sub, on: (s.mode || "default") === m.id,
+  const mine = modesForM(s.harness);
+  actionSheet("Permission mode", MODES_M.filter(m => mine.includes(m.id)).map(m => ({ label: m.short[0].toUpperCase() + m.short.slice(1), sub: m.sub, on: (s.mode || "default") === m.id,
     run: () => setModeM(s, m.id) })));
 }
 async function setModeM(s, mode) {

@@ -328,6 +328,9 @@ class Driving:
         if mode not in MODES:
             raise ValueError(f"no such mode: {mode} (one of {', '.join(MODES)})")
         s = self.get(sid)
+        cls = DRIVERS.get(s.harness)
+        if cls is not None and mode not in cls.modes:
+            raise ValueError(f"{cls.label} has no {mode} mode (it has {', '.join(cls.modes)})")
         if s.current() is not None:
             raise ValueError("a request is running: change the mode when it has finished")
         if s.mode == mode:

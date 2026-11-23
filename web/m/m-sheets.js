@@ -45,7 +45,11 @@ function bindChips(w, onChange) {
 }
 
 /* ===================================================================== New session: folder, agent, group, the first request */
-const MODE_SHORT = { acceptEdits: "accept edits", bypassPermissions: "bypass", plan: "plan", default: "ask" };
+const MODE_SHORT = { default: "default", acceptEdits: "accept edits", auto: "auto", plan: "plan", bypassPermissions: "bypass" };
+/* The modes a harness maps (Claude Code has auto; Codex, agy do not). */
+const modesForM = id => { const h = (S.harnesses || []).find(x => x.id === id); return Object.keys(MODE_SHORT).filter(m => !h || !h.modes || h.modes.includes(m)); };
+const modeChipsHtml = (harness, mode) => chipsHtml("mode", modesForM(harness).map(value => ({ value, label: MODE_SHORT[value],
+  icon: value === "bypassPermissions" ? `<span class="zap">${I("zap", 14)}</span>` : "" })), modesForM(harness).includes(mode) ? mode : "default");
 async function newSession() {
   try { const d = await api("GET", "/api/harnesses"); if (d.harnesses && d.harnesses.length) S.harnesses = d.harnesses; } catch (e) { if (e instanceof NotPaired) return; }
   const last = LS.get("lastNew", { cwd: "~/", harness: "claude", mode: "acceptEdits", cwdOn: {} });
@@ -67,7 +71,7 @@ async function newSession() {
       `<div class="sugg" id="nf-sugg"></div></div>` +
       `<div class="field"><div class="flabel">Agent</div><div id="nf-h">${chipsHtml("harness", harnessOpts(""), firstHarness(""))}</div></div>` +
       `<div class="field"><div class="flabel">Group</div>${chipsHtml("group", S.groups.map(g => ({ value: g.id, label: g.name })), gid)}</div>` +
-      `<div class="field"><div class="flabel">Mode</div>${chipsHtml("mode", Object.entries(MODE_SHORT).map(([value, label]) => ({ value, label, icon: value === "bypassPermissions" ? `<span class="zap">${I("zap", 14)}</span>` : "" })), last.mode || "acceptEdits")}</div>` +
+      `<div class="field"><div class="flabel">Mode</div><div id="nf-mode">${modeChipsHtml(firstHarness(""), last.mode || "acceptEdits")}</div></div>` +
       `<div class="field"><div class="flabel">First request <span class="opt">optional</span></div><textarea id="nf-text" class="tinput area" rows="3" placeholder="What should the agent do?"></textarea></div>` +
       `<div class="ferr" id="nf-err"></div>`,
     onOk: async w => {
@@ -106,10 +110,13 @@ async function newSession() {
   inp.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== inp) sugg.innerHTML = ""; }, 150));
   sugg.addEventListener("pointerdown", e => e.preventDefault());  // (the field keeps the keyboard)
   sugg.addEventListener("click", e => { const b = e.target.closest("[data-p]"); if (!b) return; inp.value = b.dataset.p; inp.focus(); showSugg(); });
+  const modesNow = () => { $("#nf-mode", w).innerHTML = modeChipsHtml(chipsValue(w, "harness"), chipsValue(w, "mode")); };  // (that agent's modes; the chosen one kept when it has it)
   bindChips(w, (name, v) => {
+    if (name === "harness") { modesNow(); return; }
     if (name !== "machine") return;
     machine = v; inp.value = lastOn(v) || "~/";
     $("#nf-h", w).innerHTML = chipsHtml("harness", harnessOpts(v), firstHarness(v));
+    modesNow();
   });
 }
 $("#newbtn").addEventListener("click", newSession);

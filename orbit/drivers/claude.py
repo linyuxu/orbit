@@ -161,6 +161,9 @@ class ClaudeDriver(ProcessDriver):
     steers = True  # a user message written mid-turn joins that turn (stream-json input): one result at the end
     identity = "orbit-id"  # the conversation is the Orbit session's id (--session-id)
     reattachable = True  # a restart of the server hands its process off (the Harness Server keeps it running)
+    # auto: Claude Code's own classifier approves what is safe (--permission-mode auto); default passes no flag, so
+    # the user's settings decide (their permissions.defaultMode)
+    modes = ("default", "acceptEdits", "auto", "plan", "bypassPermissions")
 
     @classmethod
     def external_sessions(cls, limit, skip):

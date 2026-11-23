@@ -4,9 +4,13 @@
 const defaultModelLabel = h => h.default_seen ? `Default · ${modelName(h.default_seen)} (${h.default_seen}, last run)` : "Default (the harness's own setting)";
 const modelsFor = id => { const h = S.harnesses.find(x => x.id === id) || { models: [] }; return [{ value: "", label: defaultModelLabel(h) }, ...(h.models || [])]; };
 const effortsFor = id => { const h = S.harnesses.find(x => x.id === id) || {}; return [{ value: "", label: "Default (the harness's own setting)" }, ...((h.efforts || []).map(e => ({ value: e, label: e })))]; };
-const MODE_SHORT = { bypassPermissions: "bypass", acceptEdits: "accept edits", plan: "plan", default: "ask" };
-const MODE_LABELS = { bypassPermissions: "bypass · auto-approve every tool", acceptEdits: "accept edits · file edits approved, other tools refused",
-  plan: "plan · read only, proposes a plan", default: "ask · tools needing approval are refused" };
+const MODE_SHORT = { default: "default", acceptEdits: "accept edits", auto: "auto", plan: "plan", bypassPermissions: "bypass" };
+const MODE_LABELS = { default: "default · the agent's own setting (Claude Code: your permissions.defaultMode)",
+  acceptEdits: "accept edits · file edits approved, other tools refused", auto: "auto · Claude Code's classifier approves what is safe, refuses the rest",
+  plan: "plan · read only, proposes a plan", bypassPermissions: "bypass · auto-approve every tool" };
+/* The modes a harness maps (/api/harnesses: Claude Code has auto, Codex and agy do not): the menus offer only those. */
+const modesFor = id => { const h = (S.harnesses || []).find(x => x.id === id); return Object.keys(MODE_LABELS).filter(m => !h || !h.modes || h.modes.includes(m)); };
+const modeOptions = id => modesFor(id).map(value => ({ value, label: MODE_LABELS[value] }));
 async function newSession(gidArg) {
   try { const d = await api("GET", "/api/harnesses"); if (d.harnesses && d.harnesses.length) S.harnesses = d.harnesses; } catch {}  // what "Default" ran last
   const last = LS.get("lastNew", { cwd: "~/", model: "", mode: "acceptEdits", harness: "claude" });
@@ -45,10 +49,10 @@ async function newSession(gidArg) {
         } }] : []),
       { key: "cwd", label: "Folder", value: defaultFolder(machine), recent, complete: completeDir },
       { key: "harness", label: "Harness", type: "dropdown", value: harness, options: harnessOpts(machine),
-        onChange: h => { harnessNow = h; ctls.model.setOptions(modelsFor(h), ""); ctls.effort.setOptions(effortsFor(h), ""); } },
+        onChange: h => { harnessNow = h; ctls.model.setOptions(modelsFor(h), ""); ctls.effort.setOptions(effortsFor(h), ""); ctls.mode.setOptions(modeOptions(h), ctls.mode.get()); } },
       { key: "model", label: "Model", type: "dropdown", value: harness === last.harness ? last.model : "", options: modelsFor(harness) },
       { key: "effort", label: "Effort", type: "dropdown", value: harness === last.harness ? (last.effort || "") : "", options: effortsFor(harness) },
-      { key: "mode", label: "Mode", type: "dropdown", value: last.mode, options: Object.entries(MODE_LABELS).map(([value, label]) => ({ value, label })) },
+      { key: "mode", label: "Mode", type: "dropdown", value: modesFor(harness).includes(last.mode) ? last.mode : "default", options: modeOptions(harness) },
       { key: "group", label: "Group", type: "dropdown", value: gid, options: S.groups.map(g => ({ value: g.id, label: g.name })) },
     ],
     render: (_, ctl) => { ctls = ctl; },
