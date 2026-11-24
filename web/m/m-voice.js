@@ -9,7 +9,7 @@
    await); coming back from the background resumes them (iOS may have ended the microphone: one tap brings it back),
    and the event stream's hello re-syncs the call with the server (voiceResync). The OpenAI key and the voice's
    settings stay on the Mac. */
-const VC = { micLost: false, blocked: false, mic: null };  // (muted: VOICE.muted, voice-core.js)
+const VC = { micLost: false, blocked: false, mic: null, lock: null, locking: false };  // (muted: VOICE.muted, voice-core.js)
 $("#callbtn").innerHTML = waveSvg();
 $("#callbar").innerHTML = `<button type="button" class="vcgo">${waveSvg()}<span class="vct"></span></button>` +
   `<button type="button" class="vchang" aria-label="Hang up"><span class="disc">${I("hangup", 18)}</span></button>`;
@@ -36,9 +36,22 @@ function micWhy(e) {
 
 /* ===================================================================== drawing */
 const callName = () => { const s = S.sessions.get(VOICE.sid); return s ? sessionTitle(s) : "the session"; };
+/* iOS lets no web page use the microphone in the background or with the screen locked, so a call keeps the screen
+   awake while it is on and this page is in front (the Screen Wake Lock; iOS 16.4+, gone by itself when the page is
+   hidden, taken again on return). */
+async function holdScreen(on) {
+  if (!("wakeLock" in navigator)) return;
+  if (!on) { const l = VC.lock; VC.lock = null; if (l) l.release().catch(() => {}); return; }
+  if (VC.lock || VC.locking || document.hidden) return;
+  VC.locking = true;
+  try { VC.lock = await navigator.wakeLock.request("screen"); VC.lock.addEventListener("release", () => { VC.lock = null; }); }
+  catch {}  // (refused: low battery mode, or no permission: the call goes on)
+  finally { VC.locking = false; }
+}
 function renderVoice() {
   const on = VOICE.phase !== "idle", live = on && VOICE.phase !== "ended", here = on && VOICE.sid === S.current;
   watchMic();
+  holdScreen(live && !!VOICE.mic);  // (this phone holds the call: its microphone is this page's)
   /* The voice button: this session's call (its bars follow the sound; a tap shows the call view), else a new call. */
   const b = $("#callbtn");
   const busy = (live && !here) || (!on && voiceAway());  // (one call at a time: another session's or device's)
@@ -159,7 +172,7 @@ function watchMic() {
     if (VOICE.mic === stream && VOICE.phase !== "idle" && VOICE.phase !== "ended") { VC.micLost = true; renderVoice(); }
   });
 }
-async function micAgain() {
+async function micAgain(quiet = false) {  // (quiet: the automatic try on return; a refusal leaves "tap Mic")
   if (METER.ctx && METER.ctx.state !== "running") METER.ctx.resume().catch(() => {});
   try {
     const m = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
@@ -171,7 +184,7 @@ async function micAgain() {
     meterTap(m);
     VC.micLost = false; VOICE.muted = false;
     renderVoice();
-  } catch (e) { toast(micWhy(e), 6000); }
+  } catch (e) { if (!quiet) toast(micWhy(e), 6000); }
 }
 /* Back to the front: the sound may have been suspended with the page (the AudioContext "interrupted", the voice
    paused); the microphone may be gone. The call's state itself comes with the event stream's hello (m.js). */
@@ -180,7 +193,10 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     if (METER.ctx && METER.ctx.state !== "running") METER.ctx.resume().catch(() => {});
     if (voiceAudio.srcObject && voiceAudio.paused) voiceAudio.play().catch(() => VOICE_UI.blocked());
-    if (VOICE.mic && VOICE.phase !== "ended" && VOICE.mic.getAudioTracks().some(t => t.readyState === "ended")) VC.micLost = true;
+    if (VOICE.mic && VOICE.phase !== "ended" && VOICE.mic.getAudioTracks().some(t => t.readyState === "ended")) {
+      VC.micLost = true;
+      micAgain(true);  // (back in front: the microphone again at once; if iOS wants a tap, the state says "tap Mic")
+    }
   }
   renderVoice();
 });
