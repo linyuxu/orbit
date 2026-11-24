@@ -46,7 +46,7 @@ DEFAULTS: dict[str, Any] = {
     "live_wake": 0.5,        # how clear speech must be to wake it from standby (vad_threshold)
     "live_ack": False,       # say a short "on it" when a task starts (off: silent until there is something to say)
     "live_chime": True,      # the page's sounds: a rising ding when the call is connected (speak now), a falling one at its end
-    "live_chime_sound": "warm",  # which (the page makes them: web/src/voice-core.js CHIMES)
+    "live_chime_sound": "bell",  # which (the page makes them: web/src/voice-core.js CHIMES)
     "live_detail": "brief",  # results: brief (one to three sentences) | detailed (the key details too)
     "live_context": True,    # the session's recent requests and answers at the call's start
     "live_prompt": "",       # the user's own instructions, after Orbit's
@@ -55,7 +55,7 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
-CHIME_SOUNDS = ("warm", "wood", "bell", "pulse", "bright")
+CHIME_SOUNDS = ("wood", "bell", "single", "bowl", "temple")
 
 
 def check(k: str, v: Any) -> None:

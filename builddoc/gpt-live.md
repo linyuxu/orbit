@@ -53,7 +53,7 @@ What the user may change (desk settings `live_*`, `orbit/services/live/config.py
 | `live_language` | auto, zh, en, ja, ko, es, fr, de, pt | a line in the instructions (the API has no language field) |
 | `live_detail` | brief, detailed | the result line in the instructions |
 | `live_ack` | on/off (off) | off: the empty `thinking.append` at each delegation cancels the automatic acknowledgement |
-| `live_chime_sound` | warm, wood, bell, pulse, bright (warm) | which sound (`web/src/voice-core.js` CHIMES: two low struck notes, ~0.5 s; bright is the first, E5 → B5); Settings plays each on a click |
+| `live_chime_sound` | wood, bell, single, bowl, temple (bell) | which sound (`web/src/voice-core.js` CHIMES: low struck notes, ~0.5 s: a marimba's knock, a low bell F3 → C4, one strike, a shimmering bowl, a bell with a wooden tap); Settings plays each on a click |
 | `live_chime` | on/off (on) | the page's own sounds (`/api/live/start` answers `chime`: the sound's name, or false): a rising two-note ding once the call is connected and listening (the WebRTC connection up and the phase past connecting), a falling one at the end |
 | `live_prompt` | up to 4 000 characters | after Orbit's instructions; they win over style, never over delegation and grounding |
 

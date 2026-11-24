@@ -19,7 +19,7 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   in Settings → Voice, what is left (a bar of the share spent); its popover has calls, talking and standby minutes and
   the talking time left. Orbit's own calls only (`/api/live/usage`): an API key cannot read the account.
 - Voice: a soft rising ding once the call is connected and listening (speak then), a falling one when it ends;
-  Settings → Voice → Sound: Off, Warm (default), Wood, Low bell, Soft hum, Bright; a click plays it (`live_chime`,
+  Settings → Voice → Sound: Off, Wood, Low bell (default), Single, Bowl, Temple; a click plays it (`live_chime`,
   `live_chime_sound`). Made by the page (Web Audio), desktop and phone.
 - Voice: several OpenAI API keys, each with a name, tried in order: one refused (a bad key, no quota, rate-limited:
   401 / 402 / 403 / 429) and the call goes on with the next (its sideband attaches with the key that made it); a key

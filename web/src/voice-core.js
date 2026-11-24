@@ -236,18 +236,18 @@ function chimeReady() {
    a second; low and soft, a struck or plucked thing rather than a keyboard's beep. Each note: its pitch (Hz), when
    (s), and its partials [ratio, gain, how fast it dies (× the note's decay)]. */
 const CHIMES = {
-  warm:   { label: "Warm", notes: [196.0, 293.66], gap: 0.12, peak: 0.24, attack: 0.014, decay: 0.5, lp: 1600,
-            partials: [[1, 1, 1], [2, 0.22, 0.6], [3, 0.06, 0.4]] },                                       // G3 → D4, soft
   wood:   { label: "Wood", notes: [220.0, 329.63], gap: 0.11, peak: 0.26, attack: 0.003, decay: 0.38, lp: 2600,
             partials: [[1, 1, 1], [4, 0.3, 0.18], [9.2, 0.05, 0.08]] },                                     // a marimba's knock
   bell:   { label: "Low bell", notes: [174.61, 261.63], gap: 0.13, peak: 0.2, attack: 0.005, decay: 0.62, lp: 3000,
-            partials: [[1, 1, 1], [2, 0.32, 0.7], [2.76, 0.16, 0.5], [5.4, 0.05, 0.3]] },                   // a singing bowl's tone
-  pulse:  { label: "Soft hum", notes: [130.81, 196.0], gap: 0.13, peak: 0.3, attack: 0.04, decay: 0.48, lp: 900, wave: "triangle",
-            partials: [[1, 1, 1], [2, 0.15, 0.8]] },                                                        // C3 → G3, muffled
-  bright: { label: "Bright", notes: [659.25, 987.77], gap: 0.1, peak: 0.1, attack: 0.012, decay: 0.42, lp: 8000,
-            partials: [[1, 1, 1], [2, 0.18, 1]] },                                                          // the first one
+            partials: [[1, 1, 1], [2, 0.32, 0.7], [2.76, 0.16, 0.5], [5.4, 0.05, 0.3]] },                   // F3 → C4, a bowl's tone
+  single: { label: "Single", notes: [196.0], gap: 0, peak: 0.24, attack: 0.005, decay: 0.75, lp: 3000,
+            partials: [[1, 1, 1], [2, 0.32, 0.7], [2.76, 0.18, 0.55], [5.4, 0.06, 0.3]] },                  // one strike (G3), the same at the end
+  bowl:   { label: "Bowl", notes: [174.61, 261.63], gap: 0.13, peak: 0.13, attack: 0.008, decay: 0.75, lp: 2800,
+            partials: [[1, 1, 1], [1.006, 0.7, 1], [2.76, 0.14, 0.55], [2.77, 0.1, 0.55], [5.4, 0.04, 0.3]] },  // two a hair apart: it shimmers
+  temple: { label: "Temple", notes: [174.61, 261.63], gap: 0.12, peak: 0.22, attack: 0.002, decay: 0.55, lp: 3200,
+            partials: [[1, 1, 1], [2.76, 0.14, 0.5], [4, 0.3, 0.12], [9.2, 0.06, 0.06]] },                  // a bell with a wooden tap
 };
-const CHIME_DEFAULT = "warm";
+const CHIME_DEFAULT = "bell";
 function chime(kind, name = VOICE.chime) {
   const c = CHIME.ctx;
   if (!c || name === false) return;
