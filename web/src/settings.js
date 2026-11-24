@@ -294,6 +294,27 @@ async function voiceUsage(pane) {
   inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); put(); } });
   draw();
 }
+/* Settings → Voice → Sound: Off, or one of the page's sounds (voice-core.js CHIMES); a click chooses it and plays it
+   (the start, then the end). */
+function chimeChooser(ctl, st) {
+  const cur = () => st().live_chime === false ? "off" : (st().live_chime_sound || CHIME_DEFAULT);
+  const draw = () => {
+    ctl.innerHTML = [["off", "Off"], ...Object.entries(CHIMES).map(([k, v]) => [k, v.label])].map(([k, l]) =>
+      `<button type="button" class="btn sm chimeopt${cur() === k ? " on" : ""}" data-chime="${k}" title="${k === "off" ? "No sounds" : "Click to hear it"}">${k === "off" ? "" : I("play", 11)}${esc(l)}</button>`).join("");
+  };
+  ctl.classList.add("chimes");
+  ctl.addEventListener("click", e => {
+    const b = e.target.closest("[data-chime]"); if (!b) return;
+    const k = b.dataset.chime;
+    if (k !== "off") { chimeReady(); chime("start", k); setTimeout(() => chime("end", k), 900); }
+    if (k === cur()) return;
+    const body = k === "off" ? { live_chime: false } : { live_chime: true, live_chime_sound: k };
+    S.settings = { ...S.settings, ...body };
+    draw();
+    api("POST", "/api/settings", body).then(x => { S.settings = x; }).catch(e => { toast(e.message); });
+  });
+  draw();
+}
 async function settingsVoice(pane, keys) {
   const note = document.createElement("div"); note.className = "set-desc set-lead";
   note.textContent = "Talk with a session (⌘⇧V or the blue bars by Send): what you ask becomes a request, and the answer is spoken back. A change here applies to the next call.";
@@ -329,8 +350,7 @@ async function settingsVoice(pane, keys) {
               { value: "detailed", label: "Detailed", title: "A few sentences with the key details" }] }));
   toggleSwitch(setRow(pane, "Say when a task starts", "A short “on it” when it hands your request to the agent. Off: quiet until there is something to say."), {
     on: !!st().live_ack, label: "Say when a task starts", onChange: on => put("live_ack", on) });
-  toggleSwitch(setRow(pane, "Sounds", "A soft ding when the call is connected and listening (speak then), and a lower one when it ends."), {
-    on: st().live_chime !== false, label: "Sounds", onChange: on => put("live_chime", on) });
+  chimeChooser(setRow(pane, "Sound", "Two notes when the call is connected and listening (speak then), and the same falling when it ends. Click one to hear it.", { stack: true }), st);
   setHeading(pane, "Listening and cost");
   keys.push(dropdown(setRow(pane, "Standby after", "With nothing said either way for this long, it rests: $0.02 a minute instead of $0.05. Speaking wakes it (the first reply after is a little slower)."), {
     value: String(st().live_idle_s ?? 30), onChange: v => put("live_idle_s", +v),

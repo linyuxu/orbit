@@ -232,23 +232,43 @@ function chimeReady() {
     if (CHIME.ctx.state === "suspended") CHIME.ctx.resume().catch(() => {});
   } catch { CHIME.ctx = null; }
 }
-function chime(kind) {
+/* The sounds to choose from (Settings → Voice → Sound): two notes rising at the start, falling at the end, about half
+   a second; low and soft, a struck or plucked thing rather than a keyboard's beep. Each note: its pitch (Hz), when
+   (s), and its partials [ratio, gain, how fast it dies (× the note's decay)]. */
+const CHIMES = {
+  warm:   { label: "Warm", notes: [196.0, 293.66], gap: 0.12, peak: 0.24, attack: 0.014, decay: 0.5, lp: 1600,
+            partials: [[1, 1, 1], [2, 0.22, 0.6], [3, 0.06, 0.4]] },                                       // G3 → D4, soft
+  wood:   { label: "Wood", notes: [220.0, 329.63], gap: 0.11, peak: 0.26, attack: 0.003, decay: 0.38, lp: 2600,
+            partials: [[1, 1, 1], [4, 0.3, 0.18], [9.2, 0.05, 0.08]] },                                     // a marimba's knock
+  bell:   { label: "Low bell", notes: [174.61, 261.63], gap: 0.13, peak: 0.2, attack: 0.005, decay: 0.62, lp: 3000,
+            partials: [[1, 1, 1], [2, 0.32, 0.7], [2.76, 0.16, 0.5], [5.4, 0.05, 0.3]] },                   // a singing bowl's tone
+  pulse:  { label: "Soft hum", notes: [130.81, 196.0], gap: 0.13, peak: 0.3, attack: 0.04, decay: 0.48, lp: 900, wave: "triangle",
+            partials: [[1, 1, 1], [2, 0.15, 0.8]] },                                                        // C3 → G3, muffled
+  bright: { label: "Bright", notes: [659.25, 987.77], gap: 0.1, peak: 0.1, attack: 0.012, decay: 0.42, lp: 8000,
+            partials: [[1, 1, 1], [2, 0.18, 1]] },                                                          // the first one
+};
+const CHIME_DEFAULT = "warm";
+function chime(kind, name = VOICE.chime) {
   const c = CHIME.ctx;
-  if (!c || VOICE.chime === false) return;
-  const notes = kind === "end" ? [[987.77, 0], [659.25, 0.11]] : [[659.25, 0], [987.77, 0.1]];  // (E5 → B5, or back)
-  const t0 = c.currentTime + 0.02, peak = kind === "end" ? 0.07 : 0.1;
-  for (const [f, at] of notes) {
-    const o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain();
-    o.type = "sine"; o.frequency.value = f;
-    o2.type = "sine"; o2.frequency.value = f * 2;  // (a quiet octave: a bell, not a beep)
-    const g2 = c.createGain(); g2.gain.value = 0.18;
-    o.connect(g); o2.connect(g2).connect(g); g.connect(c.destination);
-    const s = t0 + at;
-    g.gain.setValueAtTime(0, s);
-    g.gain.linearRampToValueAtTime(peak, s + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0005, s + 0.42);
-    o.start(s); o2.start(s); o.stop(s + 0.45); o2.stop(s + 0.45);
-  }
+  if (!c || name === false) return;
+  const k = CHIMES[name] || CHIMES[CHIME_DEFAULT];
+  const notes = kind === "end" ? [...k.notes].reverse() : k.notes;
+  const t0 = c.currentTime + 0.02, peak = k.peak * (kind === "end" ? 0.75 : 1);
+  const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = k.lp; lp.Q.value = 0.5;
+  lp.connect(c.destination);
+  notes.forEach((f, i) => {
+    const s = t0 + i * k.gap;
+    for (const [ratio, gain, die] of k.partials) {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = ratio === 1 && k.wave ? k.wave : "sine"; o.frequency.value = f * ratio;
+      const end = s + Math.max(0.05, k.decay * die);
+      g.gain.setValueAtTime(0, s);
+      g.gain.linearRampToValueAtTime(peak * gain, s + k.attack);
+      g.gain.exponentialRampToValueAtTime(0.0003, end);
+      o.connect(g).connect(lp);
+      o.start(s); o.stop(end + 0.02);
+    }
+  });
 }
 /* Connected: the phase is past connecting (the server attached) and the WebRTC connection is up — whichever is last. */
 function chimeIfReady() {
@@ -264,7 +284,7 @@ async function startCall(sid) {
   if (voiceBusy()) { VOICE_UI.toast("A voice call is on already: one at a time (⌘⇧V hangs it up)"); return; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection) { VOICE_UI.failed({ name: "NoWebRTC" }); return; }
   VOICE.starting = true; VOICE.sid = sid; VOICE.call = null; VOICE.caps.clear(); VOICE.typing = false; VOICE.muted = false;
-  VOICE.chimed = false; VOICE.chime = undefined;
+  VOICE.chimed = false; VOICE.chime = undefined;  // (the call's answer says which sound, or false)
   chimeReady();
   try { METER.ctx = new AudioContext(); if (METER.ctx.state === "suspended") METER.ctx.resume().catch(() => {}); } catch { METER.ctx = null; }  // (made in the click: Safari lets it play)
   voiceAudio.play().catch(() => {});  // (an empty play in the gesture: the element may play the voice later, iOS)

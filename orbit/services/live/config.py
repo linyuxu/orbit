@@ -46,12 +46,16 @@ DEFAULTS: dict[str, Any] = {
     "live_wake": 0.5,        # how clear speech must be to wake it from standby (vad_threshold)
     "live_ack": False,       # say a short "on it" when a task starts (off: silent until there is something to say)
     "live_chime": True,      # the page's sounds: a rising ding when the call is connected (speak now), a falling one at its end
+    "live_chime_sound": "warm",  # which (the page makes them: web/src/voice-core.js CHIMES)
     "live_detail": "brief",  # results: brief (one to three sentences) | detailed (the key details too)
     "live_context": True,    # the session's recent requests and answers at the call's start
     "live_prompt": "",       # the user's own instructions, after Orbit's
     "live_budget": 0.0,      # what the user said is left on their OpenAI account (USD; 0: not given); an API key cannot read it
     "live_budget_at": 0.0,   # when they said so (set by the desk): calls since count down from it
 }
+
+
+CHIME_SOUNDS = ("warm", "wood", "bell", "pulse", "bright")
 
 
 def check(k: str, v: Any) -> None:
@@ -66,6 +70,8 @@ def check(k: str, v: Any) -> None:
         raise ValueError("live_idle_s is 5–60 seconds, or 0 (never standby)")
     if k == "live_wake" and v not in WAKE:
         raise ValueError(f"live_wake is one of {', '.join(map(str, WAKE))}")
+    if k == "live_chime_sound" and v not in CHIME_SOUNDS:
+        raise ValueError(f"live_chime_sound is one of {', '.join(CHIME_SOUNDS)}")
     if k == "live_detail" and v not in ("brief", "detailed"):
         raise ValueError("live_detail is brief or detailed")
     if k == "live_budget" and not 0 <= v <= 100000:

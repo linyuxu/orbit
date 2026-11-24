@@ -101,6 +101,11 @@
 .set-ctl .keyline .keyin { flex:1; min-width:120px; width:auto; height:26px; }
 .set-ctl .keyadd { margin-top:2px; }
 /* Voice */
+.set-row.stack .set-ctl.chimes { display:flex; flex-wrap:wrap; justify-content:flex-start; gap:6px; }
+.set-ctl.chimes .btn + .btn { margin-left:0; }
+.set-ctl.chimes .chimeopt { display:inline-flex; align-items:center; gap:5px; }
+.set-ctl.chimes .chimeopt svg { opacity:.55; flex:none; }
+.set-ctl.chimes .chimeopt.on { border-color:var(--accent, var(--ink-3)); }
 .set-lead { margin:0 0 6px; }
 .set-pane .vprompt { width:100%; box-sizing:border-box; resize:vertical; min-height:72px; line-height:1.5; font-family:var(--font); }
 .vcount { text-align:right; margin-top:4px; font-variant-numeric:tabular-nums; }

@@ -138,7 +138,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         context, model, the user's instructions, the spoken acknowledgement)."""
         for k, v in (("live_voice", "nobody"), ("live_idle_s", 3), ("live_idle_s", 61), ("live_wake", 0.4),
                      ("live_language", "xx"), ("live_detail", "long"), ("live_prompt", "x" * 4001), ("live_ack", "yes"),
-                     ("live_chime", 1)):
+                     ("live_chime", 1), ("live_chime_sound", "loud")):
             self.assertEqual(self.req("POST", "/api/settings", {k: v})[0], 400, (k, v))
         code, o = self.req("GET", "/api/live/options")
         self.assertEqual(code, 200)
