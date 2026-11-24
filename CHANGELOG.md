@@ -17,6 +17,8 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - The voice button: five bars in a circle where Send is while the input is empty; in a call they follow the sound.
 - Voice: after each request the voice is told what became of it (running, queued behind another, joined to the
   waiting one), so it says "queued" instead of guessing; "via Voice" on a card explains what the agent got.
+- A voice call's note card is folded to its head (turns, the requests it made); a click shows the transcript, where
+  each of the user's turns that became a request says so (`→ #706`): the words no longer seem sent twice.
 - Voice calls work with another machine's sessions too (`name~id`): this server holds the call; the requests,
   the session's context and the call's note card go to that machine through the federation, and its answers come
   back on this server's events to be spoken. A session's `steer` takes `origin` and `client_id` like `send`; `note`

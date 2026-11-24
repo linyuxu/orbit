@@ -293,7 +293,13 @@ body.embed #callbtn, body.embed .callst { display:none; }
 #livecaps .lc.sys { justify-content:center; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); }
 /* A note card: a call's transcript, kept between the requests. */
 .vnote { border-left:2px solid var(--line); padding:2px 0 2px 14px; }
-.vnote .vhead { display:flex; align-items:center; gap:6px; font-size:calc(12px * var(--ui-k)); color:var(--ink-3); min-height:22px; margin-bottom:4px; }
+.vnote .vhead { display:flex; align-items:center; gap:6px; font-size:calc(12px * var(--ui-k)); color:var(--ink-3); min-height:22px; margin:0 0 0 -6px;
+  width:calc(100% + 6px); padding:2px 6px; border:0; background:none; border-radius:var(--r-s); font-family:inherit; text-align:left; cursor:default; }
+.vnote .vhead:hover { background:var(--hover); }
+.vnote .vhead > svg:first-child { flex:none; transition:transform .12s; }
+.vnote.open .vhead > svg:first-child { transform:rotate(90deg); }
+.vnote.open .vhead { margin-bottom:4px; }
+.vnote .vhead .vsum { color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .vnote .vhead .vt { color:var(--ink-2); font-weight:500; }
 .vnote .vhead .when { margin-left:auto; font-size:calc(11px * var(--ui-k)); font-variant-numeric:tabular-nums; }
 .vnote .md { color:var(--ink-2); }

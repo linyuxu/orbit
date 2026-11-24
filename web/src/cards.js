@@ -120,10 +120,28 @@ function originHtml(o) {
   return `<div class="origin" title="${tip}">${I("plug", 11)}via ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${what}</a>` : what}</div>`;
 }
 /* A note card (a voice call's transcript): kept in the conversation, not a request. */
+/* A note card (a voice call's transcript): folded to its head and what it asked (the requests are cards of their
+   own above it, so the words would show twice); a click on the head opens it (kept while the page lives). */
+const NOTE_OPEN = new Set();
 function noteHtml(c) {
-  return `<div class="vnote"><div class="vhead">${I("mic", 13)}<span class="vt">${esc(c.text)}</span><span class="when">${dayTime(c.time)}</span></div>` +
-    `<div class="md">${renderMd(c.answer || "")}</div></div>`;
+  const key = `${c.sid}:${c.id}`, open = NOTE_OPEN.has(key);
+  const m = /(Requests from this call: [^\n]*|No requests from this call\.)/.exec(c.answer || "");
+  const turns = ((c.answer || "").match(/^\*\*(You|Voice)\*\* · /gm) || []).length;
+  return `<div class="vnote${open ? " open" : ""}"><button type="button" class="vhead" data-note="${esc(key)}" aria-expanded="${open}" title="${open ? "Fold the transcript" : "Show the transcript"}">` +
+    `${I("chev", 11)}${I("mic", 13)}<span class="vt">${esc(c.text)}</span>` +
+    `<span class="vsum">${turns ? `${turns} turn${turns > 1 ? "s" : ""}` : ""}${m ? ` · ${esc(m[1].replace("Requests from this call: ", "requests "))}` : ""}</span>` +
+    `<span class="when">${dayTime(c.time)}</span></button>` +
+    (open ? `<div class="md">${renderMd(c.answer || "")}</div>` : "") + `</div>`;
 }
+document.addEventListener("click", e => {
+  const h = e.target.closest(".vnote .vhead[data-note]");
+  if (!h) return;
+  const key = h.dataset.note;
+  if (NOTE_OPEN.has(key)) NOTE_OPEN.delete(key); else NOTE_OPEN.add(key);
+  const [sid, id] = [key.slice(0, key.lastIndexOf(":")), +key.slice(key.lastIndexOf(":") + 1)];
+  const c = (S.cards.get(sid) || []).find(x => x.id === id);
+  if (c) renderCard(c);
+});
 function cardHtml0(c) {
   if (c.kind === "note") return noteHtml(c);
   const active = ACTIVE.has(c.state);

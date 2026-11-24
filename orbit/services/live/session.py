@@ -818,9 +818,15 @@ class Call:
             return None
         mins = max(1, round((time.time() - self.t0) / 60))
         when = datetime.fromtimestamp(self.t0).strftime("%H:%M")
+        sent: dict[int, list[int]] = {}  # a turn of the user's → the requests it became (the delegation's offset falls in it)
+        for _, d in reqs:
+            k = max((i for i, (w, st, _x) in enumerate(ts) if w == "user" and st <= d["offset"]), default=None)
+            if k is not None and d["cid"] not in sent.setdefault(k, []):
+                sent[k].append(d["cid"])
         lines = []
-        for who, start, text in ts:
-            lines.append(f"**{'You' if who == 'user' else 'Voice'}** · {start // 60000}:{start // 1000 % 60:02d}  \n{text}")
+        for i, (who, start, text) in enumerate(ts):
+            to = (" · → " + ", ".join(f"#{c}" for c in sent[i])) if sent.get(i) else ""
+            lines.append(f"**{'You' if who == 'user' else 'Voice'}** · {start // 60000}:{start // 1000 % 60:02d}{to}  \n{text}")
         made = sorted({d['cid'] for _, d in reqs})
         tail = ("Requests from this call: " + " · ".join(f"#{c}" for c in made)) if made else "No requests from this call."
         why = {"close_requested": "", "expired": " It ended: the voice session's time ran out.",
