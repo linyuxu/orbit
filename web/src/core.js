@@ -89,6 +89,7 @@ const ICONS = {
   caretr: '<path d="M6.5 5v6L10 8z" fill="currentColor" stroke="none"/>',  // ▸ of a folded list
   zap: '<path d="M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z"/>',
   gear: '<circle cx="8" cy="8" r="2.3"/><path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M3.5 12.5l1.3-1.3M11.2 4.8l1.3-1.3"/>',
+  keyboard: '<rect x="1.75" y="4" width="12.5" height="8" rx="1.5"/><path d="M4.5 6.6h.01M7 6.6h.01M9.5 6.6h.01M12 6.6h.01M5 9.4h6"/>',
   type: '<path d="M2 13l3.3-9h.4L9 13M3.2 10h4.6"/><path d="M10.5 8.6c.5-.5 1.1-.8 1.9-.8 1.1 0 1.8.6 1.8 1.7V13M14.2 10.6h-1.9c-1.1 0-1.8.5-1.8 1.3s.6 1.2 1.4 1.2c.9 0 1.6-.4 2.3-1.1"/>',
   clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.6"/>',
   plug: '<path d="M6 2v3.5M10 2v3.5M4 5.5h8v2.5a4 4 0 0 1-8 0zM8 12v2.5"/>',

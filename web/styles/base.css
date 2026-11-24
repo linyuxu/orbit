@@ -17,7 +17,7 @@
   --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);
   --menu-shadow:0 10px 30px rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.06),0 0 0 .5px rgba(0,0,0,.16);
   --menu-bg:rgba(251,251,250,.94); --menu-sel:rgba(0,0,0,.065); --menu-line:rgba(0,0,0,.1);
-  --hover:rgba(0,0,0,.04); --btn-hover:rgba(0,0,0,.07); --on-accent:#fff; --av-fg:#4a5d80;
+  --hover:rgba(0,0,0,.04); --btn-hover:rgba(0,0,0,.07); --on-accent:#fff; --voice-1:#5aa9ff; --voice-2:#2f6bf2; --av-fg:#4a5d80;
   --strip:#fff;  /* the tab strip: white (the surface); the active tab the page's own colour */
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Orbit Sans","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Noto Sans SC",sans-serif;
   --mono:Consolas,"Orbit Mono","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Noto Sans SC",monospace;
@@ -40,7 +40,7 @@
   --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.3);
   --panel:#1b1c1f;
   --guide:#2e3136; --folder:#3a3c41; --folder-line:#7d838c; --folder-open:#2a3140; --folder-open-line:#5b7bb5;
-  --hover:rgba(255,255,255,.05); --btn-hover:rgba(255,255,255,.08); --on-accent:#14152b;  /* dark text on the light accent: 6.8:1 */
+  --hover:rgba(255,255,255,.05); --btn-hover:rgba(255,255,255,.08); --on-accent:#14152b; --voice-1:#6cb4ff; --voice-2:#3b74f5;  /* dark text on the light accent: 6.8:1 */
   --av-fg:#aebbd6; --strip:#1f2125;
   --menu-bg:rgba(40,42,46,.95); --menu-sel:rgba(255,255,255,.09); --menu-line:rgba(255,255,255,.1);
   --menu-shadow:0 10px 30px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.3),0 0 0 .5px rgba(255,255,255,.14);

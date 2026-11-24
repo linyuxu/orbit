@@ -360,7 +360,8 @@ function openRow(r, { focus = true, pinned = false } = {}) {
   if (r.kind === "group") { switchGroup(r.gid, { focus: false, quiet: true }); S.pcursor = r.k; renderLeft(); return; }
   if (r.kind === "newgroup") { newGroup(); return; }
   if (r.kind === "fleetgrp") return;  // not a group of tabs
-  S.filter = "";
+  if (byMouse && S.filter) { FILTER_LATER.pending = true; FILTER_LATER.value = S.filter; }  // a click: the list stays as it is under the pointer (cleared once it leaves)
+  else S.filter = "";
   fromList = true;
   try { switchTo(r.sid, { group: r.gid, focus }); } finally { fromList = false; }
 }
@@ -527,7 +528,9 @@ plist.addEventListener("mousedown", e => {
   if (e.target.closest(".fold") && r.fold) { plist.focus(); setFolded(r.gid, !r.shut); return; }
   const rs = e.target.closest("[data-resume]"); if (rs) { sessionAction(rs.dataset.resume, "resume"); return; }  // the chevron folds; the rest of the row opens the group
   if (r.kind === "pgrp") { plist.focus(); renderLeft(); return; }
-  if (r.kind === "group" || r.kind === "dir" || S.left.tab === "misc") { plist.focus(); openRow(r, { focus: false }); } else openRow(r);
+  byMouse = true;
+  try { if (r.kind === "group" || r.kind === "dir" || S.left.tab === "misc") { plist.focus(); openRow(r, { focus: false }); } else openRow(r); }
+  finally { byMouse = false; }
 });
 plist.addEventListener("dblclick", e => {
   const el = e.target.closest(".prow[data-k]");
@@ -607,6 +610,33 @@ function renderPeek() {
 }
 plist.addEventListener("mouseover", e => { const row = e.target.closest(".prow.ss"); const k = row ? row.dataset.k : null; if (k !== PEEK_HOVER) { PEEK_HOVER = k; renderPeek(); } });
 plist.addEventListener("mouseleave", () => { PEEK_HOVER = null; renderPeek(); });
+/* A session clicked in a filtered list: the rows do not reshuffle under the pointer on its way out. The filter is
+   cleared once the pointer has been away a moment, the current row kept where it was on screen. */
+let byMouse = false;
+const FILTER_LATER = { pending: false, value: "", tm: 0 };
+plist.addEventListener("mouseenter", () => clearTimeout(FILTER_LATER.tm));
+plist.addEventListener("mouseleave", () => {
+  if (!FILTER_LATER.pending) return;
+  clearTimeout(FILTER_LATER.tm);
+  FILTER_LATER.tm = setTimeout(() => {
+    if (!FILTER_LATER.pending || S.filter !== FILTER_LATER.value || panelFocused()) { FILTER_LATER.pending = false; return; }  // (typed again since)
+    FILTER_LATER.pending = false;
+    const cur = () => plist.querySelector(".prow.cur");
+    const a = cur(), top = a ? a.getBoundingClientRect().top : null;
+    const seen = new Map([...plist.querySelectorAll(".prow[data-k]")].map(el => [el.dataset.k, el.getBoundingClientRect().top]));
+    S.filter = ""; S.pcursor = null; renderLeft();
+    const b = cur(), k = rectScale();
+    if (b && top !== null) plist.scrollTop += (b.getBoundingClientRect().top - top) / k;
+    for (const el of plist.querySelectorAll(".prow[data-k]")) {  // the rows slide to their places (FLIP), new ones fade in
+      const was = seen.get(el.dataset.k), now = el.getBoundingClientRect().top;
+      el.style.transition = "none";
+      if (was === undefined) el.style.opacity = "0"; else if (Math.abs(was - now) > .5) el.style.transform = `translateY(${(was - now) / k}px)`;
+      el.offsetWidth;
+      el.style.transition = "transform .22s ease, opacity .22s ease"; el.style.transform = ""; el.style.opacity = "";
+      setTimeout(() => { el.style.transition = ""; }, 260);
+    }
+  }, 900);
+});
 
 /* The Sessions list by mouse (its neighbours slide aside as it goes): drag a session to reorder it, or among another
    group's rows (or just under its head) to move it there; drag a group's head to move the group with its sessions.

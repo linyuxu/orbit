@@ -38,10 +38,20 @@ function renderCallBtn() {
   b.setAttribute("aria-pressed", String(on && VOICE.phase !== "ended"));
   b.title = on ? `${VOICE_WORD[VOICE.phase]}${name ? ` with ${name}` : ""}${VOICE.phase === "ended" ? "" : " · click or ⌘⇧V to hang up"}`
     : "Voice call with this session (⌘⇧V): talk, and it does the work";
-  st.hidden = !on;
+  /* In a call with the session in front: the orb in the input's place (unless typing instead); the state under it. */
+  const orb = on && here && !S.file && !VOICE.typing, ob = $("#voiceorb");
+  ob.hidden = !orb;
+  ob.className = on ? "call-" + VOICE.phase : "";
+  $("#inputhost").style.display = orb ? "none" : "";
+  ob.querySelector(".vorbst").textContent = orb ? VOICE_WORD[VOICE.phase] + (VOICE.phase === "standby" ? " · speak to wake it" : "") : "";
+  st.hidden = !on || orb;
   st.textContent = on ? (here || !name ? VOICE_WORD[VOICE.phase] : `${VOICE_WORD[VOICE.phase]} · ${name}`) : "";
-  st.className = `callst${on ? " call-" + VOICE.phase : ""}`;
+  st.className = `callst${on ? " call-" + VOICE.phase : ""}${on && here && VOICE.typing ? " back" : ""}`;
+  st.title = on && here && VOICE.typing ? "Show the voice again" : "";
 }
+$("#voiceorb .vtype").innerHTML = I("keyboard", 15);
+$("#voiceorb .vtype").addEventListener("click", () => { VOICE.typing = true; renderCallBtn(); input.focus(); });
+$("#callst").addEventListener("click", () => { if (VOICE.typing && VOICE.phase !== "idle") { VOICE.typing = false; renderCallBtn(); } });
 function renderCaps() {
   renderCallBtn();
   const on = VOICE.phase !== "idle", here = on && VOICE.sid === S.current;
@@ -142,14 +152,17 @@ function meterTick() {
     const jig = 0.75 + 0.25 * Math.sin(tm * (7 + i * 1.7) + i * 2.1);  // so the bars do not move as one
     el.style.transform = `scaleY(${(0.42 + 0.58 * Math.min(1, METER.v * jig * (i === 2 ? 1 : 1.15))).toFixed(3)})`;
   });
+  ORB.style.setProperty("--lv", METER.v.toFixed(3));  // (the orb swells with the sound)
   METER.raf = requestAnimationFrame(meterTick);
 }
+const ORB = $("#voiceorb .vorb");
 function meterStop() {
   cancelAnimationFrame(METER.raf);
   METER.raf = 0; METER.taps = []; METER.v = 0;
   if (METER.ctx) METER.ctx.close().catch(() => {});
   METER.ctx = null;
   for (const el of WAVE_BARS) el.style.transform = "";
+  ORB.style.setProperty("--lv", "0");
 }
 function iceGathered(pc, ms = 10000) {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
@@ -164,7 +177,7 @@ async function startCall() {
   const s = cur();
   if (!s || VOICE.starting) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection) { toast("No microphone here: this page has no WebRTC"); return; }
-  VOICE.starting = true; VOICE.sid = s.id; VOICE.call = null; VOICE.caps.clear();
+  VOICE.starting = true; VOICE.sid = s.id; VOICE.call = null; VOICE.caps.clear(); VOICE.typing = false;
   try { METER.ctx = new AudioContext(); } catch { METER.ctx = null; }  // (made in the click: Safari lets it play)
   setVoicePhase("connecting");
   let pc = null;

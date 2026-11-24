@@ -17,6 +17,11 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - The voice button: five bars in a circle where Send is while the input is empty; in a call they follow the sound.
 - Voice: after each request the voice is told what became of it (running, queued behind another, joined to the
   waiting one), so it says "queued" instead of guessing; "via Voice" on a card explains what the agent got.
+- In a call, a blue orb takes the input's place: soft clouds drift inside it, it swells with the sound (yours and
+  the voice's), hurries while the voice speaks, greys in standby; ⌨ types instead (the call goes on; the state by
+  the voice button brings the orb back). The voice button is blue.
+- Sessions list: a session clicked in a filtered list no longer reshuffles the rows under the pointer; the filter
+  clears once the pointer has been away a moment, the rows sliding to their places.
 - A voice call's note card is folded to its head (turns, the requests it made); a click shows the transcript, where
   each of the user's turns that became a request says so (`→ #706`): the words no longer seem sent twice.
 - Voice calls work with another machine's sessions too (`name~id`): this server holds the call; the requests,
