@@ -21,7 +21,6 @@
 .set-row:last-child { border-bottom:0; }
 .set-row.stack { display:block; }
 .set-row.stack .set-ctl { margin-top:10px; display:block; max-width:none; }
-.set-row.stack .set-ctl.keyrow { display:flex; justify-content:flex-start; flex-wrap:nowrap; }
 .set-text { flex:1; min-width:200px; }  /* never squeezed to a letter a line by a wide control */
 .set-label { font-size:calc(13px * var(--ui-k)); color:var(--ink); display:flex; align-items:center; gap:7px; }
 .set-desc { font-size:calc(12px * var(--ui-k)); color:var(--ink-3); margin-top:3px; line-height:1.45; overflow-wrap:anywhere; }
@@ -86,8 +85,21 @@
 .set-ctl .keyst { font-family:var(--mono); font-size:calc(12px * var(--ui-k)); color:var(--ink-3); margin-right:8px; white-space:nowrap; }
 .set-ctl .keyst.on { color:var(--ink-2); }
 .set-ctl .keyin { width:200px; margin-right:6px; }
-.set-ctl.keyrow .keyin { flex:1; min-width:120px; width:auto; }
 .set-ctl .btn + .btn { margin-left:4px; }
+/* The key list: one line a key (n · name · sk-…abcd · how it last did · ↑ Check Remove), then a line to add one */
+.set-row.stack .set-ctl.keylist { display:flex; flex-direction:column; align-items:stretch; gap:6px; }
+.set-ctl .keyline .keyhold { visibility:hidden; }  /* (the first has no ↑: its place is kept, so the buttons line up) */
+.set-ctl .keyline { display:flex; align-items:center; min-width:0; width:100%; }
+.set-ctl .keyline .keyn { flex:none; width:16px; color:var(--ink-3); font-size:calc(11.5px * var(--ui-k)); font-variant-numeric:tabular-nums; }
+.set-ctl .keyline .keyname { flex:none; width:150px; height:26px; margin-right:10px; }
+.set-ctl .keyline[data-id] .keyname { background:transparent; border-color:transparent; padding-left:6px; }
+.set-ctl .keyline[data-id] .keyname:hover { border-color:var(--line); }
+.set-ctl .keyline[data-id] .keyname:focus { background:var(--bg); border-color:var(--line); }
+.set-ctl .keyline .keyst { margin-right:8px; }
+.set-ctl .keyline .pl-dot { flex:none; margin:0 0 0 2px; }
+.set-ctl .keyline .keyfill { flex:1; min-width:12px; }
+.set-ctl .keyline .keyin { flex:1; min-width:120px; width:auto; height:26px; }
+.set-ctl .keyadd { margin-top:2px; }
 /* Voice */
 .set-lead { margin:0 0 6px; }
 .set-pane .vprompt { width:100%; box-sizing:border-box; resize:vertical; min-height:72px; line-height:1.5; font-family:var(--font); }

@@ -591,6 +591,7 @@ class Call:
         self.lock = threading.RLock()
         self.phase = "connecting"
         self.live_id = ""
+        self.key = self.key_label = ""  # (the key that made the session: its sideband attaches with it)
         self.expires_at: int | None = None
         self.reason = ""
         self.error = ""
@@ -667,38 +668,51 @@ class Call:
 
     # ------------------------------------------------------------------ create
     def create(self, sdp: str) -> dict:
-        key = keys.get(self.desk.state_dir, "openai")
-        if not key:
+        ks = keys.entries(self.desk.state_dir, "openai")
+        if not ks:
             raise NoKey("No OpenAI API key: set one in Settings → Voice")
         s = self.target
         self.cfg = config.current(self.desk.settings)
         body = session_body(self.desk, s, sdp, self.model, self.cfg)
         self.log("create", sid=self.sid, model=self.model, input=len(body["session"]["input"]),
                  instructions_tokens=est_tokens(body["session"]["instructions"]), offer_bytes=len(sdp))
-        req = urllib.request.Request(f"{http_base()}/v1/live/sessions", data=json.dumps(body).encode(), method="POST",
-                                     headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
-        t = time.time()
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                d = json.loads(r.read() or b"{}")
-                status = r.status
-        except urllib.error.HTTPError as e:
+        data = json.dumps(body).encode()
+        for i, k in enumerate(ks):  # the keys in order: one refused (bad, no quota, rate-limited), the next
+            req = urllib.request.Request(f"{http_base()}/v1/live/sessions", data=data, method="POST",
+                                         headers={"Authorization": f"Bearer {k['key']}", "Content-Type": "application/json"})
+            t = time.time()
             try:
-                err = json.loads(e.read(65536) or b"{}").get("error") or {}
-                msg = err.get("message") or ""
-            except (ValueError, AttributeError):
-                msg = ""
-            self.log("create_failed", status=e.code, error=msg[:500], ms_create=int((time.time() - t) * 1000))
-            self._fail(f"OpenAI answered {e.code}" + (f": {msg}" if msg else ""))
-        except (OSError, ValueError) as e:
-            self.log("create_failed", error=str(e)[:300])
-            self._fail(f"could not reach OpenAI: {e}")
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    d = json.loads(r.read() or b"{}")
+                    status = r.status
+            except urllib.error.HTTPError as e:
+                try:
+                    err = json.loads(e.read(65536) or b"{}").get("error") or {}
+                    msg = err.get("message") or ""
+                except (ValueError, AttributeError):
+                    msg = ""
+                self.log("create_failed", status=e.code, error=msg[:500], key=keys.label(k),
+                         ms_create=int((time.time() - t) * 1000))
+                if e.code in keys.FAILOVER:
+                    keys.note(self.desk.state_dir, k["id"], False, f"OpenAI answered {e.code}" + (f": {msg}" if msg else ""))
+                    if i + 1 < len(ks):
+                        continue
+                    many = f" (all {len(ks)} keys)" if len(ks) > 1 else ""
+                    self._fail(f"OpenAI answered {e.code}{many}" + (f": {msg}" if msg else ""))
+                self._fail(f"OpenAI answered {e.code}" + (f": {msg}" if msg else ""))
+            except (OSError, ValueError) as e:
+                self.log("create_failed", error=str(e)[:300])
+                self._fail(f"could not reach OpenAI: {e}")
+            keys.note(self.desk.state_dir, k["id"], True)
+            self.key, self.key_label = k["key"], keys.label(k)  # (the sideband attaches with the key that made it)
+            break
         self.live_id = str(((d.get("session") or {}).get("id")) or "")
         answer = str(((d.get("transport") or {}).get("sdp")) or "")
         if not self.live_id or not answer:
             self.log("create_failed", status=status, error="no session id or SDP answer")
             self._fail("OpenAI's answer had no session id or SDP answer")
-        self.log("created", status=status, ms_create=int((time.time() - t) * 1000), answer_bytes=len(answer))
+        self.log("created", status=status, ms_create=int((time.time() - t) * 1000), answer_bytes=len(answer),
+                 key=self.key_label)
         self.q = self.desk.subscribe()
         for fn in (self._sideband, self._follow_cards, self._tick):
             threading.Thread(target=fn, daemon=True, name=f"live-{fn.__name__}").start()
@@ -714,7 +728,7 @@ class Call:
     def _sideband(self) -> None:
         rapid = 0
         while not self.ended:
-            key = keys.get(self.desk.state_dir, "openai")
+            key = self.key
             url = f"{ws_base()}/v1/live/sessions/{self.live_id}/attach"
             t = time.time()
             try:

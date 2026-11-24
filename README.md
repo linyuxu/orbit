@@ -142,7 +142,7 @@ saves over a file that has content: auto-save skips it and ⌘S asks.
   short. The button says connecting · listening · speaking · standby (after 30 s of quiet, cheaper; speech wakes it),
   a red dot while the microphone is open; captions run in the conversation (a click on their head folds them to
   the latest line), and on hang-up the call's transcript stays
-  as a note card. Needs an OpenAI API key (Settings → Voice: it stays on this machine, the page never sees it).
+  as a note card. Needs an OpenAI API key, or several, named and tried in order (Settings → Voice: they stay on this machine, the page never sees them).
   It works with another machine's sessions too (this Mac holds the call; the requests go there). On the phone
   (`/m/`, over HTTPS for the microphone) the same blue bars sit beside Send: in a call the gyroscope takes the input's
   place with Type · End · Mute and the captions run in the conversation; elsewhere a bar says "in a call with X" (a

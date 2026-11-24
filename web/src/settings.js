@@ -150,42 +150,75 @@ const OPEN_IN_OPTIONS = [
   { value: "side", label: "Side tab", title: "Orbit's side tab; a file of another repo opens with that repo as its folder" },
   { value: "default", label: "Default app", title: "The file's default app ($ORBIT_EDITOR if set)" },
 ];
-/* One of Orbit's own API keys (GET/POST /api/keys): write-only, like a plugin's secrets. Shows whether it is set and
-   its last four characters; Save, Check (asks the provider whether it works) and Remove. This machine only. */
+/* Orbit's own API keys of a provider (GET/POST /api/keys): write-only, like a plugin's secrets. Several, each with a
+   name, tried in this order: a call that one is refused (a bad key, no quota, rate-limited) goes on with the next.
+   Each line: its name (edited in place), its last four characters, how it last did, ↑ (earlier in the order), Check
+   and Remove; then a line to add one. This machine only. */
 async function apiKeyRow(pane, name, desc) {
-  const ctl = setRow(pane, "OpenAI API key", desc, { stack: true });  // (its status, field and three buttons: a line of their own)
-  ctl.classList.add("keyrow");
+  const ctl = setRow(pane, "OpenAI API keys", desc, { stack: true });
+  ctl.classList.add("keylist");
+  const when = t => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
   const draw = async () => {
     let k;
     try { k = (await api("GET", "/api/keys")).keys[name]; }
     catch (e) { ctl.innerHTML = `<span class="set-desc">${esc(e.message)}</span>`; return; }
-    ctl.innerHTML = `<span class="keyst${k.set ? " on" : ""}">${k.set ? esc(k.hint) : "Not set"}</span>` +
-      `<input type="password" class="fin keyin" placeholder="${k.set ? "Replace…" : "sk-…"}" autocomplete="off" spellcheck="false">` +
-      `<button type="button" class="btn sm" data-a="save">Save</button>` +
-      (k.set ? `<button type="button" class="btn sm" data-a="check">Check</button><button type="button" class="btn sm" data-a="clear">Remove</button>` : "");
+    const many = k.keys.length > 1;
+    ctl.innerHTML = k.keys.map((x, i) => {
+      const l = x.last, st = !l ? "" : l.ok ? "ok" : "bad";
+      const tip = !l ? "Not used yet since Orbit started" : l.ok ? `Worked ${when(l.t)}` : `Refused ${when(l.t)}: ${l.error || ""}`;
+      return `<div class="keyline" data-id="${esc(x.id)}">` +
+        (many ? `<span class="keyn">${i + 1}</span>` : "") +
+        `<input class="fin keyname" value="${esc(x.name)}" placeholder="Name" maxlength="40" spellcheck="false" title="A name for this key (Enter to keep it)">` +
+        `<span class="keyst on">${esc(x.hint)}</span>` +
+        `<span class="pl-dot ${st}" title="${esc(tip)}"></span>` +
+        `<span class="keyfill"></span>` +
+        (many ? `<button type="button" class="btn sm${i ? "" : " keyhold"}" data-a="up" title="Try it earlier"${i ? "" : ' tabindex="-1" aria-hidden="true" disabled'}>↑</button>` : "") +
+        `<button type="button" class="btn sm" data-a="check">Check</button>` +
+        `<button type="button" class="btn sm" data-a="clear">Remove</button></div>`;
+    }).join("") +
+      `<div class="keyline keyadd">${many ? `<span class="keyn"></span>` : ""}<input class="fin keyname" data-k="name" placeholder="Name (optional)" maxlength="40" spellcheck="false">` +
+      `<input type="password" class="fin keyin" placeholder="${k.keys.length ? "Another key, tried after these: sk-…" : "sk-…"}" autocomplete="off" spellcheck="false">` +
+      `<button type="button" class="btn sm" data-a="add">Add</button></div>`;
   };
-  const put = async value => {
-    try { await api("POST", "/api/keys", { name, value }); toast(value ? "API key saved" : "API key removed"); draw(); }
-    catch (e) { toast(e.message); }
+  const edit = async (body, msg) => {
+    try { await api("POST", "/api/keys", { name, ...body }); if (msg) toast(msg); draw(); return true; }
+    catch (e) { toast(e.message); return false; }
+  };
+  const add = () => {
+    const inp = ctl.querySelector(".keyin"), nm = ctl.querySelector(".keyadd .keyname");
+    if (!inp.value.trim()) { inp.focus(); return; }
+    edit({ op: "add", value: inp.value.trim(), label: nm.value.trim() }, "API key added");
   };
   ctl.addEventListener("click", async e => {
     const a = e.target.closest("[data-a]"); if (!a) return;
-    const inp = ctl.querySelector(".keyin");
-    if (a.dataset.a === "save") { if (inp.value.trim()) put(inp.value.trim()); else inp.focus(); }
-    else if (a.dataset.a === "clear") {  // asked in place (a dialog would close Settings): a second click within 4 s removes it
-      if (a.dataset.sure) { put(null); return; }
+    const id = a.closest(".keyline").dataset.id;
+    if (a.dataset.a === "add") add();
+    else if (a.dataset.a === "up") {
+      const i = [...ctl.querySelectorAll(".keyline[data-id]")].findIndex(x => x.dataset.id === id);
+      edit({ op: "move", id, to: i - 1 });
+    } else if (a.dataset.a === "clear") {  // asked in place (a dialog would close Settings): a second click within 4 s removes it
+      if (a.dataset.sure) { edit({ op: "remove", id }, "API key removed"); return; }
       a.dataset.sure = "1"; a.textContent = "Remove?"; a.classList.add("danger");
       setTimeout(() => { if (a.isConnected) { delete a.dataset.sure; a.textContent = "Remove"; a.classList.remove("danger"); } }, 4000);
     } else if (a.dataset.a === "check") {
       a.disabled = true; a.textContent = "Checking…";
-      try { const r = await api("POST", "/api/keys/check", { name }); toast(r.ok ? "The OpenAI API key works" : r.error); }
+      try { const r = await api("POST", "/api/keys/check", { name, id }); toast(r.ok ? "This OpenAI API key works" : r.error); }
       catch (x) { toast(x.message); }
-      a.disabled = false; a.textContent = "Check";
+      draw();
     }
   });
+  /* A name: kept on Enter or when the field is left (if changed). */
+  const rename = inp => {
+    const line = inp.closest(".keyline[data-id]"); if (!line || inp.value === inp.defaultValue) return;
+    inp.defaultValue = inp.value;
+    edit({ op: "update", id: line.dataset.id, label: inp.value.trim() });
+  };
+  ctl.addEventListener("focusout", e => { const inp = e.target.closest(".keyline[data-id] .keyname"); if (inp) rename(inp); });
   ctl.addEventListener("keydown", e => {
-    const inp = e.target.closest(".keyin");
-    if (inp && e.key === "Enter" && inp.value.trim()) { e.preventDefault(); e.stopPropagation(); put(inp.value.trim()); }
+    if (e.key !== "Enter") return;
+    const t = e.target;
+    if (t.closest(".keyadd")) { e.preventDefault(); e.stopPropagation(); add(); }
+    else if (t.closest(".keyname")) { e.preventDefault(); e.stopPropagation(); t.blur(); }
   });
   draw();
 }
@@ -265,7 +298,7 @@ async function settingsVoice(pane, keys) {
   const note = document.createElement("div"); note.className = "set-desc set-lead";
   note.textContent = "Talk with a session (⌘⇧V or the blue bars by Send): what you ask becomes a request, and the answer is spoken back. A change here applies to the next call.";
   pane.appendChild(note);
-  apiKeyRow(pane, "openai", "Kept on this machine (a 0600 file in Orbit's state folder), never shown again, sent only to OpenAI.");
+  apiKeyRow(pane, "openai", "Tried in this order: if one is refused (a bad key, out of quota, rate-limited), the call uses the next. Kept on this machine (a 0600 file in Orbit's state folder), never shown again, sent only to OpenAI.");
   voiceUsage(pane);
   let o;
   try { o = await api("GET", "/api/live/options"); }

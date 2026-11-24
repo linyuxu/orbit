@@ -254,6 +254,75 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual(self.req("GET", "/api/keys", headers=net)[0], 403)  # (the key itself: this machine only)
         self.assertEqual(len(self.fake.bodies), 1)  # (the phone's call only)
 
+    def test_several_keys_one_refused_the_next(self):
+        """Keys tried in order: one refused (401) and the call goes on with the next (its sideband attaches with that
+        one); the refused key is then tried last for a while, and Settings shows how each last did, never the key."""
+        bad = "sk-proj-" + "b" * 40 + "DEAD"
+        keys.set_key(self.state, "openai", None)
+        try:
+            keys.edit_keys(self.state, "openai", "add", value=bad, label_="Old project")
+            st = keys.edit_keys(self.state, "openai", "add", value=fake_live.KEY, label_="Personal")
+            self.assertEqual([k["name"] for k in st["openai"]["keys"]], ["Old project", "Personal"])
+            s, r = self.start_call("Keys")  # (attached: with the key that made it, not the first)
+            c = self.desk.live.call
+            self.assertEqual(c.key_label, "Personal")
+            self.assertEqual(len(self.fake.bodies), 1)
+            log = [json.loads(x) for x in (self.state / "live" / f"{c.id}.jsonl").read_text().splitlines()]
+            fail = next(x for x in log if x["stage"] == "create_failed")
+            self.assertEqual((fail["status"], fail["key"]), (401, "Old project"))
+            self.assertNotIn(bad, json.dumps(log))
+            self.req("POST", "/api/live/stop", {})
+            code, k = self.req("GET", "/api/keys")
+            ks = k["keys"]["openai"]["keys"]
+            self.assertEqual([(x["name"], x["last"]["ok"]) for x in ks], [("Old project", False), ("Personal", True)])
+            self.assertIn("401", ks[0]["last"]["error"])
+            self.assertNotIn(bad, json.dumps(k))
+            self.assertEqual(keys.get(self.state, "openai"), fake_live.KEY)  # (the refused one: after the others now)
+            # All refused: one error that says so
+            keys.edit_keys(self.state, "openai", "remove", ks[1]["id"])
+            code, r = self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0"})
+            self.assertNotEqual(code, 200)
+            self.assertIn("401", r["error"])
+        finally:
+            keys.set_key(self.state, "openai", None)
+            keys.set_key(self.state, "openai", fake_live.KEY)
+
+    def test_key_list_edits(self):
+        """add (named, last), update (name), move, remove, check by id; an older file's one key reads as a list."""
+        import tempfile
+        from pathlib import Path
+        st = Path(tempfile.mkdtemp())
+        (st / "secrets").mkdir()
+        (st / "secrets" / "_orbit.json").write_text(json.dumps({"openai": fake_live.KEY}))
+        k = keys.status(st)["openai"]
+        self.assertEqual((k["set"], len(k["keys"]), k["keys"][0]["name"]), (True, 1, ""))
+        a = "sk-" + "a" * 30
+        k = keys.edit_keys(st, "openai", "add", value=a, label_="  Work   key ")["openai"]
+        self.assertEqual([x["name"] for x in k["keys"]], ["", "Work key"])
+        with self.assertRaises(ValueError):
+            keys.edit_keys(st, "openai", "add", value=a)  # (once)
+        with self.assertRaises(ValueError):
+            keys.edit_keys(st, "openai", "add", value="nope")
+        k2 = k["keys"][1]["id"]
+        keys.edit_keys(st, "openai", "move", k2, to=0)
+        self.assertEqual(keys.get(st, "openai"), a)
+        keys.edit_keys(st, "openai", "update", k2, label_="Team")
+        self.assertEqual(keys.status(st)["openai"]["keys"][0]["name"], "Team")
+        keys.edit_keys(st, "openai", "remove", k2)
+        self.assertEqual(keys.get(st, "openai"), fake_live.KEY)
+        self.assertEqual(json.loads((st / "secrets" / "_orbit.json").read_text())["openai"][0]["key"], fake_live.KEY)
+        self.assertEqual(oct((st / "secrets" / "_orbit.json").stat().st_mode & 0o777), "0o600")
+        with self.assertRaises(ValueError):
+            keys.edit_keys(st, "openai", "remove", "nope")
+        # over HTTP (this machine): ops and check by id
+        code, r = self.req("POST", "/api/keys", {"name": "openai", "op": "update", "id": "nope", "label": "x"})
+        self.assertEqual(code, 400)
+        kid = keys.status(self.state)["openai"]["keys"][0]["id"]
+        code, r = self.req("POST", "/api/keys/check", {"name": "openai", "id": kid})
+        self.assertEqual(code, 200)  # (this fake has no /v1/models: it is that key that was asked)
+        self.assertNotEqual(r.get("error"), "no such key")
+        self.assertEqual(self.req("POST", "/api/keys/check", {"name": "openai", "id": "nope"})[1], {"ok": False, "error": "no such key"})
+
     # ------------------------------------------------------------------ transcripts and delegations
     def test_delegation_makes_one_card_from_the_transcript(self):
         """Fragments out of order, one straddling the delegation's offset, one late (in the grace window), one after

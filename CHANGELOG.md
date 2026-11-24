@@ -8,6 +8,12 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Voice: several OpenAI API keys, each with a name, tried in order: one refused (a bad key, no quota, rate-limited:
+  401 / 402 / 403 / 429) and the call goes on with the next (its sideband attaches with the key that made it); a key
+  refused in the last 10 minutes is tried after the others; Settings → Voice lists them (name edited in place, last
+  four characters, how each last did, ↑ to try it earlier, Check, Remove, Add). `POST /api/keys` takes
+  `{"op": "add"|"update"|"remove"|"move", "id", "value", "label", "to"}` (`{"name", "value"}` alone still works);
+  `/api/keys/check` takes an `id`. An older `_orbit.json` (one key) reads as a one-key list.
 - **Settings → Voice** (GPT Live): the OpenAI API key (moved from General), the voice (38 built-in voices, each with
   the language and accent OpenAI lists), the language it speaks (or the user's), results brief or detailed, a spoken
   "on it" when a task starts (off: the automatic acknowledgement is cancelled, as before), standby after 10–60 s or

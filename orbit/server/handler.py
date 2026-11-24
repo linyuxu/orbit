@@ -902,13 +902,20 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json(self.desk.show(str(html or ""), str(b.get("title", "")), str(b.get("by", ""))))
             if p == "/api/settings":
                 return self._json(self.desk.set_settings(b))
-            if p in ("/api/keys", "/api/keys/check"):  # {"name", "value"} keeps a key (null / "": forgets it); check asks the provider
+            if p in ("/api/keys", "/api/keys/check"):  # {"name", "op": add|update|remove|move, "id", "value", "label",
+                # "to"} edits the keys (tried in order); {"name", "value"} alone: that key first (null / "": forgets
+                # them all); check (one "id", else the first) asks the provider
                 if self.from_remote:
                     return self._json({"error": "only on the server's own machine"}, 403)
                 from orbit.services import keys
+                name = str(b.get("name", ""))
                 if p == "/api/keys/check":
-                    return self._json(keys.check(self.desk.state_dir, str(b.get("name", ""))))
-                return self._json({"keys": keys.set_key(self.desk.state_dir, str(b.get("name", "")), b.get("value"))})
+                    return self._json(keys.check(self.desk.state_dir, name, str(b.get("id") or "")))
+                if b.get("op"):
+                    to = b.get("to")
+                    return self._json({"keys": keys.edit_keys(self.desk.state_dir, name, str(b["op"]), str(b.get("id") or ""),
+                                                              b.get("value"), b.get("label"), to if isinstance(to, int) else None)})
+                return self._json({"keys": keys.set_key(self.desk.state_dir, name, b.get("value"))})
             if p in ("/api/live/start", "/api/live/stop"):  # a voice call (GPT Live): this machine, or a client with the
                 # token (the phone): the key stays here, the client gets only the call's SDP answer
                 from orbit.services.live import Busy, NoKey

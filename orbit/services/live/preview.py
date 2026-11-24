@@ -76,11 +76,17 @@ def preview(state: Path, settings: dict | None, voice: str) -> Path:
     with lock:  # (one making per voice: a second hover waits for it)
         if out.is_file() and out.stat().st_size > 1000:
             return out
-        key = keys.get(state, "openai")
-        if not key:
+        ks = keys.entries(state, "openai")
+        if not ks:
             raise PermissionError("No OpenAI API key: set one in Settings → Voice")
-        pcm = record(key, voice, LINES[lang].format(name=voice.capitalize()),
-                     config.current(settings)["live_model"])
+        for i, k in enumerate(ks):  # (the keys in order: one that fails, the next)
+            try:
+                pcm = record(k["key"], voice, LINES[lang].format(name=voice.capitalize()),
+                             config.current(settings)["live_model"])
+                break
+            except (OSError, RuntimeError):
+                if i + 1 == len(ks):
+                    raise
         out.parent.mkdir(parents=True, exist_ok=True)
         tmp = out.with_suffix(".tmp")
         with wave.open(str(tmp), "wb") as w:

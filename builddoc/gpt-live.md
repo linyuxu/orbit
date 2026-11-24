@@ -203,7 +203,12 @@ Following the desk's event stream (`/api/events`; another machine's session's ca
 - a failure, Stop or pause: one commentary saying so;
 - each result is sent once (kept by delegation id); `.appended` acks are logged (context delivered, not played).
 
-A result arriving during standby still goes in (check the wake behaviour in §9).
+**Standby and a task in flight** (tested against GPT Live over WebRTC, 2026-11-23, `idle_timeout_s` 5): while a
+delegation has no result yet the session does not go to standby (60 s of silence, no `session.paused`); the result's
+`commentary.append` is spoken at once (~0.8 s), and standby comes ~5 s after it finished speaking. So a task that
+takes minutes is still said when it ends, and that wait is billed as active. (The WebSocket transport refuses
+`idle_timeout_s`: "requires a session with wake policy support".) Muting only disables the page's microphone track:
+GPT Live sees silence, so standby follows the same rule.
 
 ## 7. Interruption, hang-up, expiry
 
