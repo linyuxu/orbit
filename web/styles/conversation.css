@@ -244,30 +244,24 @@ kbd { font-family:var(--font); font-size:calc(11px * var(--ui-k)); padding:1px 5
 .pconv:focus-visible, .pdocbox:focus-visible, .plistbox:focus-visible { outline:none; }
 /* ===================================================================== a voice call (voice.js) */
 /* The microphone beside Send, like the attach button; in a call it is lit, a red dot while the microphone is open. */
-/* The voice button: five bars. Small beside Send while there is text; a circle in Send's place when the input is empty
-   and during a call (the bars follow the sound there, voice.js; a hover shows the stop). */
-#callbtn { position:relative; flex:none; }
+/* The voice button: five blue bars beside Send, as big as its arrow; in a call they follow the sound (voice.js),
+   pulse while connecting, rest as dots in standby; a hover shows the stop. */
+#callbtn { position:relative; flex:none; width:30px; height:30px; border-radius:50%; color:var(--voice-2); }
+#callbtn:hover { color:var(--voice-2); background:var(--btn-hover); }
+#callbtn svg { width:20px; height:20px; }
 #callbtn:disabled { opacity:.4; }
-#callbtn:disabled:hover { background:none; color:var(--ink-3); }
+#callbtn:disabled:hover { background:none; }
 #callbtn .hang { display:none; }
+#callbtn .hang { width:16px; height:16px; }
 #callbtn .wb { transform-box:fill-box; transform-origin:center; transition:transform .06s linear; }
-#callbtn { color:var(--voice-2); }  /* the voice is blue: the bars, and the circle they sit in */
-#callbtn:hover { color:var(--voice-2); }
-#callbtn.big { width:30px; height:30px; border-radius:50%; background:linear-gradient(140deg, var(--voice-1), var(--voice-2) 70%); color:#fff; }
-#callbtn.big:hover { background:linear-gradient(140deg, var(--voice-1), var(--voice-2) 70%); color:#fff; filter:brightness(1.12); }
-#callbtn.big:disabled:hover { filter:none; }
-/* The right-hand group (state, voice, Send) keeps together at the right, whatever is shown. */
-.crow > #callst:not([hidden]), .crow > #callst[hidden] + #callbtn { margin-left:auto; }
+.crow > #callst:not([hidden]), .crow > #callst[hidden] + #callbtn { margin-left:auto; }  /* the right-hand group keeps together */
 .crow > #callbtn + #send { margin-left:0; }
 #callbtn.call-connecting .wb { animation:wavepulse 1s ease-in-out infinite; animation-delay:calc(var(--i) * .12s); }
-#callbtn.call-standby { background:var(--btn-hover); color:var(--ink-2); }
-#callbtn.call-standby:hover { background:var(--btn-hover); color:var(--ink); filter:none; }
-#callbtn.call-standby .wb { transform:scaleY(.18) !important; }  /* resting: dots, until speech wakes it */
-#callbtn.call-ended { background:var(--btn-hover); color:var(--ink-3); }
-#callbtn.call-ended .wb { transform:scaleY(.18) !important; }
+#callbtn.call-standby, #callbtn.call-ended { color:var(--ink-3); }
+#callbtn.call-standby .wb, #callbtn.call-ended .wb { transform:scaleY(.18) !important; }  /* resting: dots, until speech wakes it */
 #callbtn[class*="call-"]:not(.call-ended):hover .wave { display:none; }
-#callbtn[class*="call-"]:not(.call-ended):hover .hang { display:block; }
-#callbtn.mic-open::after { content:""; position:absolute; top:-1px; right:-1px; width:7px; height:7px; border-radius:50%;
+#callbtn[class*="call-"]:not(.call-ended):hover .hang { display:block; color:var(--err); }
+#callbtn.mic-open::after { content:""; position:absolute; top:1px; right:1px; width:7px; height:7px; border-radius:50%;
   background:var(--err); box-shadow:0 0 0 2px var(--surface); }
 @keyframes wavepulse { 0%,100% { transform:scaleY(.35); opacity:.6 } 50% { transform:scaleY(1); opacity:1 } }
 #send[hidden] { display:none; }

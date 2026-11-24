@@ -19,7 +19,7 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   waiting one), so it says "queued" instead of guessing; "via Voice" on a card explains what the agent got.
 - In a call, a blue orb takes the input's place: soft clouds drift inside it, it swells with the sound (yours and
   the voice's), hurries while the voice speaks, greys in standby; ⌨ types instead (the call goes on; the state by
-  the voice button brings the orb back). The voice button is blue.
+  the voice button brings the orb back). The voice button is five blue bars beside Send, as big as its arrow.
 - Sessions list: a session clicked in a filtered list no longer reshuffles the rows under the pointer; the filter
   clears once the pointer has been away a moment, the rows sliding to their places.
 - A voice call's note card is folded to its head (turns, the requests it made); a click shows the transcript, where

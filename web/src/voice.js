@@ -10,8 +10,8 @@ const VOICE = { call: null, sid: null, phase: "idle", starting: false, pc: null,
 const VOICE_WORD = { connecting: "Connecting…", listening: "Listening", speaking: "Speaking", standby: "Standby", ended: "Call ended" };
 const voiceAudio = new Audio();
 voiceAudio.autoplay = true;
-/* The button: five bars (a voice), a circle where Send is while the input is empty and during a call; in a call the
-   bars follow the sound (the microphone while you talk, the voice while it speaks), and a hover shows the stop. */
+/* The button: five blue bars (a voice), as big as Send's arrow; in a call the bars follow the sound (the microphone
+   while you talk, the voice while it speaks), and a hover shows the stop. */
 const WAVE_H = [1.6, 3.4, 5.2, 3.4, 1.6];  // half-heights: short, tall, tallest, tall, short
 $("#callbtn").innerHTML = `<svg class="wave" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round">${
   WAVE_H.map((h, i) => `<line class="wb" style="--i:${i}" x1="${2.4 + i * 2.8}" x2="${2.4 + i * 2.8}" y1="${8 - h}" y2="${8 + h}"/>`).join("")
@@ -31,10 +31,7 @@ function renderCallBtn() {
   const on = VOICE.phase !== "idle", here = on && VOICE.sid === S.current;
   const name = VOICE.sid && S.sessions.get(VOICE.sid) ? S.sessions.get(VOICE.sid).name : "";
   b.disabled = !on && (!s || VOICE.starting);
-  const empty = !input.value.trim();
-  const big = on || (!b.disabled && empty);  // the circle: in a call, or where Send is when there is nothing to send
-  b.className = `ibtn sm${big ? " big" : ""}${on ? " call-" + VOICE.phase : ""}${VOICE.mic && on && VOICE.phase !== "ended" ? " mic-open" : ""}`;
-  $("#send").hidden = big && empty;
+  b.className = `ibtn sm${on ? " call-" + VOICE.phase : ""}${VOICE.mic && on && VOICE.phase !== "ended" ? " mic-open" : ""}`;
   b.setAttribute("aria-pressed", String(on && VOICE.phase !== "ended"));
   b.title = on ? `${VOICE_WORD[VOICE.phase]}${name ? ` with ${name}` : ""}${VOICE.phase === "ended" ? "" : " · click or ⌘⇧V to hang up"}`
     : "Voice call with this session (⌘⇧V): talk, and it does the work";
