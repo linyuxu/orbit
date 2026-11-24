@@ -274,8 +274,16 @@ body.embed #callbtn, body.embed .callst { display:none; }
 /* Captions while the call is on: the user's words as a request bubble, the voice's as plain text; the requests it
    made in a small line between. */
 #livecaps { padding-top:0; }
-#livecaps .lchead { display:flex; align-items:center; gap:6px; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); margin:0 0 10px; }
-#livecaps .lcdot { width:6px; height:6px; border-radius:50%; background:var(--err); animation:pulse 1.6s infinite; }
+#livecaps .lchead { display:flex; align-items:center; gap:6px; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); margin:0 0 10px;
+  padding:3px 8px 3px 4px; margin-left:-4px; border:0; background:none; border-radius:var(--r-s); cursor:default; max-width:100%; font-family:inherit; text-align:left; }
+#livecaps .lchead:hover { background:var(--hover); color:var(--ink-2); }
+#livecaps .lchead > svg { flex:none; transform:rotate(90deg); transition:transform .12s; }
+#livecaps.folded .lchead > svg { transform:none; }
+#livecaps.folded .lchead { margin-bottom:0; }
+#livecaps .lctitle { flex:none; }
+#livecaps .lclast { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink-3); margin-left:4px; }
+#livecaps .lclast b { font-weight:600; color:var(--ink-2); margin-right:3px; }
+#livecaps .lcdot { flex:none; width:6px; height:6px; border-radius:50%; background:var(--err); animation:pulse 1.6s infinite; }
 #livecaps .lc { margin-bottom:10px; display:flex; }
 #livecaps .lc.user { justify-content:flex-end; }
 #livecaps .lc.user .lcb { background:var(--req-bg); border-radius:14px; padding:8px 14px; max-width:86%; }

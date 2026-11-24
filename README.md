@@ -140,7 +140,8 @@ saves over a file that has content: auto-save skips it and ⌘S asks.
 - **⌘⇧V voice call** (GPT Live; the microphone beside Send): talk with the session in front. The voice answers what
   it can itself and hands the rest to the session as requests (cards "via Voice"); their answers come back spoken, in
   short. The button says connecting · listening · speaking · standby (after 30 s of quiet, cheaper; speech wakes it),
-  a red dot while the microphone is open; captions run in the conversation, and on hang-up the call's transcript stays
+  a red dot while the microphone is open; captions run in the conversation (a click on their head folds them to
+  the latest line), and on hang-up the call's transcript stays
   as a note card. Needs an OpenAI API key (Settings → Voice: it stays on this machine, the page never sees it).
   Settings → Voice also picks the voice (38, with their languages and accents), the language it speaks, brief or
   detailed results, a spoken "on it" when a task starts, when it rests (standby after 10–60 s, or never) and how

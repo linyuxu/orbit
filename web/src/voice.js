@@ -55,11 +55,25 @@ function renderCaps() {
     const last = turns[turns.length - 1];
     if (last && last.who === x.who && x.who !== "sys") last.text += x.text; else turns.push({ who: x.who, text: x.text });
   }
-  box.innerHTML = `<div class="lchead"><span class="lcdot"></span>Live captions</div>` + turns.slice(-14).map(t => t.who === "sys"
-    ? `<div class="lc sys">${esc(t.text)}</div>`
-    : `<div class="lc ${t.who}"><div class="lcb">${esc(t.text.trim())}</div></div>`).join("");
+  /* Folded (a click on the head; kept): one line, the latest words, so the agent's answers have the room. */
+  const folded = !!LS.get("capsFolded", false);
+  const said = turns.filter(t => t.who !== "sys");
+  const lastT = said[said.length - 1];
+  box.classList.toggle("folded", folded);
+  box.innerHTML = `<button type="button" class="lchead" aria-expanded="${!folded}" title="${folded ? "Show the captions" : "Fold the captions to one line"}">` +
+    `${I("chev", 11)}<span class="lcdot"></span><span class="lctitle">Live captions</span>` +
+    (folded && lastT ? `<span class="lclast"><b>${lastT.who === "user" ? "You" : "Voice"}</b> ${esc(lastT.text.trim())}</span>` : "") + `</button>` +
+    (folded ? "" : turns.slice(-14).map(t => t.who === "sys"
+      ? `<div class="lc sys">${esc(t.text)}</div>`
+      : `<div class="lc ${t.who}"><div class="lcb">${esc(t.text.trim())}</div></div>`).join(""));
   stick();
 }
+$("#livecaps").addEventListener("mousedown", e => { if (e.target.closest(".lchead")) e.preventDefault(); });  // (the input keeps the keyboard)
+$("#livecaps").addEventListener("click", e => {
+  if (!e.target.closest(".lchead")) return;
+  LS.set("capsFolded", !LS.get("capsFolded", false));
+  renderCaps();
+});
 let capSeq = 0;
 function addCaption(c) {
   if (!c || !c.id || VOICE.caps.has(c.id)) return;  // (the server's copy and the data channel's: one)
