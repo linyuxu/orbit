@@ -356,3 +356,48 @@ class RemoteTest(test_skeleton.SkeletonTest):
 for name in [n for n in dir(test_skeleton.SkeletonTest) if n.startswith("test_")]:
     if name not in RemoteTest.__dict__:
         setattr(RemoteTest, name, None)
+
+
+class RemoteVoiceTest(RemoteTest):
+    def test_voice_call_with_another_machines_session(self):
+        """A voice call held by this server with a session on another machine: its requests go there (origin Voice,
+        idempotent), the context comes from there, the answer comes back on this server's events and is spoken, and
+        the call's transcript becomes a note card over there."""
+        import fake_live
+        from orbit.machines.federation import wait_for
+        from orbit.services import keys
+        from test_live import delegation, t_in
+        fake = fake_live.FakeLive().start()
+        base, keys.OPENAI_BASE = keys.OPENAI_BASE, fake.base
+        keys.set_key(self.state, "openai", fake_live.KEY)
+        try:
+            url = f"http://127.0.0.1:{self.rport}/?token={self.token}"
+            self.assertEqual(self.req("POST", "/api/remotes", {"name": "vbox", "url": url})[0], 200)
+            self.assertTrue(wait_for(lambda: any(m["name"] == "vbox" and m["ok"] for m in self.req("GET", "/api/sessions")[1]["machines"])))
+            s = self.req("POST", "/api/sessions", {"cwd": self.rwork, "name": "far", "machine": "vbox", "group": "main"})[1]
+            rid = s["id"].split("~", 1)[1]
+            self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "earlier"})
+            self.assertTrue(wait_for(lambda: any(c["state"] == "completed" for c in self.rdesk.cards(rid)), 15))
+            code, r = self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+            self.assertEqual(code, 200, r)
+            self.assertTrue(fake.wait_attached(1))
+            se = fake.bodies[-1]["session"]
+            self.assertIn('session named "far"', se["instructions"])
+            self.assertIn(f"folder {self.rwork}", se["instructions"])  # (that machine's path, not /@vbox/…)
+            self.assertIn("answer: earlier", json.dumps(se["input"]))  # its recent work, read over there
+            fake.emit(t_in("run the build", 500, 1500, "r1"), delegation("del_r", 1600, "dr"))
+            self.assertTrue(wait_for(lambda: len(self.rdesk.cards(rid)) >= 2, 10))
+            c = self.rdesk.cards(rid)[1]
+            self.assertEqual((c["text"], c["origin"]["label"]), ("run the build", "Voice"))
+            com = fake.wait_got("session.commentary.append")
+            self.assertIn("answer: run the build", com[0]["content"])
+            self.req("POST", "/api/live/stop", {})
+            ok = wait_for(lambda: any(x.get("kind") == "note" for x in self.rdesk.cards(rid)), 10)
+            self.assertTrue(ok, [l for f in Path(self.state, "live").glob("*.jsonl") for l in f.read_text().splitlines() if "note" in l])
+            note = next(x for x in self.rdesk.cards(rid) if x.get("kind") == "note")
+            self.assertIn("run the build", note["answer"])
+            self.assertEqual(note["origin"]["label"], "Voice")
+        finally:
+            keys.OPENAI_BASE = base
+            keys.set_key(self.state, "openai", None)
+            fake.stop()

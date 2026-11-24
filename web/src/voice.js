@@ -30,14 +30,14 @@ function renderCallBtn() {
   const b = $("#callbtn"), st = $("#callst"), s = cur();
   const on = VOICE.phase !== "idle", here = on && VOICE.sid === S.current;
   const name = VOICE.sid && S.sessions.get(VOICE.sid) ? S.sessions.get(VOICE.sid).name : "";
-  b.disabled = !on && (!s || !!s.remote || VOICE.starting);
+  b.disabled = !on && (!s || VOICE.starting);
   const empty = !input.value.trim();
   const big = on || (!b.disabled && empty);  // the circle: in a call, or where Send is when there is nothing to send
   b.className = `ibtn sm${big ? " big" : ""}${on ? " call-" + VOICE.phase : ""}${VOICE.mic && on && VOICE.phase !== "ended" ? " mic-open" : ""}`;
   $("#send").hidden = big && empty;
   b.setAttribute("aria-pressed", String(on && VOICE.phase !== "ended"));
   b.title = on ? `${VOICE_WORD[VOICE.phase]}${name ? ` with ${name}` : ""}${VOICE.phase === "ended" ? "" : " · click or ⌘⇧V to hang up"}`
-    : s && s.remote ? "A voice call works with this Mac's sessions" : "Voice call with this session (⌘⇧V): talk, and it does the work";
+    : "Voice call with this session (⌘⇧V): talk, and it does the work";
   st.hidden = !on;
   st.textContent = on ? (here || !name ? VOICE_WORD[VOICE.phase] : `${VOICE_WORD[VOICE.phase]} · ${name}`) : "";
   st.className = `callst${on ? " call-" + VOICE.phase : ""}`;
@@ -163,7 +163,6 @@ function iceGathered(pc, ms = 10000) {
 async function startCall() {
   const s = cur();
   if (!s || VOICE.starting) return;
-  if (s.remote) { toast("A voice call works with this Mac's sessions"); return; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection) { toast("No microphone here: this page has no WebRTC"); return; }
   VOICE.starting = true; VOICE.sid = s.id; VOICE.call = null; VOICE.caps.clear();
   try { METER.ctx = new AudioContext(); } catch { METER.ctx = null; }  // (made in the click: Safari lets it play)

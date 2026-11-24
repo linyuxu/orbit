@@ -1182,11 +1182,15 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             m = re.fullmatch(r"/api/sessions/(\w[\w-]*~[\w-]+)/(\w+)", p)
             if m:
                 return self._remote_action(m.group(1), m.group(2), b)
-            m = re.fullmatch(r"/api/sessions/([\w-]+)/(send|stop|close|rename|restart|reopen|resume|update|move|clone|fork|continue|withdraw|edit|mention|mode|steer|model)", p)
+            m = re.fullmatch(r"/api/sessions/([\w-]+)/(send|stop|close|rename|restart|reopen|resume|update|move|clone|fork|continue|withdraw|edit|mention|mode|steer|model|note)", p)
             if m:
                 sid, action = m.groups()
                 if action == "steer":
-                    return self._json(self.desk.steer(sid, str(b.get("text", ""))))
+                    return self._json(self.desk.steer(sid, str(b.get("text", "")), origin=self._origin(b.get("origin")),
+                                                      client_id=b.get("client_id")))
+                if action == "note":  # a note card (a voice call's transcript, from the server that held the call)
+                    return self._json(self.desk.add_note(sid, str(b.get("title", ""))[:200], str(b.get("text", ""))[:200_000],
+                                                         origin=self._origin(b.get("origin"))))
                 if action == "model":
                     return self._json(self.desk.set_model(sid, b.get("model"), b.get("effort")))
                 if action == "mode":

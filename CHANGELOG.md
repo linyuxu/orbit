@@ -17,6 +17,10 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - The voice button: five bars in a circle where Send is while the input is empty; in a call they follow the sound.
 - Voice: after each request the voice is told what became of it (running, queued behind another, joined to the
   waiting one), so it says "queued" instead of guessing; "via Voice" on a card explains what the agent got.
+- Voice calls work with another machine's sessions too (`name~id`): this server holds the call; the requests,
+  the session's context and the call's note card go to that machine through the federation, and its answers come
+  back on this server's events to be spoken. A session's `steer` takes `origin` and `client_id` like `send`; `note`
+  adds a note card (`POST /api/sessions/ID/note {title, text, origin}`).
 - Settings → Voice: hovering a voice (or ↑↓ in the list) plays it saying hello, ▶ plays the chosen one. OpenAI
   publishes no samples, so the voice makes its own: a short WebSocket-transport session told to greet in one sentence
   (in the voice's language, else the chosen one), its speech cut out by loudness and kept as a WAV in

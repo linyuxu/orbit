@@ -88,6 +88,73 @@ def ws_base() -> str:
     return "wss://" + b[len("https://"):] if b.startswith("https://") else "ws://" + b[len("http://"):] if b.startswith("http://") else b
 
 
+# ---------------------------------------------------------------------------------------------- the bound session
+class Target:
+    """The session a call works with: one of this server's (the desk), or another machine's (`name~sid`, through
+    the federation: its requests are sent to that server, its cards come back on this server's event stream)."""
+
+    def __init__(self, desk, sid: str):
+        from orbit.machines import federation
+        self.desk, self.sid = desk, sid
+        self.remote = federation.split(sid) if getattr(desk, "federation", None) else None
+        if self.remote is None:
+            desk.get(sid)  # (KeyError: no such session)
+        elif not self._shown():
+            raise KeyError(sid)
+
+    def _shown(self) -> dict:
+        fed = self.desk.federation
+        with fed.lock:
+            return dict(fed.sessions.get(self.remote[0], {}).get(self.remote[1]) or {})  # (kept by that machine's id)
+
+    def info(self) -> dict:
+        """name, cwd (as that machine names it), harness, mode, state, steers."""
+        if self.remote is None:
+            s = self.desk.get(self.sid)
+            with self.desk.lock:
+                pub = s.public()
+        else:
+            from orbit.machines import federation
+            pub = self._shown()
+            pub["cwd"] = federation.local_paths(self.remote[0], pub.get("cwd") or "")
+        return {k: pub.get(k) for k in ("name", "cwd", "harness", "mode", "state", "steers")}
+
+    def cards(self) -> list[dict]:
+        if self.remote is None:
+            s = self.desk.get(self.sid)
+            self.desk._ensure_loaded(s)
+            with self.desk.lock:
+                return copy.deepcopy(s.cards)
+        return self._call("GET", "/cards")["cards"]
+
+    def _call(self, method: str, action: str, body: dict | None = None):
+        name, rsid = self.remote
+        code, d = self.desk.federation.call(name, method, f"/api/sessions/{rsid}{action}", body)
+        if code != 200:
+            raise RuntimeError(f"{name}: {(d or {}).get('error') or code}")
+        return d
+
+    def send(self, text: str, origin: dict, client_id: str) -> dict:
+        if self.remote is None:
+            return self.desk.send(self.sid, text, origin=origin, client_id=client_id)
+        return self._call("POST", "/send", {"text": text, "origin": origin, "client_id": client_id})
+
+    def steer(self, text: str, origin: dict, client_id: str) -> dict:
+        if self.remote is None:
+            return self.desk.steer(self.sid, text, origin=origin, client_id=client_id)
+        return self._call("POST", "/steer", {"text": text, "origin": origin, "client_id": client_id})
+
+    def edit(self, cid: int, text: str) -> dict:
+        if self.remote is None:
+            return self.desk.edit(self.sid, cid, text)
+        return self._call("POST", "/edit", {"cid": cid, "text": text})
+
+    def note(self, title: str, text: str, origin: dict) -> dict:
+        if self.remote is None:
+            return self.desk.add_note(self.sid, title, text, origin=origin)
+        return self._call("POST", "/note", {"title": title, "text": text, "origin": origin})
+
+
 # ---------------------------------------------------------------------------------------------- the session's setup
 def instructions(name: str, cwd: str, model: str, cfg: dict | None = None) -> str:
     """§3, in the structure of OpenAI's live prompting template (its Backchannel / Interruption / Delegation policy
@@ -143,19 +210,18 @@ def _msg(role: str, text: str) -> dict:
 
 def startup_input(desk, s, history: bool = True) -> list[dict]:
     """§4: the session, its last 3 requests and answers (each answer cut to 600 characters), what still runs or
-    waits; observed_at on each. About 2 000 tokens at most."""
+    waits; observed_at on each. About 2 000 tokens at most. (s: a Target, or one of the desk's sessions.)"""
     from orbit.desk.session import DRIVERS, clip
     from orbit.drivers.base import strip_orbit_line
-    desk._ensure_loaded(s)
-    with desk.lock:
-        cards = [copy.deepcopy(c) for c in s.cards if c.get("kind") != "note" and not c.get("hidden")]
-        pub = s.public()
+    t = s if isinstance(s, Target) else Target(desk, s.id)
+    pub = t.info()
+    cards = [c for c in t.cards() if c.get("kind") != "note" and not c.get("hidden")]
     at = now_iso()
-    label = getattr(DRIVERS.get(s.harness), "label", s.harness)
+    label = getattr(DRIVERS.get(pub["harness"]), "label", pub["harness"])
     running = [c for c in cards if c["state"] in ACTIVE]
     waiting = [c for c in cards if c["state"] == "queued"]
     line = lambda c: clip(strip_orbit_line(c.get("text") or ""), 160)
-    facts = (f'The Orbit session "{s.name}": harness {label}, folder {s.cwd}, permission mode {s.mode}, '
+    facts = (f'The Orbit session "{pub["name"]}": harness {label}, folder {pub["cwd"]}, permission mode {pub["mode"]}, '
              f'{"working" if running else pub.get("state", "ready")}'
              + (f' on request #{running[0]["id"]}: {line(running[0])}' if running else "") + f". (observed_at {at})")
     items = [_msg("developer", facts)]
@@ -178,11 +244,13 @@ def startup_input(desk, s, history: bool = True) -> list[dict]:
 def session_body(desk, s, sdp: str, model: str, cfg: dict | None = None) -> dict:
     """The POST /v1/live/sessions body (§2): fixed for the call's life (Settings → Voice as the call starts)."""
     cfg = cfg or config.current(desk.settings)
+    t = s if isinstance(s, Target) else Target(desk, s.id)
+    pub = t.info()
     return {
         "session": {
             "model": model,
-            "instructions": instructions(s.name, s.cwd, model, cfg),
-            "input": startup_input(desk, s, history=cfg["live_context"]),
+            "instructions": instructions(pub["name"], pub["cwd"], model, cfg),
+            "input": startup_input(desk, t, history=cfg["live_context"]),
             "audio": {"output": {"voice": cfg["live_voice"]}},
             "delegation": {"type": "client", "acknowledgement_delay_ms": ACK_DELAY_MS},
             "wake_policy": {"type": "speech", "vad_threshold": cfg["live_wake"]},
@@ -287,6 +355,7 @@ def progress_line(c: dict) -> str:
 class Call:
     def __init__(self, live: "Live", sid: str, model: str):
         self.live, self.desk, self.sid, self.model = live, live.desk, sid, model
+        self.target = Target(live.desk, sid)  # (this server's session, or another machine's)
         self.cfg = config.current(live.desk.settings)  # (again as the call is created)
         self.id = "call-" + uuid.uuid4().hex[:10]
         self.t0 = time.time()
@@ -362,7 +431,7 @@ class Call:
         key = keys.get(self.desk.state_dir, "openai")
         if not key:
             raise NoKey("No OpenAI API key: set one in Settings → Voice")
-        s = self.desk.get(self.sid)
+        s = self.target
         self.cfg = config.current(self.desk.settings)
         body = session_body(self.desk, s, sdp, self.model, self.cfg)
         self.log("create", sid=self.sid, model=self.model, input=len(body["session"]["input"]),
@@ -583,18 +652,17 @@ class Call:
         origin = {"label": "Voice", "data": {"live": self.live_id, "delegation": did}}
         how, c = "new", None
         try:
-            s = self.desk.get(self.sid)
+            t = self.target
             pc = None
             if prev is not None:
-                with self.desk.lock:
-                    pc = next((copy.deepcopy(x) for x in s.cards if x["id"] == prev["cid"]), None)
+                pc = next((x for x in t.cards() if x["id"] == prev["cid"]), None)
             if pc is not None and pc["state"] == "queued" and not pc.get("hidden"):
-                c, how = self.desk.edit(self.sid, pc["id"], pc["text"] + "\n\n" + text), "edit"  # the correction joins it
-            elif pc is not None and pc["state"] in ACTIVE and s.driver is not None and s.driver.steers:
-                c = self.desk.steer(self.sid, text, origin=origin, client_id=f"live:{self.live_id}:{did}")
+                c, how = t.edit(pc["id"], pc["text"] + "\n\n" + text), "edit"  # the correction joins it
+            elif pc is not None and pc["state"] in ACTIVE and t.info().get("steers"):
+                c = t.steer(text, origin, f"live:{self.live_id}:{did}")
                 how = "steer" if c.get("steered") else "new"
             else:
-                c = self.desk.send(self.sid, text, origin=origin, client_id=f"live:{self.live_id}:{did}")
+                c = t.send(text, origin, f"live:{self.live_id}:{did}")
         except Exception as e:  # noqa: BLE001 - the voice is told, the call goes on
             self.log("send_failed", delegation=did, error=f"{type(e).__name__}: {e}"[:300])
             self._send({"type": "session.commentary.append", "event_id": f"fail_{did}", "delegation_id": did,
@@ -617,9 +685,10 @@ class Call:
     def _status(self, did: str, c: dict, how: str) -> None:
         """What became of the request, as silent context: the voice knows the facts (sent, queued behind another,
         joined to a waiting one) instead of guessing how Orbit handles it."""
-        s = self.desk.get(self.sid)
-        with self.desk.lock:
-            run = next((x for x in s.cards if x["state"] in ACTIVE and x["id"] != c["id"]), None)
+        try:
+            run = next((x for x in self.target.cards() if x["state"] in ACTIVE and x["id"] != c["id"]), None)
+        except (RuntimeError, KeyError):
+            run = None
         busy = f'the agent is busy with request #{run["id"]}' if run else "another request runs first"
         if how == "edit":
             fact = (f"Orbit added these words to request #{c['id']}, which has not started: {busy}. It is one request, "
@@ -758,8 +827,8 @@ class Call:
                "remote_hangup": " It ended: the page's connection closed.", "connection_lost": " It ended: the connection was lost.",
                "content": " It ended: a safety filter stopped it."}.get(self.reason, f" It ended ({self.reason})." if self.reason else "")
         body = "\n\n".join(lines) + f"\n\n{tail}{why}"
-        return self.desk.add_note(self.sid, f"Voice call · {when} · {mins} min", body,
-                                  origin={"label": "Voice", "data": {"live": self.live_id, "call": self.id}})
+        return self.target.note(f"Voice call · {when} · {mins} min", body,
+                                {"label": "Voice", "data": {"live": self.live_id, "call": self.id}})
 
 
 class Live:
@@ -776,7 +845,7 @@ class Live:
     def start(self, sid: str, sdp: str) -> dict:
         if not isinstance(sdp, str) or not sdp.strip():
             raise ValueError("an SDP offer is needed")
-        self.desk.get(sid)  # (KeyError: no such session)
+        Target(self.desk, sid)  # (KeyError: no such session, here or on a machine this server reaches)
         if not keys.get(self.desk.state_dir, "openai"):
             raise NoKey("No OpenAI API key: set one in Settings → Voice")
         with self.lock:
