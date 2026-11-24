@@ -25,6 +25,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from orbit.desk import cardpatch
 from orbit.machines import remote
 
 
@@ -104,6 +105,7 @@ class Federation:
         self.sessions: dict[str, dict[str, dict]] = {}  # remote → {its id: session as shown here}
         self.errors: dict[str, str] = {}  # remote → why it is unreachable ("" when it answers)
         self.watchers: dict[str, threading.Thread] = {}
+        self.cards: dict[tuple, dict] = {}  # (remote, its sid, card id) → the card as it last came (its patches apply to it)
         self.stopped = threading.Event()
         self.placement_path = self.state / "remote-placement.json"
         try:  # NAME~ID → {"group", "favorite"}: where the user put another machine's session, here
@@ -163,7 +165,7 @@ class Federation:
             backoff = min(backoff * 2, 30.0)
 
     def _follow(self, name: str, info: dict) -> None:
-        req = urllib.request.Request(info["url"] + "/api/events", headers={"Authorization": f"Bearer {info['token']}"})
+        req = urllib.request.Request(info["url"] + "/api/events?delta=1", headers={"Authorization": f"Bearer {info['token']}"})
         with urllib.request.urlopen(req, timeout=40) as r:  # the server pings every 15 s
             for raw in r:
                 if self.stopped.is_set() or name not in remote.load(self.state):
@@ -193,7 +195,21 @@ class Federation:
             c = ev.get("card") or {}
             if SEP in str(c.get("sid", "")):
                 return
+            self._keep_card(name, c)
             self.desk.broadcast({"t": "card", "card": self.card(name, c)})
+        elif t == "cardp":  # a patch (it follows with ?delta=1): applied to the card as it last came, else fetched
+            sid = str(ev.get("sid", ""))
+            if SEP in sid:
+                return
+            key = (name, sid, ev.get("id"))
+            with self.lock:
+                have = self.cards.get(key)
+            if have is not None and have.get("rev") == ev.get("base"):
+                c = {**cardpatch.apply(have, ev.get("ops") or []), "rev": ev.get("rev")}
+                self._keep_card(name, c)
+                self.desk.broadcast({"t": "card", "card": self.card(name, c)})
+            elif have is None or (have.get("rev") or 0) < (ev.get("rev") or 0):
+                threading.Thread(target=self._fetch_card, args=(name, sid, ev.get("id")), daemon=True).start()
         elif t == "closed":
             sid = str(ev.get("id", ""))
             if SEP in sid:
@@ -201,6 +217,28 @@ class Federation:
             with self.lock:
                 self.sessions.get(name, {}).pop(sid, None)
             self.desk.broadcast({"t": "closed", "id": join(name, sid), "session": self.session(name, ev.get("session") or {"id": sid})})
+
+    CARDS_KEPT = 300
+
+    def _keep_card(self, name: str, c: dict) -> None:
+        key = (name, str(c.get("sid", "")), c.get("id"))
+        with self.lock:
+            self.cards.pop(key, None)
+            if c.get("state") not in ("completed", "error", "cancelled"):
+                self.cards[key] = c
+                while len(self.cards) > self.CARDS_KEPT:
+                    self.cards.pop(next(iter(self.cards)))
+
+    def _fetch_card(self, name: str, sid: str, cid: Any) -> None:
+        """A card whose patch could not be applied (one was missed): fetched whole from that server."""
+        try:
+            st, r = self.call(name, "GET", f"/api/sessions/{sid}/cards/{cid}?exact=1", rewrite=False, timeout=15)
+        except Exception:  # noqa: BLE001 - the next change tries again
+            return
+        c = (r or {}).get("card") if st == 200 and isinstance(r, dict) else None
+        if c:
+            self._keep_card(name, c)
+            self.desk.broadcast({"t": "card", "card": self.card(name, c)})
 
     def _replace(self, name: str, sessions: list[dict]) -> None:
         shown = {s["id"]: self.session(name, s) for s in sessions if not s.get("closed")}

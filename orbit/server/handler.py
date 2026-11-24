@@ -668,10 +668,13 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             if not svcs:
                 return self._json({"error": "no such service"}, 404)
             return self._json({"service": svcs[0].id, "log": svcs[0].tail(max(1, min(2000, int(qs.get("lines", "200")))))})
-        m = re.fullmatch(r"/api/sessions/([\w-]+)/cards/(\d+)", p)
-        if m:  # one card; ?wait=S: once it is final (following a paused request to its continuation), or after S s
+        m = re.fullmatch(r"/api/sessions/([\w-]+)/cards/(\d+(?:\.\d+)?)", p)
+        if m:  # one card; ?wait=S: once it is final (following a paused request to its continuation), or after S s;
+            # ?exact=1: that card as it is now, whatever its id (a client that missed a card patch)
             qs = {k: v[0] for k, v in parse_qs(u.query).items()}
             try:
+                if qs.get("exact") == "1" or "." in m.group(2):
+                    return self._json({"card": self.desk.card(m.group(1), float(m.group(2)))})
                 return self._json(self.desk.wait_card(m.group(1), int(m.group(2)), float(qs.get("wait", "0"))))
             except KeyError:
                 return self._json({"error": "no such session or request"}, 404)
@@ -709,10 +712,11 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json({"sessions": self.desk.list(closed=closed), "groups": self.desk.groups, "modes": MODES})
             return self._json({"sessions": self.desk.all_sessions(closed=closed), "groups": self.desk.all_groups(),
                                "modes": MODES, "machines": self.desk.federation.machines() if self.desk.federation else []})
-        m = re.fullmatch(r"/api/sessions/(\w[\w-]*~[\w-]+)/(cards(?:/\d+)?|resume-command)", p)
+        m = re.fullmatch(r"/api/sessions/(\w[\w-]*~[\w-]+)/(cards(?:/\d+(?:\.\d+)?)?|resume-command)", p)
         if m:  # a session on another machine (all its cards, or one; its resume command, for a terminal there)
             fed = federation.split(m.group(1))
-            return self._json(*reversed(self.desk.federation.call(fed[0], "GET", f"/api/sessions/{fed[1]}/{m.group(2)}")))
+            return self._json(*reversed(self.desk.federation.call(fed[0], "GET", f"/api/sessions/{fed[1]}/{m.group(2)}"
+                                                                  + (f"?{u.query}" if u.query else ""))))
         m = re.fullmatch(r"/api/sessions/([\w-]+)/resume-command", p)
         if m:  # Copy resume command: the session's conversation, continued in a terminal
             try:

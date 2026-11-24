@@ -15,7 +15,8 @@ class Streams:
         self.send_header("Cache-Control", "no-store")
         self.send_header("Connection", "keep-alive")
         self.end_headers()
-        q = self.desk.subscribe()
+        from urllib.parse import parse_qs, urlparse
+        q = self.desk.subscribe(delta=parse_qs(urlparse(self.path).query).get("delta") == ["1"])  # (card patches)
         try:
             self._sse_write({"t": "hello", "sessions": self.desk.all_sessions(), "groups": self.desk.all_groups(),
                              "machines": self.desk.federation.machines() if self.desk.federation else []})

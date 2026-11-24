@@ -227,6 +227,44 @@ class RemoteTest(test_skeleton.SkeletonTest):
             self.req("POST", "/api/remotes/box/delete", {})
         self.assertTrue(wait_for(lambda: not any(m["name"] == "box" for m in self.req("GET", "/api/sessions")[1]["machines"])))
 
+    def test_federation_follows_card_patches(self):
+        """This server follows another's events with patches (?delta=1): a streaming card there comes here step by step
+        (patches applied to the card as it last came), and ends as the card over there."""
+        from orbit.machines.federation import wait_for
+        url = f"http://127.0.0.1:{self.rport}/?token={self.token}"
+        self.assertEqual(self.req("POST", "/api/remotes", {"name": "pbox", "url": url})[0], 200)
+        try:
+            self.assertTrue(wait_for(lambda: any(m["name"] == "pbox" and m["ok"] for m in self.req("GET", "/api/sessions")[1]["machines"])))
+            code, s = self.req("POST", "/api/sessions", {"cwd": self.rwork, "name": "streamer", "machine": "pbox", "group": "main"})
+            self.assertEqual(code, 200, s)
+            events = self.desk.subscribe()
+            os.environ["FAKE_FLOOD"] = "8"
+            try:
+                self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "flood it"})
+                got = []
+
+                def done():
+                    while True:
+                        try:
+                            ev = json.loads(events.get(timeout=0.2))
+                        except Exception:
+                            return False
+                        if ev.get("t") == "card" and ev["card"]["sid"] == s["id"]:
+                            got.append(ev["card"])
+                            if ev["card"]["state"] == "completed":
+                                return True
+                self.assertTrue(wait_for(done, 30), [c["state"] for c in got])
+            finally:
+                os.environ.pop("FAKE_FLOOD", None)
+                self.desk.unsubscribe(events)
+            at_work = [c for c in got if c["state"] in ("thinking", "running")]
+            self.assertGreater(len(at_work), 8)  # (the steps between: they come as patches over the link)
+            rid = s["id"].split("~", 1)[1]
+            there = self.rdesk.card(rid, got[-1]["id"])
+            self.assertEqual(got[-1], {**there, "sid": s["id"]})
+        finally:
+            self.req("POST", "/api/remotes/pbox/delete", {})
+
     def test_federation_other_machines_conversations_to_resume(self):
         """⌘O → Other sessions lists every machine's conversations; one of box's is resumed on box."""
         import uuid

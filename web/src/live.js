@@ -1,7 +1,7 @@
 "use strict";
 /* ===================================================================== live updates (SSE) */
 function connect() {
-  const es = new EventSource("/api/events");
+  const es = new EventSource("/api/events?delta=1");  // (a streaming card's changes as patches: cardpatch.js)
   es.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if (m.t === "machines") { S.machines = m.machines || []; renderLeft(); renderTabs(); return; }
@@ -43,6 +43,9 @@ function connect() {
       else renderAll();
     } else if (m.t === "card") {
       upsertCard(m.card);
+    } else if (m.t === "cardp") {
+      const list = S.cards.get(m.sid);
+      onCardPatch(m, list && list.find(x => x.id === m.id), upsertCard);
     } else if (m.t === "schedules") {
       S.schedules = m.schedules; schedulesChanged();
     } else if (m.t === "plugin-badges") {

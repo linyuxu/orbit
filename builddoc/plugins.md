@@ -149,9 +149,10 @@ change.
 | `POST /api/sessions/{id}/send` `{"text", "origin"?}` | a request (queued behind a running one) → Card |
 | `GET /api/sessions/{id}/cards` | `{"cards": [Card]}` |
 | `GET /api/sessions/{id}/cards/{n}?wait=S` | `{"card": Card, "final": bool}`: once the request is final, or after S s (≤ 3600). A request that paused because its agent went away and that Orbit continues by itself is followed to the request that continues it |
+| `GET /api/sessions/{id}/cards/{n}?exact=1` | `{"card": Card}`: that card as it is now (n may be a turn's own id, 5.501), nothing followed: what a client that missed a `cardp` fetches |
 | `POST /api/sessions/{id}/steer` `{"text"}` | a message for the running request (or a new one) → Card with `steered` |
 | `POST /api/sessions/{id}/stop` | stop the running request |
-| `GET /api/events` | Server-Sent Events, below |
+| `GET /api/events` | Server-Sent Events, below; `?delta=1`: a streaming card's changes as patches (`cardp`) |
 
 **Session**: `id`, `name`, `cwd`, `harness`, `model`, `mode`, `state` (`starting` · `ready` · `working` ·
 `not ready` · `stopped`), `error`, `queued`, `closed`.
@@ -172,6 +173,7 @@ Orbit continues a paused request.
 | `t` | |
 |---|---|
 | `card` | `{"card": Card}`: a request changed (created, streaming, a step, finished) |
+| `cardp` | only with `?delta=1`: `{"sid", "id", "rev", "base", "ops"}`: what changed in a card at work since its revision `base` (ops: `orbit/desk/cardpatch.py`); a client without that revision fetches the card (`?exact=1`). Starting or stopping work, and every final state, still come as a whole `card` |
 | `session` | `{"session": Session}` |
 | `plugin-items` | (1.3) `{"plugin", "source", "updated"}`: a source's list changed |
 | `plugin-thread` | (2.0) `{"plugin", "kind", "key", "rev", "change"}`: a thread changed (`change` has what did: `append`, `update`, `remove`, `replace`, its fields; `whole`: fetch it) |

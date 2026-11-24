@@ -16,6 +16,7 @@ import time
 import uuid
 from pathlib import Path
 
+from orbit.desk import cardpatch
 from orbit.desk.agents import Agents
 from orbit.desk.driving import Driving
 from orbit.desk.fleet import Fleet
@@ -50,6 +51,7 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
         self.sessions: dict[str, Session] = {}  # insertion order = tab order
         self.groups: list[dict] = []  # [{"id", "name"}] in left-panel order (⌘2…⌘9)
         self.clients: list[queue.Queue] = []
+        self._cards_told: dict[tuple, dict] = {}  # (sid, card id) → the card as last broadcast (patches start from it)
         self.badge = 0  # the page's unread count (the app shell's Dock badge)
         self.ui_ctx: dict = {}  # what the user is looking at, reported by the page (orbit-agent ctx)
         self.show_dir = state_dir / "show"  # pages agents show with `orbit-agent show`
@@ -107,8 +109,10 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
             tmp.write_text(text)
             os.replace(tmp, self.path)  # atomic: a crash never leaves a half-written file
 
-    def subscribe(self) -> queue.Queue:
+    def subscribe(self, delta: bool = False) -> queue.Queue:
+        """A queue of the live events (JSON text). delta: a card's change may come as a patch (desk/cardpatch.py)."""
         q: queue.Queue = queue.Queue(maxsize=5000)
+        q.delta = delta  # type: ignore[attr-defined]
         with self.lock:
             self.clients.append(q)
         return q
@@ -123,11 +127,30 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
         with self.lock:
             data = json.dumps(ev, ensure_ascii=False)
             clients = list(self.clients)
+            short = self._card_patch(data) if ev.get("t") == "card" else None
         for q in clients:
             try:
-                q.put_nowait(data)
+                q.put_nowait(short if short is not None and getattr(q, "delta", False) else data)
             except queue.Full:
                 pass
+
+    CARDS_KEPT = 300  # the last version told of this many cards (at work): what their patches start from
+
+    def _card_patch(self, data: str) -> str | None:
+        """A card's change as a patch from the version told before (desk/cardpatch.py), when it is that much smaller;
+        else None (it goes whole). The version told is kept for the next one (cards at work only)."""
+        new = json.loads(data).get("card") or {}
+        key = (new.get("sid"), new.get("id"))
+        old = self._cards_told.pop(key, None)
+        if new.get("state") not in ("completed", "error", "cancelled"):
+            self._cards_told[key] = new
+            while len(self._cards_told) > self.CARDS_KEPT:
+                self._cards_told.pop(next(iter(self._cards_told)))
+        p = cardpatch.patch(old, new, ACTIVE)
+        if p is None:
+            return None
+        text = json.dumps(p, ensure_ascii=False)
+        return text if len(text) < len(data) * 0.7 else None
 
     def _card_changed(self, c: dict) -> None:
         s = self.sessions.get(c["sid"])
@@ -348,6 +371,16 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
         os.replace(tmp, self.settings_path)
         self.broadcast({"t": "settings", "settings": snap})
         return snap
+
+    def card(self, sid: str, cid: float) -> dict:
+        """One card, as it is now (a client that missed a patch fetches it). KeyError: no such session or card."""
+        s = self.get(sid)
+        self._ensure_loaded(s)
+        with self.lock:
+            c = next((x for x in s.cards if float(x["id"]) == float(cid)), None)
+            if c is None:
+                raise KeyError(f"{sid}#{cid}")
+            return copy.deepcopy(c)
 
     def cards(self, sid: str) -> list[dict]:
         s = self.get(sid)

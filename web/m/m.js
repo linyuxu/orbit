@@ -39,7 +39,7 @@ function closeEvents() { if (ES) { ES.onmessage = ES.onerror = null; ES.close();
 function reconnect() {
   if (document.body.classList.contains("unpaired")) return;
   closeEvents();
-  const es = ES = new EventSource(withToken("/api/events"), { withCredentials: true });
+  const es = ES = new EventSource(withToken("/api/events?delta=1"), { withCredentials: true });  // (card patches: cardpatch.js)
   es.onopen = () => { esRetry = 0; setOnline(true); };
   es.onmessage = ev => { try { onEvent(JSON.parse(ev.data)); } catch (e) { console.error(e); } };
   es.onerror = () => {
@@ -82,6 +82,10 @@ function onEvent(m) {
   } else if (m.t === "card") {
     upsertCard(m.card);
     if (!S.current) renderListSoon();
+  } else if (m.t === "cardp") {
+    const list = S.cards.get(m.sid), act = S.active.get(m.sid);  // (the list shows a working session's card too)
+    const have = (list && list.find(x => x.id === m.id)) || (act && act.id === m.id ? act : null);
+    onCardPatch(m, have, c => { upsertCard(c); if (!S.current) renderListSoon(); });
   } else if (m.t === "closed") {
     removeSession(m.id);
   } else if (m.t === "order") {
