@@ -67,6 +67,7 @@ async function newSession() {
   const w = pageSheet({
     title: "New session", ok: "Start",
     body: (ups.length ? `<div class="field"><div class="flabel">Machine</div>${chipsHtml("machine", [{ value: "", label: "This Mac" }, ...ups.map(m => ({ value: m.name, label: m.name }))], "")}</div>` : "") +
+      `<div class="field"><div class="flabel">Name <span class="opt">optional</span></div><input id="nf-name" class="tinput" autocapitalize="sentences" enterkeyhint="next" placeholder="From the folder (or rename it later)"></div>` +
       `<div class="field"><div class="flabel">Folder</div><input id="nf-cwd" class="tinput" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="next" value="${esc(lastOn(""))}">` +
       `<div class="sugg" id="nf-sugg"></div></div>` +
       `<div class="field"><div class="flabel">Agent</div><div id="nf-h">${chipsHtml("harness", harnessOpts(""), firstHarness(""))}</div></div>` +
@@ -77,7 +78,8 @@ async function newSession() {
     onOk: async w => {
       const cwd = $("#nf-cwd", w).value.trim(), text = $("#nf-text", w).value;
       if (!cwd) { $("#nf-err", w).textContent = "Pick a folder."; return; }
-      const body = { cwd, harness: chipsValue(w, "harness"), group: chipsValue(w, "group"), mode: chipsValue(w, "mode") || "acceptEdits", ...(machine ? { machine } : {}) };
+      const name = $("#nf-name", w).value.trim();
+      const body = { cwd, ...(name ? { name } : {}), harness: chipsValue(w, "harness"), group: chipsValue(w, "group"), mode: chipsValue(w, "mode") || "acceptEdits", ...(machine ? { machine } : {}) };
       const okb = w.querySelector("[data-ok]"); okb.disabled = true; $("#nf-err", w).textContent = "";
       let s;
       try { s = await api("POST", "/api/sessions", body); }

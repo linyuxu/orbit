@@ -420,19 +420,43 @@ async function setModeM(s, mode) {
     toast(`Mode: ${modeShort(mode)} (the agent restarts on this conversation)`);
   } catch (e) { if (!(e instanceof NotPaired)) toast(e.message); }
 }
-function sessionMenu() {
-  const s = S.sessions.get(S.current); if (!s) return;
+function sessionMenu(sid = S.current) {
+  const s = S.sessions.get(sid); if (!s) return;
   const working = s.state === "working";
-  actionSheet(s.name, [
+  actionSheet(sessionTitle(s), [
+    { label: "Rename…", icon: "pencil", run: () => renameSession(s) },
     { label: `Mode: ${modeShort(s.mode)}`, icon: "gear", disabled: working, run: () => modeSheet(s) },
     { label: "Stop", icon: "stop", disabled: !working && !s.queued, run: () => sessionAction(s.id, "stop") },
     { label: "Fork", icon: "fork", run: () => sessionAction(s.id, "fork") },
     { label: "Resume", icon: "play", disabled: s.state === "ready" || working, run: () => sessionAction(s.id, "resume") },
     { label: "Restart", icon: "refresh", run: () => sessionAction(s.id, "restart") },
     { label: "Copy link", icon: "link", run: () => copyText(`orbit://session/${s.id}`, "Link copied: it opens this session in Orbit on the Mac") },
+    { label: "Close session…", icon: "x", danger: true, run: () => closeSessionAsk(s) },
   ]);
 }
-$("#cmore").addEventListener("click", sessionMenu);
+function renameSession(s) {
+  askText({ title: "Rename session", ok: "Rename", value: s.name || "", placeholder: "A name for this session",
+    onOk: async v => {
+      const r = await api("POST", `/api/sessions/${encodeURIComponent(s.id)}/rename`, { name: v.trim() });
+      S.sessions.set(s.id, { ...S.sessions.get(s.id), ...r });
+      renderList(); if (S.current === s.id) renderNav();
+    } });
+}
+/* Close: its agent stops (a running request with it); the conversation is kept, and the Mac's ⌘O → Closed reopens it. */
+function closeSessionAsk(s) {
+  const working = s.state === "working" || s.queued;
+  actionSheet(`Close “${sessionTitle(s)}”?`, [
+    { label: "Close session", icon: "x", danger: true, sub: `${working ? "Its running request stops. " : ""}The conversation is kept: Orbit on the Mac can reopen it`, run: async () => {
+      try {
+        await api("POST", `/api/sessions/${encodeURIComponent(s.id)}/close`, {});
+        if (S.current === s.id) goBack();
+        S.sessions.delete(s.id); renderList();
+        toast(`Closed “${sessionTitle(s)}”`);
+      } catch (e) { if (!(e instanceof NotPaired)) toast(`Close failed: ${e.message}`); }
+    } },
+  ]);
+}
+$("#cmore").addEventListener("click", () => sessionMenu());
 function goBack() { closeSession(); history.replaceState(null, "", location.pathname + location.search); }
 $("#cback").addEventListener("click", goBack);
 

@@ -89,7 +89,19 @@ function updateTitleBar() {
   $("#vlist .nav").classList.toggle("scrolled", under);
 }
 $("#lscroll").addEventListener("scroll", updateTitleBar, { passive: true });
+/* A long-press on a session: its menu (rename, close, …) without opening it. The click that ends the press does not open it. */
+const PRESS = { tm: 0, x: 0, y: 0, fired: false };
+$("#slist").addEventListener("pointerdown", e => {
+  const o = e.target.closest("[data-open]"); if (!o || e.button > 0) return;
+  PRESS.fired = false; PRESS.x = e.clientX; PRESS.y = e.clientY;
+  clearTimeout(PRESS.tm);
+  PRESS.tm = setTimeout(() => { PRESS.fired = true; if (navigator.vibrate) navigator.vibrate(8); sessionMenu(o.dataset.open); }, 520);
+});
+$("#slist").addEventListener("pointermove", e => { if (Math.hypot(e.clientX - PRESS.x, e.clientY - PRESS.y) > 10) clearTimeout(PRESS.tm); });
+for (const ev of ["pointerup", "pointercancel", "pointerleave"]) $("#slist").addEventListener(ev, () => clearTimeout(PRESS.tm));
+$("#slist").addEventListener("contextmenu", e => { if (e.target.closest("[data-open]")) e.preventDefault(); });
 $("#slist").addEventListener("click", e => {
+  if (PRESS.fired) { PRESS.fired = false; e.preventDefault(); return; }
   const f = e.target.closest("[data-fold]");
   if (f) { const g = f.dataset.fold; S.folded.has(g) ? S.folded.delete(g) : S.folded.add(g); LS.set("folded", [...S.folded]); renderList(); return; }
   const o = e.target.closest("[data-open]");
