@@ -156,6 +156,16 @@ button.shead:active { background:var(--hover); }
 .req .steer { margin-top:6px; max-width:80%; background:var(--req-bg); border-radius:12px; padding:6px 14px; color:var(--ink-2);
   font-size:15px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; }
 .req .steer .lbl { font-size:11px; font-weight:600; color:var(--run); text-transform:uppercase; letter-spacing:.04em; margin-right:8px; }
+/* A turn the agent took by itself (m-cards.js autoReqHtml): a quiet line on the left, not a bubble */
+.req.auto { align-items:stretch; }
+.req.auto .steer { align-self:flex-end; }
+.autoreq { display:flex; flex-direction:column; gap:2px; padding:2px 0 2px 12px; border-left:2px solid color-mix(in srgb, var(--run) 40%, var(--line)); }
+.autoreq .ahead { display:flex; align-items:center; gap:6px; min-height:24px; font-size:var(--fs-meta); color:var(--ink-3); min-width:0; }
+.autoreq .ahead > svg { flex:none; }
+.autoreq .ahead .lbl { flex:none; color:var(--ink-2); font-weight:600; }
+.autoreq .ahead .why { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.autoreq .ahead .when { margin-left:auto; padding-left:10px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.autoreq .what { font:var(--fs-req)/1.45 var(--read-font); color:var(--ink); overflow-wrap:anywhere; }
 .ans .head { display:flex; align-items:center; gap:8px; min-height:26px; font-size:var(--fs-ui); color:var(--ink-3); }
 .ans .head .st { flex:none; color:var(--ink-2); font-weight:500; }
 .s-completed .head .st { color:var(--ok); } .s-thinking .head .st, .s-running .head .st { color:var(--run); }
@@ -704,3 +714,9 @@ body.vcall #toast { bottom:calc(268px + var(--sab)); }  /* (over the call view, 
 
 /* One call at a time: while one is on (another session's, or another device's), the voice button waits. */
 #callbtn.vbusy { color:var(--ink-3); opacity:.45; }
+
+/* Misc → Keep the screen on */
+.mrow.awake { display:flex; align-items:center; gap:12px; padding:10px 16px; min-height:52px; }
+.mrow.awake .aw-t { flex:1; min-width:0; display:flex; flex-direction:column; }
+.mrow.awake .nm { font-size:16px; color:var(--ink); }
+.mrow.awake .sub { font-size:13px; color:var(--ink-3); margin-top:1px; }

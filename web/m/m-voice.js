@@ -36,9 +36,13 @@ function micWhy(e) {
 
 /* ===================================================================== drawing */
 const callName = () => { const s = S.sessions.get(VOICE.sid); return s ? sessionTitle(s) : "the session"; };
-/* iOS lets no web page use the microphone in the background or with the screen locked, so a call keeps the screen
-   awake while it is on and this page is in front (the Screen Wake Lock; iOS 16.4+, gone by itself when the page is
-   hidden, taken again on return). */
+/* iOS lets no web page use the microphone in the background or with the screen locked, so the screen stays awake
+   while Orbit is in front (Misc → Keep the screen on; on by default) and always during a call (the Screen Wake Lock;
+   iOS 16.4+, gone by itself when the page is hidden, taken again on return or at the next tap). */
+const keepAwake = () => LS.get("keepAwake", true) !== false;
+function awakeWanted() { return keepAwake() || (VOICE.phase !== "idle" && VOICE.phase !== "ended" && !!VOICE.mic); }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) holdScreen(awakeWanted()); });
+document.addEventListener("pointerdown", () => { if (!VC.lock && awakeWanted()) holdScreen(true); }, true);  // (if it needs a gesture)
 async function holdScreen(on) {
   if (!("wakeLock" in navigator)) return;
   if (!on) { const l = VC.lock; VC.lock = null; if (l) l.release().catch(() => {}); return; }
@@ -51,7 +55,7 @@ async function holdScreen(on) {
 function renderVoice() {
   const on = VOICE.phase !== "idle", live = on && VOICE.phase !== "ended", here = on && VOICE.sid === S.current;
   watchMic();
-  holdScreen(live && !!VOICE.mic);  // (this phone holds the call: its microphone is this page's)
+  holdScreen(awakeWanted());
   /* The voice button: this session's call (its bars follow the sound; a tap shows the call view), else a new call. */
   const b = $("#callbtn");
   const busy = (live && !here) || (!on && voiceAway());  // (one call at a time: another session's or device's)
@@ -201,3 +205,4 @@ document.addEventListener("visibilitychange", () => {
   renderVoice();
 });
 renderVoice();
+holdScreen(awakeWanted());  // (Orbit open: the screen stays on, if Misc says so)
