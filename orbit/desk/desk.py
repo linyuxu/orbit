@@ -124,15 +124,14 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
 
     def broadcast(self, ev: dict) -> None:
         # Serialize now: cards are mutated in place, and a client must see each state as it was.
-        with self.lock:
+        with self.lock:  # (queued under the lock too: each client gets the changes in the order they were made)
             data = json.dumps(ev, ensure_ascii=False)
-            clients = list(self.clients)
             short = self._card_patch(data) if ev.get("t") == "card" else None
-        for q in clients:
-            try:
-                q.put_nowait(short if short is not None and getattr(q, "delta", False) else data)
-            except queue.Full:
-                pass
+            for q in self.clients:
+                try:
+                    q.put_nowait(short if short is not None and getattr(q, "delta", False) else data)
+                except queue.Full:
+                    pass
 
     CARDS_KEPT = 300  # the last version told of this many cards (at work): what their patches start from
 
@@ -380,13 +379,20 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
             c = next((x for x in s.cards if float(x["id"]) == float(cid)), None)
             if c is None:
                 raise KeyError(f"{sid}#{cid}")
-            return copy.deepcopy(c)
+            return self._as_told(c)
+
+    def _as_told(self, c: dict) -> dict:
+        """A card for a client to hold (a copy): a card at work as it was last broadcast, not as it is now. Its
+        streaming text grows in place before its revision moves (the next broadcast, ≤ 0.12 s later): read now, a
+        client would get text its next patch adds again."""
+        told = self._cards_told.get((c.get("sid"), c.get("id")))
+        return copy.deepcopy(told if told is not None and told.get("rev") == c.get("rev") else c)
 
     def cards(self, sid: str) -> list[dict]:
         s = self.get(sid)
         self._ensure_loaded(s)
-        with self.lock:
-            return copy.deepcopy(s.cards)  # a snapshot: drivers mutate cards while the response is written
+        with self.lock:  # a snapshot (drivers mutate cards while the response is written); cards at work as last told
+            return [self._as_told(c) for c in s.cards]
 
     def resume_command(self, sid: str) -> dict:
         """The shell command that continues this session's conversation in a terminal: cd to its folder, then the

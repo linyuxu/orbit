@@ -14,6 +14,8 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   every text and tool event; a client that missed one fetches the card (`GET /api/sessions/<id>/cards/<n>?exact=1`).
   Starting or stopping work and final states still go whole; clients that do not ask (plugins, older pages) get whole
   cards as before. A flood of 12 tool steps with long text: 0.6 MB to a patched client instead of 4.3 MB.
+  A card read at work (its list, `?exact=1`) is the one last broadcast: its streaming text grows before its revision
+  moves, and read then it would get text its next patch adds again. Each client gets the changes in the order made.
 - The state folder (sessions, settings, logs) is made 0700 at start; the README says what 127.0.0.1 without a token means
   on a machine shared with others; the CI workflow reads the repository only (`permissions: contents: read`).
 - Defaults: Appearance as Regular weight, the conversation in Consolas 14 (the built-in Inconsolata where Consolas, which

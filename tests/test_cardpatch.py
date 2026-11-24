@@ -89,6 +89,7 @@ class StreamTest(test_skeleton.SkeletonTest):
         f_evs = [e for e in mine(full) if e["t"] == "card" and e["card"]["id"] == 1]
         self.assertFalse([e for e in mine(full) if e["t"] == "cardp"])  # (a client that did not ask: whole cards only)
         self.assertGreater(sum(e["t"] == "cardp" for e in d_evs), 10)
+        self.assertEqual((d_evs[0]["t"], d_evs[-1]["t"], d_evs[-1]["card"]["state"]), ("card", "card", "completed"))  # (first and final: whole, for notifications)
         card = None
         for e in d_evs:
             if e["t"] == "card":
@@ -103,6 +104,39 @@ class StreamTest(test_skeleton.SkeletonTest):
         f_bytes = sum(len(x) for x in full if b'"sid": "' + s["id"].encode() + b'"' in x)
         self.assertLess(d_bytes, f_bytes * 0.15, (d_bytes, f_bytes))
         self.assertEqual(self.req("GET", f"/api/sessions/{s['id']}/cards/99?exact=1")[0], 404)
+
+    def test_a_card_read_between_broadcasts_is_the_one_told(self):
+        """Streaming text grows in the card before its revision moves (the next broadcast, ≤ 0.12 s later): a client
+        that loads the card then gets it as last broadcast, so the next patch does not add that text twice."""
+        s = self.new_session("Race")
+        d = self.desk
+        sess = d.get(s["id"])
+        d._ensure_loaded(sess)
+        with d.lock:
+            c = d._new_card(sess, sess.next_id(), "streaming")
+            c["state"] = "thinking"
+            sess.cards.append(c)
+            d._card_changed(c)  # (told: revision 1, no text yet)
+            c["partial"] = "Hel"  # a delta: in the card at once, its broadcast to come
+        q = d.subscribe(delta=True)
+        try:
+            got = self.req("GET", f"/api/sessions/{s['id']}/cards/{c['id']}?exact=1")[1]["card"]
+            listed = next(x for x in self.req("GET", f"/api/sessions/{s['id']}/cards")[1]["cards"] if x["id"] == c["id"])
+            self.assertEqual((got.get("partial"), got["rev"]), (None, c["rev"]))  # (as told, not as it is)
+            self.assertEqual(listed, got)
+            with d.lock:
+                c["partial"] += "lo"
+                d._card_changed(c)
+            p = json.loads(q.get(timeout=2))
+            self.assertEqual((p["t"], p["base"]), ("cardp", got["rev"]))
+            now = {**cardpatch.apply(got, p["ops"]), "rev": p["rev"]}
+            self.assertEqual(now["partial"], "Hello")  # (not "HelHello")
+            self.assertEqual(now, self.req("GET", f"/api/sessions/{s['id']}/cards/{c['id']}?exact=1")[1]["card"])
+        finally:
+            d.unsubscribe(q)
+            with d.lock:
+                c["state"] = "cancelled"
+                d._card_changed(c)
 
 
 if __name__ == "__main__":
