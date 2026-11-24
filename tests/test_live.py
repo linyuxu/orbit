@@ -304,6 +304,29 @@ class LiveTest(test_skeleton.SkeletonTest):
         code, r2 = self.req("POST", "/api/live/start", {"sid": other["id"], "sdp": "v=0 offer"})
         self.assertEqual(code, 200, r2)
 
+    def test_take_back_a_request(self):
+        """"Take it back" by voice: the call's request that has not started is withdrawn (nothing runs), one that runs
+        is stopped; the voice is told which. "Cancel the nightly job" is a task, not a take-back."""
+        s = self.new_session("Back")
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "slow job"})
+        self.wait_card(s["id"], 1, ("running",))
+        self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+        self.assertTrue(self.fake.wait_attached(1))
+        self.fake.emit(t_in("check the logs", 500, 1500, "k1"), delegation("del_k1", 1600, "dk1"))
+        self.wait_card(s["id"], 2, ("queued",))
+        self.fake.emit(t_in("把那个 request 收回", 3000, 4000, "k2"), delegation("del_k2", 4100, "dk2"))
+        com = wait(lambda: [e for e in self.fake.got("session.commentary.append") if e["event_id"] == "takeback_del_k2"])
+        self.assertIn("withdrew request #2", com[0]["content"])
+        c2 = next(c for c in self.desk.cards(s["id"]) if c["id"] == 2)
+        self.assertEqual((c2["state"], c2.get("hidden")), ("cancelled", True))
+        self.assertEqual(c2["text"], "check the logs")  # (the take-back words were not added to it)
+        # the running one: stopped
+        self.fake.emit(t_in("停下", 6000, 6500, "k3"), delegation("del_k3", 6600, "dk3"))
+        com = wait(lambda: [e for e in self.fake.got("session.commentary.append") if e["event_id"] == "takeback_del_k3"])
+        self.assertIn("stopped request #1", com[0]["content"])
+        self.wait_card(s["id"], 1, ("cancelled",))
+        self.assertIn("withdraw, cancel or stop a request", self.fake.bodies[-1]["session"]["instructions"])
+
     def test_status_in_an_idle_session(self):
         """A request in an idle session is "queued" only for the moment before its agent takes it: the voice is told it
         runs now, never that it waits (a real call said "it is queued behind another request" with nothing running)."""

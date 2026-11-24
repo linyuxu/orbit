@@ -17,6 +17,9 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - The voice button: five bars in a circle where Send is while the input is empty; in a call they follow the sound.
 - Voice: after each request the voice is told what became of it (running, queued behind another, joined to the
   waiting one), so it says "queued" instead of guessing; "via Voice" on a card explains what the agent got.
+- Voice: "take it back" (撤回 · 撤掉 · 收回 · 取消 · 算了 · cancel · withdraw · stop …, when those words are all the
+  user said about it) withdraws the call's request that has not started, or stops the one running, and the voice
+  says which; "cancel the nightly job" stays a task for the agent.
 - One voice call at a time, everywhere: the server refuses a second (409, saying which call is on) instead of
   hanging up the first. Every page knows of a call another page or device holds (its state events, `GET /api/live`):
   the voice buttons wait (grey), the pill says "another device" (go to its session, hang it up), and ⌘⇧V hangs up

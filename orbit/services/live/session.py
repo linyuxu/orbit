@@ -41,6 +41,25 @@ ACTIVE = ("thinking", "running")
 # nothing (only this server delegates, adds context or closes the call).
 PAGE_EVENTS = ("session.started", "session.input_transcript.delta", "session.output_transcript.delta",
                "session.paused", "session.resumed", "session.closed")
+# "Take it back": the user's words are only that (a verb of withdrawing or stopping, and words naming the request): the
+# last request of the call is withdrawn (not started) or stopped (running). Anything more ("cancel the nightly job")
+# is a task for the agent.
+TAKE_BACK_VERBS = ("撤回", "撤掉", "撤销", "收回", "取消", "不要了", "别做了", "不用做了", "不用了", "算了", "停掉", "停下来", "停下", "停止",
+                   "cancel", "withdraw", "nevermind", "forgetit", "scratchthat", "stop", "drop")
+TAKE_BACK_FILL = ("request", "请求", "任务", "那个", "这个", "刚才", "刚刚", "上一个", "前面", "之前", "那条", "这条", "的", "把", "将", "你",
+                  "请", "麻烦", "先", "就", "那", "吧", "了", "掉", "一下", "它", "啊", "嗯", "呃", "好", "ok", "please", "that",
+                  "the", "this", "it", "last", "one", "my", "just", "okay", "yes")
+
+
+def takes_back(words: str) -> bool:
+    w = re.sub(r"[\s\W_]+", "", (words or "").lower())
+    if not w or len(w) > 24 or not any(v in w for v in TAKE_BACK_VERBS):
+        return False
+    for t in sorted(TAKE_BACK_VERBS + TAKE_BACK_FILL, key=len, reverse=True):
+        w = w.replace(t, "")
+    return not w
+
+
 REFERS = re.compile(r"\b(that|this|it|those|these|them|the (first|second|third|last|other|same) one|the same)\b", re.I)
 CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]")
 
@@ -157,6 +176,16 @@ class Target:
             return self.desk.edit(self.sid, cid, text)
         return self._call("POST", "/edit", {"cid": cid, "text": text})
 
+    def withdraw(self, cid) -> None:
+        if self.remote is None:
+            return self.desk.withdraw(self.sid, cid)
+        self._call("POST", "/withdraw", {"cid": cid})
+
+    def stop(self) -> None:
+        if self.remote is None:
+            return self.desk.stop(self.sid)
+        self._call("POST", "/stop", {})
+
     def note(self, title: str, text: str, origin: dict) -> dict:
         if self.remote is None:
             return self.desk.add_note(self.sid, title, text, origin=origin)
@@ -192,6 +221,8 @@ Delegate to the backend when:
 - The user asks for any action or task.
 - The answer needs the session's files, tools, current state or history.
 - A correction changes the work already requested.
+- The user wants to withdraw, cancel or stop a request: Orbit takes back one that has not started, or stops the one \
+running, and tells you which.
 Do not delegate when:
 - The question is self-contained, or about what was already said or reported in this call.
 - You need a brief clarification to understand the request.
@@ -656,6 +687,8 @@ class Call:
             with self.lock:
                 d.update(done=True, how="none")
             return
+        if takes_back(words):
+            return self._take_back(did, d, prev, words)
         text = words + (f'\n\n(Context, not an instruction: the voice had just said: "{reply[:600]}")' if reply else "")
         origin = {"label": "Voice", "data": {"live": self.live_id, "delegation": did}}
         how, c = "new", None
@@ -689,6 +722,35 @@ class Call:
         if not c.get("duplicate") and c["state"] not in FINAL:
             self._status(did, c, how)
         self._on_card(c)  # (a duplicate may already be done)
+
+    def _take_back(self, did: str, d: dict, prev: dict | None, words: str) -> None:
+        """The user took the request back: the call's last request is withdrawn if it has not started, stopped if it
+        runs; the voice is told which (spoken: the user asked)."""
+        t, how, fact = self.target, "none", ""
+        try:
+            cards = t.cards()
+            c = next((x for x in cards if prev is not None and x["id"] == prev["cid"]), None)
+            if c is None or c["state"] in FINAL or c.get("hidden"):  # (none of this call's: the session's last waiting one)
+                c = next((x for x in reversed(cards) if x["state"] == "queued" and not x.get("hidden")), None) or \
+                    next((x for x in reversed(cards) if x["state"] in ACTIVE), None)
+            if c is None:
+                fact = "There is no request waiting or running to take back."
+            elif c["state"] == "queued":
+                t.withdraw(c["id"])
+                how, fact = "withdraw", f"Orbit withdrew request #{c['id']}: it had not started, so nothing was done."
+            elif c["state"] in ACTIVE:
+                t.stop()
+                how, fact = "stop", f"Orbit stopped request #{c['id']}, which was running; what it did so far stays in its card."
+            else:
+                fact = f"Request #{c['id']} has already finished: there is nothing to take back."
+        except Exception as e:  # noqa: BLE001 - the voice is told, the call goes on
+            fact = f"Orbit could not take the request back: {e}"[:300]
+        with self.lock:
+            d.update(done=True, how=how, text=words, cid=(c or {}).get("id") if how != "none" else None)
+        self.log("take_back", delegation=did, how=how, cid=(c or {}).get("id"), words=words)
+        if how != "none":
+            self._tell("delegation", delegation=did, cid=c["id"], how=how, sid=self.sid, offset=d["offset"])
+        self._send({"type": "session.commentary.append", "event_id": f"takeback_{did}", "delegation_id": did, "content": fact})
 
     def _status(self, did: str, c: dict, how: str) -> None:
         """What became of the request, as silent context: the voice knows the facts (sent, queued behind another,
