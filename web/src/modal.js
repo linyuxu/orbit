@@ -149,7 +149,7 @@ const confirmDialog = o => dialog(o).then(v => v !== null);
 let LAST_INPUT = "mouse";
 addEventListener("keydown", e => { if (!["Meta", "Control", "Alt", "Shift"].includes(e.key)) LAST_INPUT = "key"; }, true);
 addEventListener("mousedown", () => { LAST_INPUT = "mouse"; }, true);
-function listPopup({ items, anchor, at, side, sel = 0, onPick, onClose, accelerators = false, filterable = false, inside, maxWidth }) {
+function listPopup({ items, anchor, at, side, sel = 0, onPick, onSel, onClose, accelerators = false, filterable = false, inside, maxWidth }) {
   if (typeof hideTip === "function") hideTip();
   const el = document.createElement("div"); el.className = "menu" + (LAST_INPUT === "key" ? " keys" : ""); el.setAttribute("role", "menu");
   if (maxWidth) el.style.maxWidth = maxWidth + "px";
@@ -180,8 +180,10 @@ function listPopup({ items, anchor, at, side, sel = 0, onPick, onClose, accelera
       view.map((it, k) => it.sep ? "<hr>" :
         `<div class="row${k === i ? " sel" : ""}${it.danger ? " danger" : ""}" data-i="${k}"${it.disabled ? ' style="opacity:.45"' : ""}><span class="lbl">${labelHtml(it, k)}</span>${it.key ? `<span class="k">${esc(it.key)}</span>` : ""}${it.sub ? `<span class="sub">${I("chev", 12)}</span>` : ""}</div>`).join("");
     const r = el.querySelector(".row.sel"); if (r) r.scrollIntoView({ block: "nearest" });
+    if (onSel && view[i] !== lastSel) { lastSel = view[i]; if (lastSel) onSel(lastSel); }  // (the row the mouse or ↑↓ is on; not the one it opened on)
   };
   i = Math.max(0, Math.min(sel, items.length - 1));
+  let lastSel = items[i];
   draw();
   document.body.appendChild(el);
   // Work in CSS px of the zoomed page: rects (and mouse coordinates) may come back zoomed, depending on the engine.
@@ -284,7 +286,8 @@ function dropdown(wrap, f) {
     lp = listPopup({ items: f.options.map(o => ({ label: o.label, value: o.value })), anchor: btn,
       sel: f.options.findIndex(o => o.value === value),
       onPick: it => { value = it.value; draw(); btn.focus(); if (f.onChange) f.onChange(value); },
-      onClose: () => { lp = null; } });
+      onSel: f.onSel ? it => f.onSel(it.value) : null,
+      onClose: () => { lp = null; if (f.onClose) f.onClose(); } });
   };
   btn.addEventListener("click", () => lp ? lp.close() : open());
   btn.addEventListener("keydown", e => {

@@ -74,6 +74,8 @@ class FakeLive:
         self.received: list[dict] = []
         self.history: list[tuple[float, dict]] = []  # server events sent, for the 3 s replay
         self.attached = 0
+        self.ws_sessions: list[dict] = []  # session.start of each WebSocket-transport session (voice previews)
+        self.ws_received: list[dict] = []
         self.attach_status = 0  # non-zero: refuse attaches with this HTTP status
         self.conn: socket.socket | None = None
         self.lock = threading.Lock()
@@ -198,6 +200,34 @@ class FakeLive:
             except OSError:
                 pass
 
+    def serve_ws_session(self, sock: socket.socket) -> None:
+        """A WebSocket-transport session: session.started, then the voice's audio (3 chunks of 0.1 s), then quiet."""
+        send = lambda ev: sock.sendall(server_frame(0x1, json.dumps(ev).encode()))
+        try:
+            while True:
+                fin, op, data, masked = read_client_frame(sock)
+                if op == 0x8:
+                    break
+                if op != 0x1:
+                    continue
+                ev = json.loads(data)
+                with self.lock:
+                    self.ws_sessions.append(ev) if ev.get("type") == "session.start" else self.ws_received.append(ev)
+                if ev.get("type") == "session.start":
+                    send({"type": "session.started", "event_id": "evt_ws_1", "session": {"id": "live_ws_1", **ev["session"]}})
+                    for k in range(3):
+                        send({"type": "session.output_audio.delta", "event_id": f"evt_au_{k}",
+                              "delta": base64.b64encode(struct.pack("<2400h", *([1000 * (k + 1)] * 2400))).decode()})
+                elif ev.get("type") == "session.close":
+                    send({"type": "session.closed", "event_id": "evt_ws_closed", "reason": "close_requested"})
+        except (ConnectionError, OSError, ValueError):
+            pass
+        finally:
+            try:
+                sock.close()
+            except OSError:
+                pass
+
     def react(self, ev: dict) -> None:
         typ, eid = ev.get("type"), ev.get("event_id")
         self.n += 1
@@ -232,6 +262,18 @@ class Handler(BaseHTTPRequestHandler):
         f = self.fake
         if self.path == "/fake/state":
             return self._json({"bodies": f.bodies, "received": f.got(), "attached": f.attached, "offer": f.offer})
+        if self.path == "/v1/live/sessions" and self.headers.get("Upgrade", "").lower() == "websocket":
+            # the WebSocket transport (a voice preview): session.start first, audio deltas back
+            if self.headers.get("Authorization") != f"Bearer {KEY}":
+                return self._json({"error": {"message": "bad key"}}, 401)
+            key = self.headers.get("Sec-WebSocket-Key", "")
+            accept = base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()
+            self.wfile.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                              f"Sec-WebSocket-Accept: {accept}\r\n\r\n").encode())
+            self.wfile.flush()
+            self.close_connection = True
+            f.serve_ws_session(self.request)
+            return
         if self.path.startswith("/v1/live/sessions/") and self.path.endswith("/attach"):
             if self.headers.get("Authorization") != f"Bearer {KEY}":
                 return self._json({"error": {"message": "bad key"}}, 401)

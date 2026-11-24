@@ -92,3 +92,5 @@
 .set-lead { margin:0 0 6px; }
 .set-pane .vprompt { width:100%; box-sizing:border-box; resize:vertical; min-height:72px; line-height:1.5; font-family:var(--font); }
 .vcount { text-align:right; margin-top:4px; font-variant-numeric:tabular-nums; }
+.set-ctl .vpst { margin:0; white-space:nowrap; }
+.set-ctl .vplay { color:var(--ink-2); }

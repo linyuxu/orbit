@@ -10,6 +10,7 @@ import struct
 import threading
 import time
 import unittest
+import urllib.request
 from pathlib import Path
 
 import fake_live
@@ -165,6 +166,36 @@ class LiveTest(test_skeleton.SkeletonTest):
         finally:
             self.req("POST", "/api/settings", {k: live.config.DEFAULTS[k] for k in set_})
         self.assertEqual(self.req("POST", "/api/settings", {"live_wake": 1})[0], 400)  # (an int for a float: 1.0, not a choice)
+
+    def test_voice_preview(self):
+        """GET /api/live/preview: a short WebSocket-transport session where the voice greets (its line in its own
+        language, or the chosen one), kept as a WAV and served from the cache after; this machine only."""
+        import wave
+        code, _ = self.req("GET", "/api/live/preview?voice=nobody")
+        self.assertEqual(code, 400)
+        n0 = len(self.fake.ws_sessions)
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/api/live/preview?voice=harema") as r:
+            data = r.read()
+            self.assertIn("audio/", r.headers["Content-Type"])
+        start = self.fake.ws_sessions[n0]["session"]
+        self.assertEqual(start["audio"], {"format": {"type": "audio/pcm", "rate": 24000}, "output": {"voice": "harema"}})
+        self.assertIn("こんにちは、Haremaです", start["input"][0]["content"][0]["text"])  # (a Japanese voice: Japanese)
+        self.assertTrue(any(e.get("type") == "session.input_audio.append" for e in self.fake.ws_received))  # the input runs
+        f = Path(self.state, "live", "voices", "harema-ja.wav")
+        with wave.open(str(f)) as w:
+            self.assertEqual((w.getframerate(), w.getnchannels(), w.getnframes()), (24000, 1, 7200))
+        self.assertEqual(data, f.read_bytes())
+        urllib.request.urlopen(f"http://127.0.0.1:{self.port}/api/live/preview?voice=harema").read()
+        self.assertEqual(len(self.fake.ws_sessions), n0 + 1)  # (kept: made once)
+        self.req("POST", "/api/settings", {"live_language": "zh"})
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{self.port}/api/live/preview?voice=marin").read()
+            self.assertIn("你好，我是Marin", self.fake.ws_sessions[-1]["session"]["input"][0]["content"][0]["text"])
+        finally:
+            self.req("POST", "/api/settings", {"live_language": "auto"})
+        from orbit.machines import remote
+        net = {"Host": f"100.64.0.9:{self.port}", "Authorization": f"Bearer {remote.token(self.state)}"}
+        self.assertEqual(self.req("GET", "/api/live/preview?voice=marin", headers=net)[0], 403)
 
     def test_no_key_and_another_machine(self):
         s = self.new_session("Nokey")

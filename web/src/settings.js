@@ -198,6 +198,33 @@ function settingsGeneral(pane, keys) {
    starts: a change applies to the next call. */
 const VOICE_LANG_LABEL = { auto: "The language I speak", zh: "中文 (Mandarin)", en: "English", ja: "日本語", ko: "한국어",
   es: "Español", fr: "Français", de: "Deutsch", pt: "Português" };
+/* A voice's preview (GET /api/live/preview: made by the voice itself the first time, a few seconds, then kept):
+   played on hover after a short pause; a newer hover or the list closing stops it. */
+const VPREV = { audio: new Audio(), seq: 0, tm: 0, status: null, urls: new Map() };
+function voicePreview(voice, delay = 0, keep = false) {
+  clearTimeout(VPREV.tm);
+  const my = ++VPREV.seq;
+  const say = t => { if (VPREV.status && VPREV.status.isConnected) VPREV.status.textContent = t; };
+  if (!voice) { if (!VPREV.keep) VPREV.audio.pause(); say(""); return; }
+  VPREV.keep = keep;  // (▶: the list closing does not stop it)
+  VPREV.audio.pause();
+  VPREV.tm = setTimeout(async () => {
+    let url = VPREV.urls.get(voice);
+    if (!url) {
+      say(`Making a preview of ${voice}…`);
+      try {
+        const r = await fetch(`/api/live/preview?voice=${encodeURIComponent(voice)}`);
+        if (!r.ok) { const e = await r.json().catch(() => ({})); if (my === VPREV.seq) say(e.error || `no preview (${r.status})`); return; }
+        url = URL.createObjectURL(await r.blob());
+        VPREV.urls.set(voice, url);
+      } catch (e) { if (my === VPREV.seq) say(String(e.message || e)); return; }
+    }
+    if (my !== VPREV.seq) return;  // (moved on meanwhile)
+    say("");
+    VPREV.audio.src = url;
+    VPREV.audio.play().catch(() => say("Click ▶ to hear it"));
+  }, delay);
+}
 async function settingsVoice(pane, keys) {
   const note = document.createElement("div"); note.className = "set-desc set-lead";
   note.textContent = "Talk with a session (⌘⇧V or the round button by Send): what you ask becomes a request, and the answer is spoken back. A change here applies to the next call.";
@@ -211,9 +238,18 @@ async function settingsVoice(pane, keys) {
   const put = (k, v) => api("POST", "/api/settings", { [k]: v }).then(x => { S.settings = x; }).catch(e => toast(e.message));
   const cap = w => w[0].toUpperCase() + w.slice(1);
   setHeading(pane, "Voice");
-  keys.push(dropdown(setRow(pane, "Voice", "How it sounds. The first ten speak many languages; the others have the language and accent shown."), {
+  const vrow = setRow(pane, "Voice", "How it sounds: hover a voice in the list (or ↑↓) to hear it; ▶ plays the one chosen. The first ten speak many languages; the others have the language and accent shown. A preview is made once, then kept.");
+  const vdd = dropdown(vrow, {
     value: st().live_voice || "marin", onChange: v => put("live_voice", v),
-    options: o.voices.map(v => ({ value: v.name, label: cap(v.name) + (v.about ? ` · ${v.about}` : "") })) }));
+    onSel: v => voicePreview(v, 350), onClose: () => voicePreview(null),
+    options: o.voices.map(v => ({ value: v.name, label: cap(v.name) + (v.about ? ` · ${v.about}` : "") })) });
+  keys.push(vdd);
+  const pv = document.createElement("button");
+  pv.type = "button"; pv.className = "ibtn sm vplay"; pv.title = "Hear this voice"; pv.innerHTML = I("play", 13);
+  pv.addEventListener("click", () => voicePreview(vdd.get(), 0, true));
+  vrow.prepend(pv);
+  const pst = document.createElement("span"); pst.className = "vpst set-desc"; vrow.prepend(pst);
+  VPREV.status = pst;
   keys.push(dropdown(setRow(pane, "Language", "What it speaks. “The language I speak” follows you."), {
     value: st().live_language || "auto", onChange: v => put("live_language", v),
     options: Object.keys(o.languages).map(k => ({ value: k, label: VOICE_LANG_LABEL[k] || o.languages[k] })) }));

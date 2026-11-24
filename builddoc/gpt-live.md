@@ -55,6 +55,11 @@ What the user may change (desk settings `live_*`, `orbit/services/live/config.py
 | `live_ack` | on/off (off) | off: the empty `thinking.append` at each delegation cancels the automatic acknowledgement |
 | `live_prompt` | up to 4 000 characters | after Orbit's instructions; they win over style, never over delegation and grounding |
 
+A voice's preview (`orbit/services/live/preview.py`): the WebSocket transport (`wss://…/v1/live/sessions`,
+`session.start` first, PCM 24 kHz), a developer message to greet with one line naming the voice, silence as input.
+The output streams continuously (silence too, and no "audio done" event), so speech is found by loudness (RMS of
+0.1 s windows) and the recording ends after 1.2 s of quiet; measured: about 9 s to make, 5 s of speech.
+
 ## 3. Instructions
 
 Short, in the style of Codex's shipped prompt (`backend_prompt.md`): it delegates every action, answers

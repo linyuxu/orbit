@@ -610,6 +610,20 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json({"error": "only on the server's own machine"}, 403)
             from orbit.services import keys
             return self._json({"keys": keys.status(self.desk.state_dir)})
+        if p == "/api/live/preview":  # Settings → Voice: a voice saying hello (made once, then kept; this machine only)
+            if self.from_remote:
+                return self._json({"error": "only on the server's own machine"}, 403)
+            from orbit.services.live import preview as live_preview
+            voice = (parse_qs(u.query).get("voice") or [""])[0]
+            try:
+                f = live_preview.preview(self.desk.state_dir, self.desk.settings, voice)
+            except PermissionError as e:
+                return self._json({"error": str(e), "need": "openai-key"}, 400)
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            except (RuntimeError, OSError) as e:
+                return self._json({"error": f"no preview: {e}"}, 502)
+            return self._file(f, cache=True)
         if p == "/api/live/options":  # Settings → Voice: what each setting may be
             from orbit.services.live import config as live_config
             return self._json({"voices": [{"name": v, "about": a} for v, a in live_config.VOICES],

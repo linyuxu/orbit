@@ -17,6 +17,10 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - The voice button: five bars in a circle where Send is while the input is empty; in a call they follow the sound.
 - Voice: after each request the voice is told what became of it (running, queued behind another, joined to the
   waiting one), so it says "queued" instead of guessing; "via Voice" on a card explains what the agent got.
+- Settings → Voice: hovering a voice (or ↑↓ in the list) plays it saying hello, ▶ plays the chosen one. OpenAI
+  publishes no samples, so the voice makes its own: a short WebSocket-transport session told to greet in one sentence
+  (in the voice's language, else the chosen one), its speech cut out by loudness and kept as a WAV in
+  `<state>/live/voices/` (made once per voice: a few seconds, a fraction of a cent). `GET /api/live/preview?voice=`.
 - Live captions fold to one line (the latest words) with a click on their head, and stay folded until opened.
 - **OpenCode** is a built-in harness (⌘N → Harness, `orbit-agent new --harness opencode`), beside Claude Code, Codex
   and agy ([builddoc/opencode.md](builddoc/opencode.md)). One `opencode serve` per session on 127.0.0.1 with a random
