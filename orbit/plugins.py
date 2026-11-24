@@ -438,6 +438,7 @@ RESERVED_SHORTCUTS: dict[str, str] = {
     "Mod-Shift-O": "Orbit: main panel ⇄ side tab",
     "Mod-Shift-R": "Orbit: reload the UI (also the app's menu)",
     "Mod-Shift-T": "Orbit: reopen the last closed tab",
+    "Mod-Shift-V": "Orbit: a voice call (GPT Live)",
     "Mod-Shift-Z": "Orbit: redo (also the app's menu)",
     "Mod-Shift-K": "the editor: delete the line",
     "Mod-Shift-U": "the editor: redo the selection",

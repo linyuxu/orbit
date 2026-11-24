@@ -58,7 +58,7 @@ try { if (window.top === window && matchMedia("(pointer: coarse) and (max-width:
           <button class="ibtn sm" data-f="-1" title="Previous (⇧⏎ · ⌘⇧G)"></button><button class="ibtn sm" data-f="1" title="Next (⏎ · ⌘G)"></button>
           <button class="ibtn sm" data-f="close" title="Close (Esc)"></button></div>
         <div id="sessview">
-          <div id="conv" tabindex="-1"><div class="col" id="cards"></div></div>
+          <div id="conv" tabindex="-1"><div class="col" id="cards"></div><div class="col" id="livecaps" hidden></div></div>
           <button id="jump" title="Scroll to the latest answer (⌘L)"></button>
           <div id="composer-wrap">
             <div id="agentbar" hidden></div>
@@ -72,6 +72,8 @@ try { if (window.top === window && matchMedia("(pointer: coarse) and (max-width:
                 <button class="chip" id="modechip" title="Permission mode"></button>
                 <span class="runon" id="runon" title="Click: /model · /effort"></span>
                 <span class="runhint" id="runhint"></span>
+                <span class="callst" id="callst" hidden></span>
+                <button class="ibtn sm" id="callbtn" title="Voice call with this session (⌘⇧V)" disabled></button>
                 <button id="send" title="Send (⌘⏎)" disabled></button>
               </div>
             </div>
@@ -145,6 +147,7 @@ try { if (window.top === window && matchMedia("(pointer: coarse) and (max-width:
 <script src="/src/cards.js"></script>
 <script src="/src/composer.js"></script>
 <script src="/src/attach.js"></script>
+<script src="/src/voice.js"></script>
 <script src="/src/tabs.js"></script>
 <script src="/src/files.js"></script>
 <script src="/src/find.js"></script>

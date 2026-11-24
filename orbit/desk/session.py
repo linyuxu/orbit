@@ -21,6 +21,7 @@ SETTINGS: dict[str, Any] = {
     "calendar": False,     # D4: Calendar reads macOS Calendar only when turned on
     "open_in": "default",  # where ↗ / "Open in …" open a file: default | jetbrains | vscode | side
     "serve_remote": False,  # other machines may reach this server (its Tailscale / LAN address, with the token)
+    "live_model": "gpt-live-1.1",  # GPT Live voice: gpt-live-1.1 | gpt-live-1
 }
 OPEN_IN = ("default", "jetbrains", "vscode", "side")
 
@@ -81,7 +82,8 @@ def clip(text: str, n: int) -> str:
 
 
 MODES = ["default", "acceptEdits", "auto", "plan", "bypassPermissions"]  # every mode Orbit knows; a harness says which it maps (Driver.modes)
-ORIGINS_KEPT = 500  # a session remembers where its last 500 plugin-sent requests came from
+ORIGINS_KEPT = 500  # a session remembers where its last 500 plugin-sent requests came from (and their client ids)
+NOTES_KEPT = 200  # and its last 200 note cards
 DEFAULT_GROUPS = [{"id": "main", "name": "Main"}, {"id": "projects", "name": "Projects"}, {"id": "personal", "name": "Personal"}]
 FLEET_GROUP = "fleet"  # helper sessions live outside the user's groups: no tab, no left-panel row
 FLEET_MAX = 3  # helpers per folder; more asks queue on the least busy one
@@ -117,6 +119,8 @@ class Session:
         self.fleet: bool = meta.get("fleet", False)  # a Fleet helper (⌘K quick asks, `orbit-agent ask`)
         self.hidden: list[int] = meta.get("hidden", [])  # cards replaced by an edited request (ids only)
         self.origins: dict[str, dict] = meta.get("origins", {})  # card id → where the request came from (a plugin)
+        self.client_ids: dict[str, int] = meta.get("client_ids", {})  # a sender's id for a request → its card (sent once)
+        self.notes: list[dict] = meta.get("notes", [])  # note cards (a voice call's transcript): not requests, kept here
         self.interrupted: bool = meta.get("interrupted", False)  # a request was running when the server stopped
         self.was_running: bool = meta.get("running", False)  # a request ran at the last save (after a crash: cut off)
         self.catching_up = False  # its handed-off process's output is being read (no new request goes to it yet)
@@ -137,6 +141,8 @@ class Session:
                 "closed_at": self.closed_at, "named": self.named, "group": self.group, "favorite": self.favorite,
                 "fork_from": self.fork_from, "last": self.last, "fleet": self.fleet, "hidden": self.hidden,
                 **({"origins": dict(list(self.origins.items())[-ORIGINS_KEPT:])} if self.origins else {}),
+                **({"client_ids": dict(list(self.client_ids.items())[-ORIGINS_KEPT:])} if self.client_ids else {}),
+                **({"notes": self.notes[-NOTES_KEPT:]} if self.notes else {}),
                 **({"interrupted": True} if self.interrupted else {}),
                 **({"running": True} if (self.current() is not None if self.loaded else self.was_running) else {}),
                 **({"fork_carry": self.fork_carry} if self.fork_carry else {}),
@@ -157,6 +163,10 @@ class Session:
                 "queued": sum(1 for c in self.cards if c["state"] == "queued"), "closed": self.closed,
                 "closed_at": self.closed_at, "named": self.named, "group": self.group, "favorite": self.favorite,
                 "last": self.last, "created": self.created, "fleet": self.fleet, "agents": self.running_agents()}
+
+    def next_id(self) -> int:
+        """The next request's card id (note cards sit between requests with ids like 4.001: never counted)."""
+        return max((c["id"] for c in self.cards if c.get("kind") != "note"), default=0) + 1
 
     def current(self) -> dict | None:
         for c in self.cards:

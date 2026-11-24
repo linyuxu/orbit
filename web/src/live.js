@@ -5,6 +5,7 @@ function connect() {
   es.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if (m.t === "machines") { S.machines = m.machines || []; renderLeft(); renderTabs(); return; }
+    if (m.t === "live") { if (!EMBED) voiceEvent(m); return; }
     if (m.t === "hello") {
       const had = S.current;
       S.machines = m.machines || [];

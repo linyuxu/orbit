@@ -113,11 +113,18 @@ function cardHtml(c) {
 /* Where a request came from, when a plugin sent it (Slack, a webhook …): "via <label>", a link if it gave one. */
 function originHtml(o) {
   if (!o || !(o.label || o.plugin)) return "";
+  if (o.label === "Voice" && !o.plugin) return `<div class="origin" title="Asked in a voice call (GPT Live)">${I("mic", 11)}via Voice</div>`;
   const what = esc(o.label || o.plugin), tip = esc(`Sent by the ${o.plugin || "a"} plugin`);
   const url = o.url && /^(https?|slack):\/\//.test(o.url) ? o.url : "";
   return `<div class="origin" title="${tip}">${I("plug", 11)}via ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${what}</a>` : what}</div>`;
 }
+/* A note card (a voice call's transcript): kept in the conversation, not a request. */
+function noteHtml(c) {
+  return `<div class="vnote"><div class="vhead">${I("mic", 13)}<span class="vt">${esc(c.text)}</span><span class="when">${dayTime(c.time)}</span></div>` +
+    `<div class="md">${renderMd(c.answer || "")}</div></div>`;
+}
 function cardHtml0(c) {
+  if (c.kind === "note") return noteHtml(c);
   const active = ACTIVE.has(c.state);
   const tool = active ? currentTool(c) : "";
   const body = c.answer || [c.live, c.partial].filter(Boolean).join("\n\n");
@@ -235,6 +242,7 @@ $("#agentbar").addEventListener("click", e => {
 });
 function renderConv() {
   renderAgentBar();
+  if (typeof renderCaps === "function") renderCaps();  // (the call button, and a voice call's captions: this session's or none)
   const box = $("#cards");
   const list = S.cards.get(S.current);
   if (!S.current || !list || !list.length) {

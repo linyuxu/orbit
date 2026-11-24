@@ -127,6 +127,12 @@ saves over a file that has content: auto-save skips it and ⌘S asks.
 - **⌘J** opens a shell in the session's folder (your login shell on a pty the server owns, shown with xterm.js
   below the status bar). Same three states as ⌘\`; Esc goes to the shell, Esc Esc back to the input; ⌃⌥K / ⌃⌥J
   resize it; Kill, Open in iTerm. The shell outlives ⌘⇧R and ends with its session. `$ORBIT_SESSION` is set in it.
+- **⌘⇧V voice call** (GPT Live; the microphone beside Send): talk with the session in front. The voice answers what
+  it can itself and hands the rest to the session as requests (cards "via Voice"); their answers come back spoken, in
+  short. The button says connecting · listening · speaking · standby (after 30 s of quiet, cheaper; speech wakes it),
+  a red dot while the microphone is open; captions run in the conversation, and on hang-up the call's transcript stays
+  as a note card. Needs an OpenAI API key (Settings → General: it stays on this machine, the page never sees it).
+  Each call is logged in `~/.orbit/live/<call>.jsonl` (stages, times, ids; never the key). Design: `builddoc/gpt-live.md`.
 - **⌘K** quick ask: a one-off request to a Fleet helper (a background agent in the current folder; no tab, its
   answer shows in the side tab without taking the keyboard) or to any open session. Up to 3 helpers per folder.
 - **⌘V / drop / attach**: drop any file from Finder on the conversation or the input: it goes into the request as
@@ -333,12 +339,12 @@ CI (`.github/workflows/test.yml`) runs them on macOS and Linux for every push. T
 | `orbit/machines/` | `remote.py` (the token, the remotes registry), `federation.py` (other servers' sessions, files and shells as this one's: `NAME~ID`, `/@NAME/…`) |
 | `orbit/harness_server/` | The Harness Server: a daemon (stdlib only) that runs the agent processes and journals their output, so they outlive a restart of the server; `client.py` (the launcher the drivers spawn through) |
 | `orbit/workspace/` | `files.py` (tree, read / save, ± Review), `notes.py` (the vault, wiki links, week note), `skills.py` |
-| `orbit/services/` | `schedule.py`, `calendar.py` (via `helpers/calendar.swift`), `usage.py` (plan usage), `shell.py` (the ⌘J shells on a pty), `plugin_services.py` (plugins' services), `plugin_items.py` (their item sources), `plugin_views.py` (their threads and docs, the `svc:` proxy) |
+| `orbit/services/` | `schedule.py`, `calendar.py` (via `helpers/calendar.swift`), `usage.py` (plan usage), `shell.py` (the ⌘J shells on a pty), `plugin_services.py` (plugins' services), `plugin_items.py` (their item sources), `plugin_views.py` (their threads and docs, the `svc:` proxy), `keys.py` (Orbit's own API keys), `live/` (GPT Live voice calls: `session.py` the call, `ws.py` a stdlib websocket client) |
 | `orbit/cli/` | `orbit.py` (the `orbit` command), `agent.py` (`orbit-agent`); launched by `cli/orbit` and `cli/orbit-agent` |
 | `orbit/plugins.py` | Plugins: finds and loads them, registers their harnesses (`drivers/protocol.py` runs those) and services (`services/plugin_services.py` keeps them running), their secrets, command and hint |
 | `orbit/home.py` | `~/.orbit` (moved once from the old `~/.aide`, a link left behind) |
 | `web/index.html` | The page's markup; it loads `web/styles/*.css` and `web/src/*.js` (plain scripts sharing one scope, in order: `core`, `markdown`, `state`, … `main` boots) |
-| `web/src/` | The UI by feature: `fileicons` (file-type and folder icons), `plugins` (what plugins add to the page), `pviews` (a plugin's thread, doc and list, drawn natively), `msglist` (the message list a conversation and a thread share), `lineedit` (Emacs keys in one-line fields), `cards`, `composer`, `attach`, `tabs`, `files`, `find`, `notes`, `left`, `side`, `review`, `schedules`, `settings`, `modal`, `finder`, `machines`, `shell`, `commands`, `keys`, `live`, `main` |
+| `web/src/` | The UI by feature: `fileicons` (file-type and folder icons), `plugins` (what plugins add to the page), `pviews` (a plugin's thread, doc and list, drawn natively), `msglist` (the message list a conversation and a thread share), `lineedit` (Emacs keys in one-line fields), `cards`, `composer`, `attach`, `tabs`, `files`, `find`, `notes`, `left`, `side`, `review`, `schedules`, `settings`, `modal`, `finder`, `machines`, `shell`, `commands`, `keys`, `live` (the server's events), `voice` (a GPT Live call), `main` |
 | `web/styles/` | `base` (tokens), `layout`, `conversation`, `editor`, `side`, `panels`, `dialogs`, `settings`, `embed` |
 | `web/vendor/` · `web/cm/` | markdown-it, highlight.js, KaTeX, xterm.js and the CodeMirror bundle; its sources (`npm install && npm run build` writes `web/vendor/cm.js`) |
 | `app/` | Tauri 2 shell: native window (WKWebView), app menu; shows any orbit server, starts this Mac's |

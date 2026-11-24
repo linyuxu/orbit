@@ -61,6 +61,9 @@ def make_server(port: int, desk: Desk, schedules: Path | None = None, binds: lis
     if desk.federation is None:
         desk.federation = federation.Federation(desk)
         desk.federation.start()
+    if desk.live is None:
+        from orbit.services.live import Live
+        desk.live = Live(desk)
     from orbit.services import plugin_items
     plugin_items.BROADCAST = desk.broadcast  # (1.3) a source that changed: an open ⌘O redraws
     from orbit.services import plugin_views

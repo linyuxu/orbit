@@ -48,6 +48,7 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
         self.ui_ctx: dict = {}  # what the user is looking at, reported by the page (orbit-agent ctx)
         self.show_dir = state_dir / "show"  # pages agents show with `orbit-agent show`
         self.scheduler = None  # orbit.services.schedule.Scheduler, attached by the server
+        self.live = None  # orbit.services.live.Live: the GPT Live voice call, attached by the server
         self.federation = None  # orbit.machines.federation.Federation: other machines' sessions, attached by the server
         from orbit.desk.external_index import ExternalIndex
         self.external_index = ExternalIndex(self.broadcast)  # conversations to resume (Resume another session)
@@ -326,6 +327,8 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
                 raise ValueError(f"{k} takes a {type(SETTINGS[k]).__name__}")
             if k == "open_in" and v not in OPEN_IN:
                 raise ValueError(f"open_in is one of {', '.join(OPEN_IN)}")
+            if k == "live_model" and v not in ("gpt-live-1.1", "gpt-live-1"):
+                raise ValueError("live_model is gpt-live-1.1 or gpt-live-1")
         with self.lock:
             self.settings.update(b)
             snap = dict(self.settings)
@@ -377,6 +380,15 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
                     c["origin"] = s.origins[str(n)] = p["origin"]
                 s.cards.append(c)
             s.pending = []
+            sent = {v: k for k, v in s.client_ids.items()}  # card id → the sender's client id
+            for c in s.cards:
+                if c["id"] in sent:
+                    c["client_id"] = sent[c["id"]]
+            for x in s.notes:  # note cards between the requests they followed
+                s.cards.append({**self._new_card(s, x["id"], x.get("text", ""), x.get("time")), "kind": "note",
+                                "state": "note", "answer": x.get("answer", ""), "started": x.get("time"),
+                                "finished": x.get("time"), "rev": 1, **({"origin": x["origin"]} if x.get("origin") else {})})
+            s.cards.sort(key=lambda c: c["id"])
 
     def external(self, limit: int = 40, q: str = "") -> list[dict]:
         """Conversations started outside Orbit (a terminal, anywhere) that a harness can resume: newest first, or with
@@ -457,6 +469,11 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
             for s in self.sessions.values():
                 if s.id not in handed and s.current() is not None and s.driver and s.driver.alive():
                     s.interrupted = True
+        if self.live is not None:  # a voice call ends with the server (its transcript kept as a note card)
+            try:
+                self.live.shutdown()
+            except Exception as e:  # noqa: BLE001 - the server stops anyway
+                print(f"orbit: voice call: {type(e).__name__}: {e}", flush=True)
         if self.federation:
             self.federation.stop()
         if self.scheduler:

@@ -247,6 +247,7 @@ const SHORTCUTS = [
     ["↑↓ PgUp PgDn ⌃V ⌥V", "Scroll the focused conversation"],
     ["Home End ⌥⇧, ⌥⇧.", "Top / end of the conversation (End sticks to the end again)"],
     ["⌘L", "Scroll to the latest answer", "M:KeyL", scrollLatest],
+    ["⌘⇧V", "Voice call with the current session (GPT Live): talk, and it does the work; again: hang up (the OpenAI key: Settings → General)", "MS:KeyV", () => toggleCall()],
   ]],
   ["Panels", [
     ["⌘`", "Left panel (three-state toggle)", "M:Backquote", toggleLeft],

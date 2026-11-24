@@ -610,6 +610,10 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json({"error": "only on the server's own machine"}, 403)
             from orbit.services import keys
             return self._json({"keys": keys.status(self.desk.state_dir)})
+        if p == "/api/live":  # the voice call: phase, bound session, transcript so far (this machine only)
+            if self.from_remote:
+                return self._json({"error": "only on the server's own machine"}, 403)
+            return self._json(self.desk.live.state())
         if p == "/api/harnesses":
             return self._json({"harnesses": self.desk.harnesses()})
         if p == "/api/harness-server":  # whether the agents run in the Harness Server (or directly, and why)
@@ -885,6 +889,21 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 if p == "/api/keys/check":
                     return self._json(keys.check(self.desk.state_dir, str(b.get("name", ""))))
                 return self._json({"keys": keys.set_key(self.desk.state_dir, str(b.get("name", "")), b.get("value"))})
+            if p in ("/api/live/start", "/api/live/stop"):  # a voice call (GPT Live): this machine only
+                if self.from_remote:
+                    return self._json({"error": "only on the server's own machine"}, 403)
+                from orbit.services.live import NoKey
+                if p == "/api/live/stop":
+                    try:
+                        return self._json(self.desk.live.stop(str(b.get("call") or "")))
+                    except KeyError:
+                        return self._json({"error": "no such call"}, 404)
+                try:
+                    return self._json(self.desk.live.start(str(b.get("sid", "")), b.get("sdp")))
+                except NoKey as e:
+                    return self._json({"error": str(e), "need": "openai-key"}, 400)
+                except ValueError as e:
+                    return self._json({"error": str(e)}, 502 if str(e).startswith(("OpenAI", "could not reach")) else 400)
             if p == "/api/schedules":
                 return self._json(self.desk.scheduler.create(b))
             if p == "/api/schedules/parse":
@@ -1166,7 +1185,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     self.desk.move(sid, b.get("before"))
                     return self._json({"ok": True})
                 if action == "send":
-                    return self._json(self.desk.send(sid, b.get("text", ""), origin=self._origin(b.get("origin"))))
+                    return self._json(self.desk.send(sid, b.get("text", ""), origin=self._origin(b.get("origin")),
+                                                     client_id=b.get("client_id")))
                 if action == "withdraw":
                     self.desk.withdraw(sid, int(b.get("cid", 0)))
                     return self._json({"ok": True})
