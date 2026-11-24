@@ -26,6 +26,7 @@ function setVoicePhase(p) {
   const was = VOICE.phase;
   VOICE.phase = p;
   if (p === "ended" && was !== "ended" && was !== "idle" && VOICE.chimed) chime("end");
+  if (p === "ended" && was !== "ended" && typeof loadUsage === "function") setTimeout(loadUsage, 4000);  // (the status bar's OpenAI cost)
   chimeIfReady();
   clearTimeout(VOICE.endTm);
   if (p === "ended") VOICE.endTm = setTimeout(() => { if (VOICE.phase === "ended") { VOICE.call = null; VOICE.caps.clear(); setVoicePhase("idle"); } }, 2500);

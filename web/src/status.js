@@ -80,16 +80,32 @@ function renderUsage() {  // every harness, always, in a steady order (the sessi
   const b = $("#sb-usage"); if (!b) return;
   // (a plugin's agent may add a quota line, plugin API 1.3: "8 USD left", after its meter or alone)
   const s = cur(), hs = (USAGE.harnesses || []).filter(h => (h.limits || []).length || h.quota);
-  b.hidden = !hs.length;
+  const v = voiceUse();
+  b.hidden = !hs.length && !v;
   b.innerHTML = `<span class="lbl">Used</span>` + hs.map(h => {
     const main = (h.limits || [])[0], q = h.quota ? `<span class="uq">${esc(h.quota)}</span>` : "";
     return `<span class="h${s && h.id === s.harness ? " mine" : ""}"><span class="hn">${esc(h.label)}</span>` + (main ? `${ubar(main.used)}<span class="${heat(main.used)}">${Math.round(main.used)}%</span>` +
       `${main.resets_at ? `<span class="rs">${inFmt(main.resets_at)}</span>` : ""}` : "") + `${q}</span>`;
-  }).join("");
-  b.title = hs.map(h => `${h.label}${h.plan ? " " + h.plan : ""}: ` + [...(h.limits || []).map(l => `${Math.round(l.used)}% of ${l.label || "its plan"}${l.resets_at ? " (resets in " + inFmt(l.resets_at) + ")" : ""}`), ...(h.quota ? [h.quota] : [])].join(", ")).join("\n") + "\n(click: details)";
+  }).join("") + (v ? `<span class="h ov"><span class="hn">OpenAI</span>` + (v.b ? `${ubar(v.pct)}<span class="${heat(v.pct)}">${usd(v.b.left)} left</span>`
+    : `<span>${v.m.estimated ? "≈ " : ""}${usd(v.m.cost)}</span>`) + `</span>` : "");
+  b.title = (v ? [`OpenAI (voice): ${usd(v.m.cost)} this month, ${v.m.calls} call${v.m.calls === 1 ? "" : "s"}` + (v.b ? `; ${usd(v.b.left)} of ${usd(v.b.given)} left (≈ ${vmin(v.b.active_min)} of talking)` : "")] : []).concat(hs.map(h => `${h.label}${h.plan ? " " + h.plan : ""}: ` + [...(h.limits || []).map(l => `${Math.round(l.used)}% of ${l.label || "its plan"}${l.resets_at ? " (resets in " + inFmt(l.resets_at) + ")" : ""}`), ...(h.quota ? [h.quota] : [])].join(", "))).join("\n") + "\n(click: details)";
+}
+/* OpenAI (GPT Live voice): what Orbit's calls cost this month, by their own usage (an API key cannot read the
+   account), and the balance left when the user gave one in Settings → Voice. Shown once there is a call or a balance. */
+const usd = x => "$" + (x < 1000 ? x.toFixed(2) : Math.round(x));
+const vmin = m => { m = Math.round(m); return m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`; };
+function voiceUse() {
+  const u = USAGE.voice; if (!u || !u.month) return null;
+  const m = u.month, b = u.budget;
+  if (!m.calls && !b) return null;
+  return { m, b, pct: b && b.given ? Math.min(100, b.spent / b.given * 100) : 0 };
 }
 async function loadUsage() {
-  try { USAGE = await api("GET", "/api/usage"); renderUsage(); if (document.getElementById("usagepop")) usagePop(true); } catch {}
+  try {
+    const [u, v] = await Promise.all([api("GET", "/api/usage"), api("GET", "/api/live/usage").catch(() => null)]);
+    USAGE = { ...u, voice: v };
+    renderUsage(); if (document.getElementById("usagepop")) usagePop(true);
+  } catch {}
 }
 function usagePop(keep = false) {
   let pop = document.getElementById("usagepop");
@@ -101,11 +117,21 @@ function usagePop(keep = false) {
       `<span class="rs">${h.limits && h.limits[0] && h.limits[0].resets_at ? "Resets in " + inFmt(h.limits[0].resets_at) : h.error ? esc(h.error) : ""}</span></div>` +
       ((h.limits || []).map(x => `<span class="lim" title="${esc(x.window)}${x.resets_text ? " · resets " + esc(x.resets_text) : ""}"><span class="k">${esc(x.label)}</span>${ubar(x.used)}<span class="${heat(x.used)}">${Math.round(x.used)}%</span></span>`).join("") || (h.quota ? "" : `<span class="lim">no figures reported</span>`)) +
       (h.quota ? `<span class="lim uq">${esc(h.quota)}</span>` : "") +
-      `</div>`).join("") : `<div class="ur">No harness reported its usage yet.</div>`) +
-    `<div class="foot">Claude: its /usage (no model call) · Codex: its last turn's rate limits${USAGE.at ? " · checked " + ago(USAGE.at) : ""}</div>`;
+      `</div>`).join("") : `<div class="ur">No harness reported its usage yet.</div>`) + voicePopRow() +
+    `<div class="foot">Claude: its /usage (no model call) · Codex: its last turn's rate limits${voiceUse() ? " · OpenAI: Orbit's own calls, by what GPT Live reported (an API key cannot read the account)" : ""}${USAGE.at ? " · checked " + ago(USAGE.at) : ""}</div>`;
   const r = $("#sb-usage").getBoundingClientRect(), k = rectScale();
   pop.style.left = Math.max(8, Math.min(innerWidth / S.zoom - 390, r.left / k)) + "px";
   pop.style.bottom = (innerHeight / S.zoom - r.top / k + 6) + "px";
+}
+function voicePopRow() {
+  const v = voiceUse(); if (!v) return "";
+  const m = v.m, b = v.b, dur = sec => sec >= 3600 ? vmin(sec / 60) : sec >= 60 ? `${Math.round(sec / 60)} min` : `${sec} s`;
+  return `<div class="ur"><div class="t"><b>OpenAI</b><span class="plan">· voice (GPT Live)</span>` +
+    `<span class="rs">${b ? `≈ ${vmin(b.active_min)} of talking left` : ""}</span></div>` +
+    `<span class="lim"><span class="k">This month</span>${m.estimated ? "≈ " : ""}${usd(m.cost)} · ${m.calls} call${m.calls === 1 ? "" : "s"} · ${dur(m.active_s)} talking${m.standby_s ? ` · ${dur(m.standby_s)} standby` : ""}</span>` +
+    (b ? `<div><span class="lim"><span class="k">Balance</span>${ubar(v.pct)}<span class="${heat(v.pct)}">${usd(b.left)} of ${usd(b.given)} left</span></span></div>`
+       : `<div class="lim vhint">Give your balance in Settings → Voice to see what is left</div>`) +
+    `</div>`;
 }
 $("#sb-usage").addEventListener("click", () => usagePop());
 document.addEventListener("mousedown", e => {

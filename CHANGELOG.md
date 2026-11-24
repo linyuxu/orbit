@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The status bar's usage: OpenAI (GPT Live voice) next to Claude and Codex: this month's cost, or, with a balance given
+  in Settings → Voice, what is left (a bar of the share spent); its popover has calls, talking and standby minutes and
+  the talking time left. Orbit's own calls only (`/api/live/usage`): an API key cannot read the account.
 - Voice: a soft rising ding once the call is connected and listening (speak then), a falling one when it ends;
   Settings → Voice → Sounds (`live_chime`, on) turns them off. Made by the page (Web Audio), desktop and phone.
 - Voice: several OpenAI API keys, each with a name, tried in order: one refused (a bad key, no quota, rate-limited:

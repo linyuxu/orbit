@@ -122,7 +122,10 @@
 .ubar i { display:block; height:100%; background:var(--ink-3); border-radius:3px; }
 .ubar.hot i { background:var(--err); } .ubar.warm i { background:var(--run); }
 #sb-usage .hot { color:var(--err); }
-#sb-usage .uq { white-space:nowrap; }  /* a plugin agent's quota (plugin API 1.3), plain text after its meter */
+#sb-usage .uq { white-space:nowrap; }
+#sb-usage .ov > span:last-child { white-space:nowrap; }  /* OpenAI (voice): this month's cost, or the balance left */
+#usagepop .ur .lim.vhint { color:var(--ink-3); margin-top:6px; }
+#usagepop .ur > div > .lim { margin-top:6px; }  /* a plugin agent's quota (plugin API 1.3), plain text after its meter */
 #usagepop { position:fixed; z-index:60; width:380px; background:var(--surface); border-radius:var(--r-m); box-shadow:var(--menu-shadow); padding:12px 14px; font-size:calc(12px * var(--ui-k)); }
 #usagepop .uh { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
 #usagepop .uh b { font-size:calc(13px * var(--ui-k)); } #usagepop .uh .sub { color:var(--ink-3); }
