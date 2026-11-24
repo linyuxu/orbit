@@ -206,3 +206,53 @@ document.addEventListener("visibilitychange", () => {
 });
 renderVoice();
 holdScreen(awakeWanted());  // (Orbit open: the screen stays on, if Misc says so)
+
+/* ===================================================================== the dark screen
+   The screen stays on (above), and after a minute untouched it goes nearly black — an OLED shows black for almost
+   nothing — with only the call's gyroscope (or the time) faintly in the middle; a tap brings Orbit back (that tap does
+   nothing else). A web page cannot set the display's brightness: this is the closest it gets. */
+const DIM = { tm: 0, on: false, gyro: null, clock: 0, AFTER_MS: 60000 };
+function dimArm() {
+  clearTimeout(DIM.tm);
+  if (document.hidden || !awakeWanted()) return;
+  DIM.tm = setTimeout(dimOn, DIM.AFTER_MS);
+}
+function dimOn() {
+  if (document.hidden || !awakeWanted() || DIM.on) return;
+  DIM.on = true;
+  const d = $("#dimmer");
+  if (!DIM.gyro) DIM.gyro = makeGyro($("#dimmer .dvorb"), "d");
+  d.hidden = false;
+  dimDraw();
+  DIM.clock = setInterval(dimDraw, 15000);
+  requestAnimationFrame(() => d.classList.add("on"));
+}
+function dimDraw() {
+  const live = VOICE.phase !== "idle" && VOICE.phase !== "ended";
+  const d = $("#dimmer");
+  d.classList.toggle("call", live);
+  DIM.gyro.run(live && DIM.on);
+  const s = live && S.sessions.get(VOICE.sid);
+  d.querySelector(".dword").textContent = live ? `${VOICE_WORD[VOICE.phase]}${VOICE.muted ? " · muted" : ""}${s ? ` · ${sessionTitle(s)}` : ""}` : "";
+  d.querySelector(".dtime").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+function dimOff() {
+  if (!DIM.on) return;
+  DIM.on = false;
+  clearInterval(DIM.clock);
+  const d = $("#dimmer");
+  d.classList.remove("on");
+  if (DIM.gyro) DIM.gyro.run(false);
+  setTimeout(() => { if (!DIM.on) d.hidden = true; }, 250);
+}
+/* A touch anywhere: back from the dark (the touch is swallowed), and the minute starts again. */
+document.addEventListener("pointerdown", e => {
+  if (DIM.on) { e.preventDefault(); e.stopPropagation(); dimOff(); }
+  dimArm();
+}, true);
+$("#dimmer").addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); }, true);
+document.addEventListener("keydown", () => { dimOff(); dimArm(); }, true);
+document.addEventListener("visibilitychange", () => { if (document.hidden) { clearTimeout(DIM.tm); dimOff(); } else dimArm(); });
+const dimRender = VOICE_UI.render;  // (the call's phase shows on the dark screen too)
+VOICE_UI.render = () => { dimRender(); if (DIM.on) dimDraw(); };
+dimArm();

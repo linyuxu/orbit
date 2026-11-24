@@ -56,7 +56,7 @@ function miscRootPage() {
       navRow({ attrs: `data-open="calendar"`, icon: I("calendar", 18), name: "Calendar", hint: calHint }) +
       navRow({ attrs: `data-open="schedules"`, icon: I("clock", 18), name: "Schedules", hint: S.schedules == null ? "" : on.length ? esc(fmtNext(on[0].next)) : "none" }) +
       navRow({ attrs: `data-open="usage"`, icon: I("monitor", 18), name: "Usage", hint: usageHint() }) + `</div>` +
-      `<div class="rows"><div class="mrow awake"><span class="aw-t"><span class="nm">Keep the screen on</span><span class="sub">While Orbit is open (always during a voice call)</span></span>` +
+      `<div class="rows"><div class="mrow awake"><span class="aw-t"><span class="nm">Keep the screen on</span><span class="sub">While Orbit is open (always in a voice call); dark after a minute untouched</span></span>` +
       `<button class="switch${keepAwake() ? " on" : ""}" data-awake role="switch" aria-checked="${keepAwake()}" aria-label="Keep the screen on"><span></span></button></div></div>` +
       pluginRowsHtml();
   };

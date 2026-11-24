@@ -153,19 +153,19 @@ const waveSvg = (cls = "wave") => `<svg class="${cls}" width="16" height="16" vi
   WAVE_H.map((h, i) => `<line class="wb" style="--i:${i}" x1="${2.4 + i * 2.8}" x2="${2.4 + i * 2.8}" y1="${8 - h}" y2="${8 + h}"/>`).join("")}</svg>`;
 /* The image of a call: a gyroscope. A cloud core (it swells with the sound) and two rings tumbling around it in 3D:
    each ring's near half passes in front of the core, its far half behind. Faster while the voice speaks, nearly
-   still in standby. Its own frame loop runs while it is shown (run(true)). One per page (its gradients' ids). */
-function makeGyro(svg) {
+   still in standby. Its own frame loop runs while it is shown (run(true)). One per page, or more with a suffix k for their gradients' ids. */
+function makeGyro(svg, k = "") {  // (k: a suffix for its ids, when a page draws two)
   svg.innerHTML = `<defs>
-      <radialGradient id="vgN" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#dff0ff"/><stop offset=".35" stop-color="var(--voice-1)"/><stop offset=".75" stop-color="var(--voice-2)"/><stop offset="1" stop-color="#1a3596"/></radialGradient>
-      <radialGradient id="vgG"><stop offset="0" stop-color="var(--voice-1)" stop-opacity=".5"/><stop offset="1" stop-color="var(--voice-1)" stop-opacity="0"/></radialGradient>
-      <filter id="vgB" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
-      <clipPath id="vgC"><circle cx="50" cy="50" r="17"/></clipPath></defs>
+      <radialGradient id="vgN${k}" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#dff0ff"/><stop offset=".35" stop-color="var(--voice-1)"/><stop offset=".75" stop-color="var(--voice-2)"/><stop offset="1" stop-color="#1a3596"/></radialGradient>
+      <radialGradient id="vgG${k}"><stop offset="0" stop-color="var(--voice-1)" stop-opacity=".5"/><stop offset="1" stop-color="var(--voice-1)" stop-opacity="0"/></radialGradient>
+      <filter id="vgB${k}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
+      <clipPath id="vgC${k}"><circle cx="50" cy="50" r="17"/></clipPath></defs>
     <g class="gback"></g>
-    <g class="gcore"><circle cx="50" cy="50" r="31" fill="url(#vgG)"/><circle cx="50" cy="50" r="17" fill="url(#vgN)"/>
-      <g clip-path="url(#vgC)" style="mix-blend-mode:screen">
-        <ellipse class="gcl" cx="44" cy="46" rx="9" ry="6.5" fill="#fff" opacity=".75" filter="url(#vgB)"/>
-        <ellipse class="gcl" cx="55" cy="55" rx="7.5" ry="7" fill="#a5f3fc" opacity=".75" filter="url(#vgB)"/>
-        <ellipse class="gcl" cx="48" cy="58" rx="6.5" ry="5" fill="#c7d2fe" opacity=".75" filter="url(#vgB)"/></g></g>
+    <g class="gcore"><circle cx="50" cy="50" r="31" fill="url(#vgG${k})"/><circle cx="50" cy="50" r="17" fill="url(#vgN${k})"/>
+      <g clip-path="url(#vgC${k})" style="mix-blend-mode:screen">
+        <ellipse class="gcl" cx="44" cy="46" rx="9" ry="6.5" fill="#fff" opacity=".75" filter="url(#vgB${k})"/>
+        <ellipse class="gcl" cx="55" cy="55" rx="7.5" ry="7" fill="#a5f3fc" opacity=".75" filter="url(#vgB${k})"/>
+        <ellipse class="gcl" cx="48" cy="58" rx="6.5" ry="5" fill="#c7d2fe" opacity=".75" filter="url(#vgB${k})"/></g></g>
     <g class="gfront"></g>`;
   const back = svg.querySelector(".gback"), front = svg.querySelector(".gfront"), core = svg.querySelector(".gcore");
   const clouds = [...svg.querySelectorAll(".gcl")];

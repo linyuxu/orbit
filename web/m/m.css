@@ -160,12 +160,13 @@ button.shead:active { background:var(--hover); }
 .req.auto { align-items:stretch; }
 .req.auto .steer { align-self:flex-end; }
 .autoreq { display:flex; flex-direction:column; gap:2px; padding:2px 0 2px 12px; border-left:2px solid color-mix(in srgb, var(--run) 40%, var(--line)); }
-.autoreq .ahead { display:flex; align-items:center; gap:6px; min-height:24px; font-size:var(--fs-meta); color:var(--ink-3); min-width:0; }
-.autoreq .ahead > svg { flex:none; }
+.autoreq .ahead { display:flex; align-items:baseline; gap:0 6px; min-height:24px; font-size:var(--fs-meta); color:var(--ink-3); min-width:0; }
+.autoreq .ahead > svg { flex:none; align-self:center; }
 .autoreq .ahead .lbl { flex:none; color:var(--ink-2); font-weight:600; }
-.autoreq .ahead .why { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-.autoreq .ahead .when { margin-left:auto; padding-left:10px; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.autoreq .what { font:var(--fs-req)/1.45 var(--read-font); color:var(--ink); overflow-wrap:anywhere; }
+.autoreq .ahead .why { min-width:0; }
+.autoreq .awhat { display:flex; align-items:baseline; gap:10px; }
+.autoreq .what { flex:1; min-width:0; font:var(--fs-req)/1.45 var(--read-font); color:var(--ink); overflow-wrap:anywhere; }
+.autoreq .when { flex:none; margin-left:auto; font-size:var(--fs-meta); color:var(--ink-3); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .ans .head { display:flex; align-items:center; gap:8px; min-height:26px; font-size:var(--fs-ui); color:var(--ink-3); }
 .ans .head .st { flex:none; color:var(--ink-2); font-weight:500; }
 .s-completed .head .st { color:var(--ok); } .s-thinking .head .st, .s-running .head .st { color:var(--run); }
@@ -720,3 +721,14 @@ body.vcall #toast { bottom:calc(268px + var(--sab)); }  /* (over the call view, 
 .mrow.awake .aw-t { flex:1; min-width:0; display:flex; flex-direction:column; }
 .mrow.awake .nm { font-size:16px; color:var(--ink); }
 .mrow.awake .sub { font-size:13px; color:var(--ink-3); margin-top:1px; }
+
+/* The dark screen (m-voice.js): nearly black, the call's gyroscope (or the time) faint in the middle. */
+#dimmer { position:fixed; inset:0; z-index:9999; background:#000; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; opacity:0; transition:opacity .25s; touch-action:none; -webkit-user-select:none; user-select:none; }
+#dimmer[hidden] { display:none; }
+#dimmer.on { opacity:1; }
+#dimmer .dvorb { width:120px; height:120px; overflow:visible; display:none; opacity:.42; filter:saturate(.85); }
+#dimmer.call .dvorb { display:block; }
+#dimmer .dword { color:#5b6b85; font-size:15px; min-height:20px; letter-spacing:.01em; }
+#dimmer .dtime { color:#3a3f48; font-size:44px; font-weight:300; font-variant-numeric:tabular-nums; }
+#dimmer.call .dtime { font-size:15px; color:#30343b; }
