@@ -112,5 +112,6 @@ function saveUi() {
   LS.set("current", S.current); LS.set("file", S.file); LS.set("group", S.group); LS.set("lastTab", S.lastTab);
   LS.set("left", S.left); LS.set("follow", S.follow); LS.set("ftabs", S.ftabs); LS.set("tabOrder", S.tabOrder); LS.set("sides", S.sides); LS.set("tabFocus", S.tabFocus); LS.set("sideW", S.sideW);
   LS.set("expanded", S.expanded); LS.set("closedFiles", S.closedFiles);
+  if (typeof layoutChanged === "function") layoutChanged();  // (the tabs: the server's, layout.js)
   reportCtx();
 }

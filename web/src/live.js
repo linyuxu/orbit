@@ -9,6 +9,7 @@ function connect() {
     if (m.t === "hello") {
       const had = S.current;
       if (typeof SIDE_SRV !== "undefined") { SIDE_SRV.loaded.clear(); SIDE_SRV.rev = {}; }  // (what changed meanwhile: fetched again)
+      if (!EMBED) loadLayout();  // (the tabs too)
       S.machines = m.machines || [];
       setSessions(m.sessions, m.groups);
       for (const sid of [...S.cards.keys()]) if (!S.sessions.has(sid)) S.cards.delete(sid);
@@ -44,6 +45,8 @@ function connect() {
       else renderAll();
     } else if (m.t === "card") {
       upsertCard(m.card);
+    } else if (m.t === "layout") {  // the tabs changed (here or on another page): as the server has them
+      layoutEvent(m);
     } else if (m.t === "side") {  // a session's side tabs changed (here or on another screen): as the server has them
       if (!EMBED && m.sid) applySideState(m.sid, m.side);
     } else if (m.t === "cardp") {

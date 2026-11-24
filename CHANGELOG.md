@@ -8,6 +8,11 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The tab layout is the server's too (`orbit/desk/layout.py`): each group's file tabs (files, notes, plugin views,
+  Schedules, Calendar), the tab row's order, and a file tab's side tabs; every page shows the same (`GET/POST
+  /api/layout`, a `layout` event). A page writes it whole from the revision it had; one that is behind (409) puts
+  what it added or closed since on top of the current one (a three-way merge) and writes again. Which tab a page
+  shows, its scroll, a panel put away: the page's own. The tabs a page had move to the server the first time.
 - A session's side panel is the server's, like its conversation (`orbit/desk/sides.py`): every screen shows the same
   tabs and the same one shown (the page, the phone, a page on another machine), and a change on one (open, pick, close,
   an agent's `orbit-agent show` or `open --side`) goes to all as a `side` event (`GET/POST /api/sessions/<id>/side`,

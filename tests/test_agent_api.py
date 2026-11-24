@@ -151,6 +151,24 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         st = side()
         self.assertEqual(([x["kind"] for x in st["items"]], st["i"]), (["file"], 0))
 
+    def test_the_tab_layout_is_the_servers(self):
+        """The file tabs, the tab row's order and file tabs' side tabs: one layout every page shares, written whole from
+        the revision a page had (a page behind gets 409 and the current one), told to all as a layout event."""
+        self.assertEqual(self.req("GET", "/api/layout")[1], {"layout": {"ftabs": {}, "order": {}, "sides": {}}, "rev": 0})
+        lay = {"ftabs": {"main": [{"path": "/tmp/a.py", "pinned": True}, {"path": "orbit:schedules", "pinned": True}]},
+               "order": {"main": ["f:/tmp/a.py", "s:abc"]},
+               "sides": {"f:/tmp/a.py": {"list": [{"kind": "review", "root": "/tmp", "id": "r1"}], "i": 0}}}
+        got, th = self.listen({"layout"})
+        code, r = self.req("POST", "/api/layout", {"layout": lay, "base": 0})
+        th.join(5)
+        self.assertEqual((code, r["rev"]), (200, 1))
+        self.assertEqual(got[0], {"t": "layout", "layout": lay, "rev": 1})
+        self.assertEqual(self.req("GET", "/api/layout")[1], {"layout": lay, "rev": 1})
+        code, r = self.req("POST", "/api/layout", {"layout": {**lay, "order": {}}, "base": 0})  # (a page behind)
+        self.assertEqual((code, r["rev"], r["layout"]), (409, 1, lay))
+        self.assertEqual(self.req("POST", "/api/layout", {"layout": {"ftabs": []}, "base": 1})[0], 400)
+        self.assertEqual(self.req("POST", "/api/layout", {"layout": {"ftabs": {}, "order": {}, "sides": {}}, "base": 1})[1]["rev"], 2)
+
     # ------------------------------------------------------------------ sessions / send
     def test_sessions_and_send(self):
         a = self.new_session("asker")

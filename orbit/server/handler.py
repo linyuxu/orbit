@@ -717,6 +717,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             fed = federation.split(m.group(1))
             return self._json(*reversed(self.desk.federation.call(fed[0], "GET", f"/api/sessions/{fed[1]}/{m.group(2)}"
                                                                   + (f"?{u.query}" if u.query else ""))))
+        if p == "/api/layout":  # the tab layout every screen shares (desk/layout.py)
+            return self._json(self.desk.layout())
         m = re.fullmatch(r"/api/sessions/([\w-]+(?:~[\w-]+)?)/side", p)
         if m:  # its side panel (desk/sides.py); another machine's: from there
             fed = federation.split(m.group(1))
@@ -921,6 +923,12 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 line = b.get("line")
                 return self._json(self.desk.open_for_user(str(b.get("path", "")), int(line) if line else None,
                                                           bool(b.get("side")), str(b.get("by", ""))))
+            if p == "/api/layout":  # {"layout", "base"}: the tabs as a page arranged them; 409 + the current one if behind
+                from orbit.desk.layout import Stale
+                try:
+                    return self._json(self.desk.set_layout(b.get("layout"), b.get("base")))
+                except Stale as e:
+                    return self._json({"error": str(e), **e.current}, 409)
             m = re.fullmatch(r"/api/sessions/([\w-]+(?:~[\w-]+)?)/side", p)
             if m:  # {"op": open|close|select|clear, "spec"?, "id"?}: its side panel, on every screen (desk/sides.py)
                 fed = federation.split(m.group(1))
