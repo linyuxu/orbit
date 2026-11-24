@@ -122,6 +122,11 @@ class AgyDriver(ProcessDriver):
         self.started_steps: set[int] = set()
 
     @classmethod
+    def usage(cls):
+        from orbit.services.usage import agy_usage
+        return agy_usage()
+
+    @classmethod
     def models(cls) -> list[dict[str, str]]:
         if cls._models is None:
             try:

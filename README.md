@@ -174,8 +174,9 @@ saves over a file that has content: auto-save skips it and ⌘S asks.
   ran last (the init event names the model); the input shows what the request runs on (`Claude Opus 5.5 High`).
 - **A file changed on disk while you edited it**: Reload from disk · Overwrite with mine · Save mine as a copy
   (`<name> (mine).md` beside it, opened next to the file).
-- **Plan usage** in the status bar: `Used  Claude ▬ 94% 12h 25m · 86% Fable  Codex ▬ 40% 5d 8h` (Claude from its
-  `/usage`, no model call; Codex from its last turn's rate limits; every 5 min, Refresh in the popover).
+- **Plan usage** in the status bar: `Used  Claude ▬ 94% 12h 25m · 86% Fable  Codex ▬ 40% 5d 8h  Antigravity ▬ 1% 6d
+  OpenAI $5.54` (Claude and Antigravity from their `/usage`, no model call; Codex from its last turn's rate limits;
+  every 5 min, Refresh in the popover; OpenAI: what Orbit's voice calls cost this month, or the balance left).
 - **Resume any other session**: ⌘O → Other sessions (or + in the Sessions panel → Resume another session…) lists
   everything that can be resumed and is not in the Sessions tab, newest first: closed unnamed Orbit sessions, and
   Claude Code and Codex conversations that are no Orbit session (a terminal, an IDE, anywhere), on every connected

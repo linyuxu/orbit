@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The status bar's usage: Antigravity (agy) too, from `agy -p /usage` (a local command: no model call, no
+  conversation): Gemini and Claude/GPT, each week and 5 h, the tightest on the bar; the popover lays out more than two
+  windows as a grid.
 - The status bar's usage: OpenAI (GPT Live voice) next to Claude and Codex: this month's cost, or, with a balance given
   in Settings → Voice, what is left (a bar of the share spent); its popover has calls, talking and standby minutes and
   the talking time left. Orbit's own calls only (`/api/live/usage`): an API key cannot read the account.

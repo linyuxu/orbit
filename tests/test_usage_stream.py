@@ -35,6 +35,32 @@ class UsageTest(unittest.TestCase):
         self.assertEqual(datetime.fromtimestamp(usage._resets_at("9am (UTC)", now)), datetime(2026, 11, 22, 9, 0))
         self.assertIsNone(usage._resets_at("whenever", now))
 
+    def test_agy_usage_lines(self):
+        """agy -p /usage (Antigravity): tab-separated windows, "Remaining" turned into used, the tightest first; a fake
+        agy stands in (exit 2: an API key, no account quota: not shown)."""
+        text = ("Gemini Models\tWeekly Limit Remaining\t99%\t2026-12-01T04:52:00Z\n"
+                "Gemini Models\tFive Hour Limit Remaining\t100%\t2026-11-24T21:29:19Z\n"
+                "Claude and GPT models\tWeekly Limit Remaining\t40%\t2026-12-01T16:29:19Z\n"
+                "Claude and GPT models\tFive Hour Limit Remaining\t0%\t2026-11-24T21:29:19Z\n\n")
+        lim = usage.parse_agy(text)
+        self.assertEqual([(x["label"], x["used"]) for x in lim],
+                         [("Claude/GPT 5h", 100.0), ("Claude/GPT wk", 60.0), ("Gemini wk", 1.0), ("Gemini 5h", 0.0)])
+        self.assertEqual(lim[2]["resets_at"], datetime.fromisoformat("2026-12-01T04:52:00+00:00").timestamp())
+        with tempfile.TemporaryDirectory() as d:
+            exe = Path(d) / "agy"
+            (Path(d) / "out.txt").write_text(text)
+            for body, want in ((f"cat '{d}/out.txt'", "limits"),
+                               ("echo 'needs an account' >&2; exit 2", "missing"), ("echo boom >&2; exit 1", "error")):
+                exe.write_text(f"#!/bin/sh\n[ \"$1 $2\" = \"-p /usage\" ] || exit 9\n{body}\n")
+                exe.chmod(0o755)
+                with mock.patch.dict(os.environ, {"ORBIT_AGY_USAGE_BIN": str(exe)}):
+                    u = usage.agy_usage()
+                self.assertEqual(u["label"], "Antigravity")
+                if want == "limits":
+                    self.assertEqual(len(u["limits"]), 4)
+                else:
+                    self.assertTrue(u.get(want), u)
+
     def test_codex_rate_limits(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp) / "sessions" / "2026" / "11" / "21"

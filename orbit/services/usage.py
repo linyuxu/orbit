@@ -3,7 +3,9 @@
 Claude Code: `claude -p /usage` prints the plan's windows ("Current week (all models): 94% used · resets Nov 22 at
 2am (…)"); it is a local command (no model call, no cost). Codex: every turn's token_count event carries
 `rate_limits` (primary / secondary windows: used_percent, window_minutes, resets_at, plan_type) in its rollout files;
-the newest one is read. agy reports nothing, nor does OpenCode (no plan of its own: each provider bills). A plugin's
+the newest one is read. agy (Antigravity): `agy -p /usage` prints its quota windows, one per line, tab-separated
+("Gemini Models · Weekly Limit Remaining · 99% · 2026-12-01T04:52:00Z"); a local command too (no model call, no
+conversation made). OpenCode reports nothing (no plan of its own: each provider bills). A plugin's
 agent answers `--usage` (Harness Protocol §3): its limits, and (plugin API 1.3) maybe a `quota` line ("8 USD left")
 the status bar shows after its meter.
 
@@ -128,6 +130,49 @@ def codex_usage() -> dict[str, Any]:
         return {"id": "codex", "label": "Codex", "plan": plan[:1].upper() + plan[1:], "limits": limits,
                 "asof": os.path.getmtime(f)}
     return {"id": "codex", "label": "Codex", "limits": [], "asof": time.time()}
+
+
+def parse_agy(text: str) -> list[dict[str, Any]]:
+    """agy's /usage lines → limits (used = 100 − remaining), the tightest first (the status bar shows the first)."""
+    limits = []
+    for line in (text or "").splitlines():
+        f = [x.strip() for x in line.split("\t")]
+        if len(f) < 3 or not f[2].endswith("%"):
+            continue
+        try:
+            left = float(f[2].rstrip("%"))
+        except ValueError:
+            continue
+        group = re.sub(r"\s*models?$", "", f[0], flags=re.I).replace(" and ", "/")
+        win = f[1].lower()
+        span = "wk" if "week" in win else "5h" if "five hour" in win or "5 hour" in win else re.sub(r"\s*limit.*$", "", f[1], flags=re.I)
+        at = None
+        if len(f) > 3 and f[3]:
+            try:
+                at = datetime.fromisoformat(f[3].replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                pass
+        used = 100.0 - left if "remaining" in win else left
+        limits.append({"label": f"{group} {span}", "window": f"{f[0]}: {f[1]}", "used": round(used, 1), "resets_at": at,
+                       "resets_text": ""})
+    limits.sort(key=lambda x: -x["used"])
+    return limits
+
+
+def agy_usage() -> dict[str, Any]:
+    exe = shlex.split(os.environ.get("ORBIT_AGY_USAGE_BIN") or os.environ.get("ORBIT_AGY_BIN") or "agy")
+    if not shutil.which(exe[0]) and not os.path.exists(exe[0]):
+        return {"id": "agy", "label": "Antigravity", "missing": True}
+    try:
+        r = subprocess.run(exe + ["-p", "/usage"], capture_output=True, text=True, timeout=60,
+                           stdin=subprocess.DEVNULL, cwd=str(Path.home()))
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return {"id": "agy", "label": "Antigravity", "error": str(e)[:200], "asof": time.time(), "limits": []}
+    limits = parse_agy(r.stdout)
+    if r.returncode != 0 and not limits:  # (2: an API key, which has no account quota)
+        return {"id": "agy", "label": "Antigravity", "missing": True} if r.returncode == 2 else \
+            {"id": "agy", "label": "Antigravity", "error": (r.stderr or r.stdout).strip()[:200], "asof": time.time(), "limits": []}
+    return {"id": "agy", "label": "Antigravity", "asof": time.time(), "limits": limits}
 
 
 class Usage:

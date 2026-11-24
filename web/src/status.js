@@ -115,13 +115,21 @@ function usagePop(keep = false) {
   pop.innerHTML = `<div class="uh"><b>Usage</b><span class="sub">· all harnesses</span><button class="btn sm" data-urefresh>Refresh</button></div>` +
     (hs.length ? hs.map(h => `<div class="ur"><div class="t"><b>${esc(h.label)}</b>${h.plan ? `<span class="plan">· ${esc(h.plan)}</span>` : ""}` +
       `<span class="rs">${h.limits && h.limits[0] && h.limits[0].resets_at ? "Resets in " + inFmt(h.limits[0].resets_at) : h.error ? esc(h.error) : ""}</span></div>` +
-      ((h.limits || []).map(x => `<span class="lim" title="${esc(x.window)}${x.resets_text ? " · resets " + esc(x.resets_text) : ""}"><span class="k">${esc(x.label)}</span>${ubar(x.used)}<span class="${heat(x.used)}">${Math.round(x.used)}%</span></span>`).join("") || (h.quota ? "" : `<span class="lim">no figures reported</span>`)) +
+      limRows(h) +
       (h.quota ? `<span class="lim uq">${esc(h.quota)}</span>` : "") +
       `</div>`).join("") : `<div class="ur">No harness reported its usage yet.</div>`) + voicePopRow() +
-    `<div class="foot">Claude: its /usage (no model call) · Codex: its last turn's rate limits${voiceUse() ? " · OpenAI: Orbit's own calls, by what GPT Live reported (an API key cannot read the account)" : ""}${USAGE.at ? " · checked " + ago(USAGE.at) : ""}</div>`;
+    `<div class="foot">Claude: its /usage (no model call) · Codex: its last turn's rate limits${(USAGE.harnesses || []).some(h => h.id === "agy") ? " · Antigravity: its /usage" : ""}${voiceUse() ? " · OpenAI: Orbit's own calls, by what GPT Live reported (an API key cannot read the account)" : ""}${USAGE.at ? " · checked " + ago(USAGE.at) : ""}</div>`;
   const r = $("#sb-usage").getBoundingClientRect(), k = rectScale();
   pop.style.left = Math.max(8, Math.min(innerWidth / S.zoom - 390, r.left / k)) + "px";
   pop.style.bottom = (innerHeight / S.zoom - r.top / k + 6) + "px";
+}
+/* A harness's windows in the popover: inline; more than two (Antigravity: two model groups × week and 5 h) in a grid,
+   each group's on its own row. */
+function limRows(h) {
+  const ls = h.limits || [];
+  if (!ls.length) return h.quota ? "" : `<span class="lim">no figures reported</span>`;
+  const one = x => `<span class="lim" title="${esc(x.window)}${x.resets_text ? " · resets " + esc(x.resets_text) : ""}${x.resets_at ? " · resets in " + inFmt(x.resets_at) : ""}"><span class="k">${esc(x.label)}</span>${ubar(x.used)}<span class="${heat(x.used)}">${Math.round(x.used)}%</span></span>`;
+  return ls.length > 2 ? `<div class="lims">${[...ls].sort((a, b) => a.label.localeCompare(b.label)).map(one).join("")}</div>` : ls.map(one).join("");
 }
 function voicePopRow() {
   const v = voiceUse(); if (!v) return "";
