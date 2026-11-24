@@ -19,7 +19,7 @@ import urllib.parse
 from pathlib import Path
 
 import test_skeleton
-from orbit import plugins
+from orbit import API_VERSION, plugins
 from orbit.machines.federation import wait_for
 from orbit.services import plugin_services, plugin_views
 
@@ -411,7 +411,8 @@ class ViewsTest(test_skeleton.SkeletonTest):
         self.assertIn("[service.b] files '../up/' ignored", o["error"])
         self.assertIn("the plugin has several services, say which one it asks", o["error"])
         self.assertNotIn("files", plugins.LOADED["other"]["service"]["a"])
-        self.assertEqual(self.req("GET", "/api/version")[1]["api"], "2.0")
+        self.assertEqual(self.req("GET", "/api/version")[1]["api"], f"{API_VERSION[0]}.{API_VERSION[1]}")
+        self.assertGreaterEqual(API_VERSION, (2, 0))
 
     def test_a_1x_plugin_still_loads_without_its_pages(self):
         d = plugin_dir(Path(self.tmp.name), "old1", '[plugin]\nname = "old1"\nrequires_api = ">=1.1,<2"\n'

@@ -1125,6 +1125,13 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     return self._json({"error": "Calendar.app is on macOS only"}, 400)
                 subprocess.Popen(["open", "-a", "Calendar"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return self._json({"ok": True})
+            if p == "/api/calendar/note":  # {event, create?}: a meeting's note (where the meeting_notes setting says)
+                return self._json(self.desk.meeting_note(b.get("event") or {}, bool(b.get("create"))))
+            if p == "/api/calendar/related":  # {event}: what the plugins' [meeting] related say (API 2.1)
+                from orbit import plugins
+                if self.from_remote:  # (it runs the plugins' commands)
+                    return self._json({"items": [], "local": False})
+                return self._json({"items": plugins.meeting_related(b.get("event") or {}), "local": True})
             if p == "/api/calendar/prep":  # a Fleet helper prepares the user for a meeting, into its note
                 return self._json(self.desk.meeting_prep(b.get("event") or {}, str(b.get("path", ""))))
             if p == "/api/attach-session" and b.get("machine"):  # another machine's conversation: resumed there

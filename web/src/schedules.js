@@ -207,7 +207,7 @@ function renderX() {
   if (xKind() === "schedules") renderSchedulesX(); else renderCalendarX();
 }
 function drawX(head, body, foot) {
-  if (typeof XNBOX !== "undefined" && XNBOX && $("#xbody").contains(XNBOX)) $("#xview").appendChild(XNBOX);  // kept, not redrawn
+  if (xKind() !== "calendar" && typeof calNoteHide === "function") calNoteHide();  // (the meeting note: the Calendar's)
   $("#xhead").innerHTML = head; $("#xbody").innerHTML = body; $("#xfoot").textContent = foot;
   const el = $("#xbody .xrow.kc"); if (el) el.scrollIntoView({ block: "nearest" });
 }
@@ -233,7 +233,7 @@ function xMove(how) {
 }
 function xMenu(where) {
   const r = XV.rows.find(x => x.k === XV.cur); if (!r) return;
-  where = where || { anchor: $("#xbody .xrow.kc") };
+  where = where || { anchor: $("#xbody .xrow.kc [data-cmore]") || $("#xbody .xrow.kc") };  // (a meeting: by its ⋯)
   if (r.it) scheduleMenu(r.it, where); else calMenu(r, where);
 }
 function xWeek(d) { XV.week = d === 0 ? 0 : XV.week + d; XV.cur = null; loadX(); }

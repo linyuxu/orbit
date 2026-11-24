@@ -3,8 +3,9 @@
 /* A main tab (⌘⌃C) or a side tab: today's and tomorrow's meetings (W: a week, paged), one 44px row each — the time,
    the organizer's initial, the title, `now` / `overlap`, "organizer · accepted/total", Join. Blocks (all day,
    declined, canceled, free, untitled, placeholders, your own) hide behind a per-day "N blocks". A meeting opens in
-   place (→, a click; several can be open): its people, the invitation, related sessions, Prep / Copy link; the open
-   meeting the cursor is on shows its note under it (calnote.js). The side pane stays free for a session. */
+   place (→, a click; several can be open): its people, the invitation, related sessions and what plugins relate to it
+   (API 2.1, [meeting] related), Prep / Copy link. The cursor's meeting's note is in a pane pinned under the list
+   (calnote.js). The side pane stays free for a session. */
 XV.span = LS.get("calSpan", "days");  // "days": today + tomorrow · "week": 7 days from the paged week's start
 XV.opened = new Set();                // meetings opened in place
 XV.blocks = new Set();                // days (their start) whose blocks are shown
@@ -49,6 +50,21 @@ function calRelated(ev) {
   if (!words.length) return [];
   return [...S.sessions.values()].filter(s => !s.fleet && !s.closed && words.some(w =>
     (s.name + " " + (s.last ? s.last.text : "")).toLowerCase().includes(w))).slice(0, 4);
+}
+/* What the plugins relate to a meeting (POST /api/calendar/related), asked once per meeting when it is opened. */
+const CAL_REL = new Map();  // calKey -> [{plugin, title, detail?, url?, path?}] (null: being asked)
+function calPluginRelated(ev) {
+  const k = calKey(ev);
+  if (!CAL_REL.has(k)) {
+    CAL_REL.set(k, null);
+    api("POST", "/api/calendar/related", { event: ev }).then(d => {
+      CAL_REL.set(k, d.items || []);
+      if (!(d.items || []).length || xKind() !== "calendar" || !XV.opened.has(k)) return;
+      renderX();
+      const box = XV.cur === k && $(`#xbody .mopen[data-for="${CSS.escape(k)}"]`); if (box) box.scrollIntoView({ block: "nearest" });
+    }).catch(() => CAL_REL.set(k, []));
+  }
+  return CAL_REL.get(k) || [];
 }
 function calLinkify(text) {
   return esc(text || "").replace(/https?:\/\/[^\s<>"')]+/g, u => `<a href="${u}" data-url="${u}">${u}</a>`);
@@ -112,7 +128,7 @@ function renderCalendarX() {
       return renderCalendarX();
     }
   }
-  drawX(head, body, "→ open · ⏎ its note · J join · ⌘E more");
+  drawX(head, body, "↑↓ move · → open · ⏎ write the note · P prep · J join · B blocks · ⌘E more");
   showCalNote();
 }
 /* An opened meeting: who (accepted: a green ring; declined: struck through), the invitation, related sessions, actions. */
@@ -120,20 +136,24 @@ function calOpenHtml(ev, k) {
   const guests = (ev.guests || (ev.people || []).map(name => ({ name, status: "" }))).filter(g => !g.me);
   const people = guests.length ? `<div class="mpeople">${guests.map(g => `<span class="mchip ${esc(g.status || "")}" title="${esc(g.name)}${g.status ? " · " + esc(g.status) : ""}">${calAvatar(g.name, " sm")}${esc(g.name)}</span>`).join("")}</div>` : "";
   const desc = (ev.notes || "").trim();
-  const rel = calRelated(ev);
+  const rel = calRelated(ev), prel = calPluginRelated(ev);
+  const relHtml = rel.map(s => `<span class="mses" data-ses="${esc(s.id)}" title="Open beside (the side pane)">${stateMark(s)}${esc(s.name)}</span>`).join("")
+    + prel.map((x, i) => `<span class="mses mprel" data-prel="${esc(k)}:${i}" title="${esc([x.detail, x.url || (x.path && tilde(x.path)), "from " + x.plugin].filter(Boolean).join(" · "))}">${I(x.url ? "external" : x.path ? "file" : "link", 12)}${esc(x.title)}</span>`).join("");
   return `<div class="mopen" data-for="${esc(k)}">` +
     `<div class="mline">${esc([dayLabel(ev.start), calRange(ev), ev.calendar, ev.location, ev.recurring ? "repeats" : ""].filter(Boolean).join(" · "))}</div>` +
     people +
     (desc ? `<details class="mdesc"><summary>Invitation</summary><div>${calLinkify(desc)}</div></details>` : "") +
-    (rel.length ? `<div class="mrel"><span class="ml">Related</span>${rel.map(s => `<span class="mses" data-ses="${esc(s.id)}" title="Open beside (the side pane)">${stateMark(s)}${esc(s.name)}</span>`).join("")}</div>` : "") +
+    (relHtml ? `<div class="mrel"><span class="ml">Related</span>${relHtml}</div>` : "") +
     `<div class="macts"><button class="btn sm" data-ma="prep" title="An agent prepares you, into the note (P)">Prep</button>` +
     `${ev.link ? `<button class="btn sm" data-ma="copy" title="Copy the meeting link (C)">Copy link</button>` : ""}</div></div>`;
 }
 const calRow = () => XV.rows.find(x => x.k === XV.cur);
 function calOpen(k, on = !XV.opened.has(k)) {
   if (on) XV.opened.add(k);
-  else { if (XN.editing && XN.open === k) leaveCalNote(false); XV.opened.delete(k); }
+  else XV.opened.delete(k);
   XV.cur = k; renderX();
+  const box = on && $(`#xbody .mopen[data-for="${CSS.escape(k)}"]`), row = $("#xbody .xrow.kc");  // what opened, in view
+  if (box) { box.scrollIntoView({ block: "nearest" }); if (row) row.scrollIntoView({ block: "nearest" }); }
 }
 function calCopyLink(ev) { if (ev.link) copyText(ev.link).then(() => toast("Copied the meeting link")); else toast("No meeting link in this event"); }
 function calSpan(span) { XV.span = span; LS.set("calSpan", span); XV.week = 0; XV.cur = null; loadX(); }
@@ -142,22 +162,37 @@ function calAttach(where) {
   menu(ss.length ? ss.map(s => ({ label: s.name, key: basename(s.cwd), run: () => openSide({ kind: "session", sid: s.id }, { focus: true }) }))
     : [{ label: "No session open", disabled: true }], where);
 }
+/* Quote to a session: the meeting (title, time, organizer) and its note, as a quote at the end of that session's input. */
+async function calQuote(ev, sid) {
+  let text = "";
+  try { const d = await api("POST", "/api/calendar/note", { event: ev }); text = d.exists ? d.text || "" : ""; } catch {}
+  const head = [`${ev.title || "(no title)"}`, `${dayLabel(ev.start)} ${calRange(ev)}`, ev.organizer ? `organizer ${ev.organizer}` : ""].filter(Boolean).join(" · ");
+  quoteTo({ text: text.trim() ? text : "(no note yet)", ref: `Meeting: ${head}` }, sid);
+}
+function calQuoteSub(ev) {
+  const ss = [...S.sessions.values()].filter(s => !s.fleet && !s.closed);
+  const first = S.current && ss.find(s => s.id === S.current);
+  const list = first ? [first, ...ss.filter(s => s !== first)] : ss;
+  return list.length ? list.map(s => ({ label: s.name, key: s === first ? "current" : basename(s.cwd), run: () => calQuote(ev, s.id) }))
+    : [{ label: "No session open", disabled: true }];
+}
 function calMenu(r, where) {
   const ev = r.ev, k = r.k;
   menu([
-    { label: "Open and write notes", key: "⏎", run: () => { XV.opened.add(k); XV.cur = k; renderX(); editCalNote(); } },
+    { label: "Write notes", key: "⏎", run: () => { XV.cur = k; renderX(); editCalNote(); } },
     { label: XV.opened.has(k) ? "Close" : "Open", key: XV.opened.has(k) ? "←" : "→", run: () => calOpen(k) },
     { label: "Open the note as a file", key: "N", run: () => meetingNote(ev) },
     { label: "Join", key: "J", disabled: !ev.link, run: () => openUrl(ev.link) },
     { label: "Copy link", key: "C", disabled: !ev.link, run: () => calCopyLink(ev) },
-    { label: "Prep: an agent prepares me, into the note", key: "P", run: () => { XV.opened.add(k); renderX(); prepMeeting(ev); } },
-    { label: "Refresh", key: "R", run: () => { S.calCache.clear(); loadX(true); } },
-  ], where);
+    { label: "Prep: an agent prepares me, into the note", key: "P", run: () => prepMeeting(ev) },
+    EMBED ? null : { label: "Quote to session", sub: () => calQuoteSub(ev) },
+    { label: "Refresh", key: "R", run: () => { S.calCache.clear(); CAL_REL.clear(); loadX(true); } },
+  ].filter(Boolean), where);
 }
 /* Keys in the Calendar (the list has the keyboard; the note's editor keeps its own). */
 function calKeyDown(combo) {
   const r = calRow();
-  if (combo === "KeyR") { S.calCache.clear(); loadX(true); return true; }
+  if (combo === "KeyR") { S.calCache.clear(); CAL_REL.clear(); loadX(true); return true; }
   if (combo === "KeyW") { calSpan(XV.span === "week" ? "days" : "week"); return true; }
   if (XV.span === "week" && (combo === "A:ArrowLeft" || combo === "A:ArrowRight")) { xWeek(combo === "A:ArrowLeft" ? -1 : 1); return true; }
   if (XV.span === "week" && combo === "KeyT") { xWeek(0); return true; }
@@ -167,8 +202,8 @@ function calKeyDown(combo) {
   if (combo === "ArrowRight") { calOpen(r.k, true); return true; }
   if (combo === "ArrowLeft") { calOpen(r.k, false); return true; }
   if (combo === "Space") { calOpen(r.k); return true; }
-  if (combo === "Enter") { XV.opened.add(r.k); renderX(); editCalNote(); return true; }
-  if (combo === "KeyP") { XV.opened.add(r.k); renderX(); prepMeeting(r.ev); return true; }
+  if (combo === "Enter") { editCalNote(); return true; }
+  if (combo === "KeyP") { prepMeeting(r.ev); return true; }
   if (combo === "KeyJ") { if (r.ev.link) openUrl(r.ev.link); else toast("No meeting link in this event"); return true; }
   if (combo === "KeyC") { calCopyLink(r.ev); return true; }
   if (combo === "KeyN") { meetingNote(r.ev); return true; }
@@ -184,6 +219,13 @@ $("#xview").addEventListener("click", e => {
   if (row && !t.closest("[data-join]")) { done(); calOpen(row.dataset.xk); $("#xbody").focus({ preventScroll: true }); return; }
   const join = t.closest("[data-join]"); if (join) { done(); const r = XV.rows.find(x => x.k === join.dataset.join); if (r) openUrl(r.ev.link); return; }
   const blk = t.closest("[data-blk]"); if (blk) { done(); const d = +blk.dataset.blk; if (XV.blocks.has(d)) XV.blocks.delete(d); else XV.blocks.add(d); renderX(); return; }
+  const pr = t.closest("[data-prel]");
+  if (pr) {
+    done();
+    const at = pr.dataset.prel.lastIndexOf(":"), x = (CAL_REL.get(pr.dataset.prel.slice(0, at)) || [])[+pr.dataset.prel.slice(at + 1)];
+    if (x && x.url) openUrl(x.url); else if (x && x.path) openFile(x.path); else if (x) toast(x.detail || x.title);
+    return;
+  }
   const ses = t.closest("[data-ses]"); if (ses) { done(); openSide({ kind: "session", sid: ses.dataset.ses }, { focus: true }); return; }
   const url = t.closest("[data-url]"); if (url) { done(); openUrl(url.dataset.url); return; }
   const act = t.closest("[data-ma]");

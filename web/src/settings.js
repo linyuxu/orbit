@@ -232,6 +232,20 @@ function settingsGeneral(pane, keys) {
   keys.push(dd);
   toggleSwitch(setRow(pane, "Calendar", "Read macOS Calendar (read-only): today's meetings in Misc and the status bar, ⌘⇧C to join."), {
     on: !!(S.settings && S.settings.calendar), label: "Calendar", onChange: on => setCalendar(on) });
+  const mn = setRow(pane, "Meeting notes", "Where a meeting's note is made: <code>{vault}/</code> (the notes) or <code>{data}/</code> (the data folder), then a path with <code>{date}</code> <code>{YYYY}</code> <code>{MM}</code> <code>{DD}</code> <code>{HH}</code> <code>{mm}</code> <code>{YYYYMM}</code> <code>{HHMM}</code> <code>{title}</code>, e.g. <code>{data}/calendar_notes/{YYYYMM}/{DD}_{HHMM}_{title}.md</code>. Enter saves.", { stack: true });
+  mn.innerHTML = `<input class="fin mnotes" spellcheck="false" autocomplete="off" style="width:100%">`;
+  const mi = mn.querySelector("input");
+  mi.value = mi.defaultValue = (S.settings && S.settings.meeting_notes) || "";
+  const saveMn = () => {
+    if (mi.value.trim() === mi.defaultValue) return;
+    api("POST", "/api/settings", { meeting_notes: mi.value.trim() }).then(st => {
+      S.settings = st; mi.value = mi.defaultValue = st.meeting_notes;
+      if (typeof XN !== "undefined") { XN.cache.clear(); XN.open = null; if (xKind() === "calendar") renderX(); }
+      toast("Meeting notes go to " + st.meeting_notes);
+    }).catch(e => toast(e.message));
+  };
+  mi.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); saveMn(); } });
+  mi.addEventListener("focusout", saveMn);
   const kb = setRow(pane, "Keyboard shortcuts", "Every key Orbit uses, searchable (⌘/).");
   kb.innerHTML = `<button type="button" class="btn sm" data-act="keys">Show all</button>`;
   kb.querySelector("button").addEventListener("click", () => { closeModal(); deskKey("M:Slash"); });

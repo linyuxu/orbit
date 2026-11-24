@@ -13,7 +13,7 @@ async function loadPluginUi() {
   bindPluginKeys();
   renderPluginStatus();
   if (S.left.tab.startsWith("p:") && !pluginSidebar(S.left.tab)) S.left.tab = "sessions";  // its plugin is gone
-  pviewsReloaded();  // (views whose plugin or kind changed are drawn again; the lists' counts fetched)
+  if (typeof pviewsReloaded === "function") pviewsReloaded();  // (views whose plugin or kind changed are drawn again; the lists' counts fetched)
   renderLeft(); renderTabs();
 }
 function renderPluginStatus() {

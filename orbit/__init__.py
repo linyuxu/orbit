@@ -17,4 +17,4 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent  # the repository: orbit/, web/, plugin/, cli/
 __version__ = "0.2.0"  # Orbit's version (CHANGELOG.md); pyproject, the app and the page read it from here
-API_VERSION = (2, 0)  # the plugin API (major, minor): a plugin's requires_api is checked against it
+API_VERSION = (2, 1)  # the plugin API (major, minor): a plugin's requires_api is checked against it

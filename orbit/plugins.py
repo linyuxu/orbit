@@ -27,6 +27,10 @@ listed by `plugin_paths` in `<state dir>/config.toml` (for working on a plugin i
     [people]                      # (API 1.2) who a name is: [cli] + args, stdin {"names": [...]} (people(), below)
     args = ["people"]
 
+    [meeting]                     # (API 2.1) the Calendar's meetings: [cli] + args, stdin {"event": {...}}
+    related = ["related"]         # what relates to a meeting (meeting_related(), below)
+    prep = ["prep"]               # context added to a meeting's Prep (meeting_context(), below)
+
     [[ui.sidebar]]                # (API 1.1) a left-panel tab; [[ui.panel]] the side pane; [[ui.tab]] a tab kind
     id = "inbox"
     title = "Inbox"
@@ -305,6 +309,16 @@ def read(folder: Path) -> dict[str, Any]:
         if not cli.get("command"):
             raise ValueError("[people] runs the plugin's [cli] command, which is missing")
         people = {"args": list(pargs)}
+    meeting = d.get("meeting")  # [meeting]: hooks on the Calendar's meetings (API 2.1), answered by [cli]
+    if meeting is not None:
+        if not isinstance(meeting, dict) or not set(meeting) <= {"related", "prep"} or not meeting:
+            raise ValueError("[meeting]: a table, related = [\"…\"] and/or prep = [\"…\"]")
+        for k, v in meeting.items():
+            if not isinstance(v, list) or not all(isinstance(a, str) for a in v):
+                raise ValueError(f"[meeting] {k}: a list of strings (the arguments of the plugin's [cli] command)")
+        if not cli.get("command"):
+            raise ValueError("[meeting] runs the plugin's [cli] command, which is missing")
+        meeting = {k: list(v) for k, v in meeting.items()}
     hint = " ".join(str((d.get("agent") or {}).get("hint") or "").split())
     if len(hint) > 300:
         raise ValueError("[agent] hint: one sentence (300 characters at most)")
@@ -312,7 +326,7 @@ def read(folder: Path) -> dict[str, Any]:
             "description": str(meta.get("description") or ""), "harness": d.get("harness") or {},
             "service": d.get("service") or {}, "secrets": list(sec), "cli": cli.get("command") or None, "hint": hint,
             "panels": panels, "actions": actions, "sidebars": sidebars, "tabs": tabs, "people": people,
-            "palette": palette, "messages": messages, "schemes": schemes, "warnings": warnings}
+            "meeting": meeting or {}, "palette": palette, "messages": messages, "schemes": schemes, "warnings": warnings}
 
 
 # ---------------------------------------------------------------------- native views (API 2.0)
@@ -695,7 +709,8 @@ def public() -> list[dict[str, Any]]:
         if m:
             have = get_secrets(e["name"])
             x.update(secrets=[{"key": k, "set": k in have} for k in m["secrets"]], cli=bool(m.get("cli")),
-                     hint=m.get("hint", ""), services=plugin_services.status(e["name"]), people=bool(m.get("people")))
+                     hint=m.get("hint", ""), services=plugin_services.status(e["name"]), people=bool(m.get("people")),
+                     meeting=sorted(m.get("meeting") or {}))
             if m.get("people") and e["name"] in PEOPLE_ERRORS:
                 x["people_error"] = PEOPLE_ERRORS[e["name"]]["error"]
             x["palette"] = [p["id"] for p in m.get("palette") or []]
@@ -739,7 +754,7 @@ def load(state: Path, extra: list[str] | None = None) -> list[dict[str, Any]]:
     taken: dict[str, str] = {}  # shortcut → who has it (the first plugin to claim one wins)
     for folder in folders(state, extra):
         entry: dict[str, Any] = {"name": folder.name, "path": str(folder), "version": "", "ok": False, "error": "",
-                                 "enabled": True, "harnesses": [], "services": [], "people": False}
+                                 "enabled": True, "harnesses": [], "services": [], "people": False, "meeting": []}
         try:
             m = read(folder)
             entry.update(name=m["name"], version=m["version"], description=m["description"])
@@ -770,7 +785,8 @@ def load(state: Path, extra: list[str] | None = None) -> list[dict[str, Any]]:
             TOKENS[kept.get(m["name"]) or "orbitp_" + _secrets.token_urlsafe(24)] = m["name"]
             for sid, spec in m["service"].items():
                 plugin_services.register(m["name"], sid, spec, folder)
-            entry.update(ok=True, harnesses=sorted(made), services=sorted(m["service"]), people=bool(m["people"]))
+            entry.update(ok=True, harnesses=sorted(made), services=sorted(m["service"]), people=bool(m["people"]),
+                         meeting=sorted(m["meeting"]))
             if m["warnings"]:  # (ignored, reported where a plugin's problems show; the plugin is loaded)
                 entry.update(error="; ".join(m["warnings"]), warnings=list(m["warnings"]))
         except (ValueError, OSError) as e:
@@ -1056,3 +1072,104 @@ def people(names: list[Any]) -> dict[str, dict[str, str]]:
         ev.wait(PEOPLE_TIMEOUT * (len(LOADED) + 1) * 4)
     with _people_lock:
         return {n: dict(x["v"]) for n in want if (x := _people.get(n)) and x["v"]}
+
+
+# ---------------------------------------------------------------------- meetings (API 2.1): hooks on the Calendar
+# A plugin with [meeting] is asked, through its [cli] command (the event as JSON on stdin), what relates to a meeting
+# (`related`: shown when the meeting is opened) and what its Prep should know (`prep`: added to the helper's prompt).
+# Every such plugin is asked at once, MEETING_TIMEOUT s at most; one that fails is left out and logged.
+MEETING_TIMEOUT = 8
+MEETING_ITEMS = 8  # related items per plugin
+MEETING_CONTEXT_MAX = 6000  # characters of context per plugin
+EVENT_KEYS = ("id", "title", "start", "end", "all_day", "organizer", "people", "guests", "attendees", "location",
+              "calendar", "notes", "link", "recurring")
+
+
+def meeting_event(e: Any) -> dict[str, Any]:
+    """What a plugin is told of a meeting: its plain fields (the invitation's text cut at 4000 characters)."""
+    if not isinstance(e, dict):
+        return {}
+    out = {k: e[k] for k in EVENT_KEYS if k in e and isinstance(e[k], (str, int, float, bool, list))}
+    if isinstance(out.get("notes"), str):
+        out["notes"] = out["notes"][:4000]
+    return out
+
+
+def _hook_log(name: str, hook: str, text: str) -> None:
+    if STATE is None:
+        return
+    try:
+        f = STATE / "logs" / "plugins" / f"{name}.meeting.log"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        if f.exists() and f.stat().st_size > 1_000_000:
+            os.replace(f, f.with_suffix(".log.1"))
+        with open(f, "a") as fh:
+            fh.write(f"--- orbit: {time.strftime('%Y-%m-%d %H:%M:%S')} [meeting] {hook}: {text}\n")
+    except OSError:
+        pass
+
+
+def _meeting_ask(name: str, hook: str, event: dict) -> dict | None:
+    """One plugin's answer to one hook: its JSON object, or None (logged) when it failed."""
+    try:
+        r = run_cli(name, LOADED[name]["meeting"][hook], json.dumps({"event": event}), timeout=MEETING_TIMEOUT)
+    except (KeyError, ValueError, OSError) as e:
+        r = {"code": 127, "stdout": "", "stderr": str(e)}
+    if r["code"] != 0:
+        tail = (r["stderr"] or r["stdout"]).strip().splitlines()[-1:] or [""]
+        _hook_log(name, hook, f"exited {r['code']}" + (f": {tail[0][:300]}" if tail[0] else ""))
+        return None
+    try:
+        d = json.loads(r["stdout"] or "")
+    except ValueError:
+        d = None
+    if not isinstance(d, dict):
+        _hook_log(name, hook, "its output is not a JSON object")
+        return None
+    return d
+
+
+def _meeting_all(hook: str, event: Any) -> list[tuple[str, dict]]:
+    names = [n for n, m in LOADED.items() if hook in (m.get("meeting") or {})]
+    if not names:
+        return []
+    ev = meeting_event(event)
+    with ThreadPoolExecutor(max_workers=min(4, len(names))) as pool:
+        got = list(pool.map(lambda n: _meeting_ask(n, hook, ev), names))
+    return [(n, d) for n, d in zip(names, got) if d is not None]
+
+
+def _text(v: Any, n: int) -> str:
+    return " ".join(v.split())[:n] if isinstance(v, str) else ""
+
+
+def meeting_related(event: Any) -> list[dict[str, str]]:
+    """What the plugins say relates to a meeting: [{"plugin", "title", "detail"?, "url"? (http/https), "path"?
+    (absolute)}], MEETING_ITEMS per plugin at most; an item without a title is left out."""
+    out = []
+    for name, d in _meeting_all("related", event):
+        items = d.get("items") if isinstance(d.get("items"), list) else []
+        for x in items[:MEETING_ITEMS]:
+            if not isinstance(x, dict) or not _text(x.get("title"), 200):
+                continue
+            it = {"plugin": name, "title": _text(x["title"], 200)}
+            if _text(x.get("detail"), 300):
+                it["detail"] = _text(x["detail"], 300)
+            u = x.get("url")
+            if isinstance(u, str) and re.match(r"https?://[^\s\"'<>]+$", u) and len(u) <= 4096:
+                it["url"] = u
+            pth = x.get("path")
+            if isinstance(pth, str) and pth.startswith("/") and len(pth) <= 1000 and "\n" not in pth:
+                it["path"] = pth
+            out.append(it)
+    return out
+
+
+def meeting_context(event: Any) -> list[dict[str, str]]:
+    """What the plugins add to a meeting's Prep: [{"plugin", "text"}] (Markdown, MEETING_CONTEXT_MAX characters each)."""
+    out = []
+    for name, d in _meeting_all("prep", event):
+        t = d.get("context")
+        if isinstance(t, str) and t.strip():
+            out.append({"plugin": name, "text": t.strip()[:MEETING_CONTEXT_MAX]})
+    return out

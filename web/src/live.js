@@ -70,8 +70,9 @@ function connect() {
     } else if (m.t === "plugin-doc") {
       pviewDocEvent(m);
     } else if (m.t === "settings") {
-      const was = !!S.settings.calendar;
+      const was = !!S.settings.calendar, notesWere = S.settings.meeting_notes;
       S.settings = m.settings;
+      if (notesWere !== S.settings.meeting_notes && typeof XN !== "undefined" && !XN.editing) { XN.cache.clear(); XN.open = null; if (xKind() === "calendar") renderX(); }
       if (was !== !!S.settings.calendar) { S.calCache.clear(); S.calToday = null; loadCalToday(); if (xOn()) loadX(); }
     } else if (m.t === "note_append") {
       noteAppended(m);

@@ -1,35 +1,20 @@
 "use strict";
 /* ===================================================================== the Calendar tab's meeting note */
-/* A meeting opens (a click, or ⏎) to show its note right under it (Meetings/<date> <title>.md in the vault), read-only;
-   ⏎ again edits it (the Markdown editor, autosaved), Esc stops editing, Esc again closes it. P asks a Fleet helper to
-   prepare you for the meeting: its brief is appended to the note (`## Prep · …`) without disturbing what you type.
-   The width stays the list's: the side pane beside the Calendar is free for a session. */
-const XN = { open: null, path: null, ev: null, editing: false, seq: 0, text: null, prepping: new Map() };
-const XNBOX = document.getElementById("xnote");  // one box, moved under the open meeting (an open editor goes with it)
+/* A pane pinned under the list (the list scrolls, the pane stays): the note of the meeting the cursor is on, read-only
+   while you move; ⏎ edits it (the Markdown editor, autosaved), Esc saves and goes back to the list. Where a note is
+   comes from the `meeting_notes` setting (the server: POST /api/calendar/note). P asks a Fleet helper to prepare you
+   for the meeting: its brief is appended to the note (`## Prep · …`) without disturbing what you type. Its top edge
+   drags its height. The width stays the list's: the side pane beside the Calendar is free for a session. */
+const XN = { open: null, path: null, ev: null, editing: false, seq: 0, text: null, timer: 0, cache: new Map(), prepping: new Map() };
+const XNBOX = document.getElementById("xnote");  // one box, under the list
 const xnote = () => XNBOX;
 const calNoteOn = () => xKind() === "calendar";
 const inCalNote = () => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest("#xnote"));
 
-function meetingNoteName(ev) {
-  const d = new Date(ev.start * 1000);
-  const ymd = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-  const title = (ev.title || "Meeting").replace(/[\/\\:*?"<>|#^\[\]]+/g, " ").replace(/\s+/g, " ").trim() || "Meeting";
-  return `Meetings/${ymd} ${title}`;
-}
-const meetingNotePath = ev => S.vault ? `${S.vault}/${meetingNoteName(ev)}.md` : null;
-/* The meeting's note, made once from the event (a header: when, where, who, the link; then ## Notes). */
+/* The meeting's note, made once from the event (the server writes its header: when, where, who, the link; ## Notes). */
 async function ensureMeetingNote(ev) {
-  const r = await api("POST", "/api/notes/create", { name: meetingNoteName(ev) });
-  if (r.created) {
-    const where = [ev.calendar, ev.location].filter(Boolean).join(" · ");
-    const lines = [`# ${ev.title || "Meeting"}`, "", `- **When** ${dayLabel(ev.start)} ${eventWhen(ev)}${where ? " · " + where : ""}`];
-    if (ev.organizer) lines.push(`- **Organizer** ${ev.organizer}`);
-    if (ev.people && ev.people.length) lines.push(`- **With** ${ev.people.join(", ")}`);
-    else if (ev.attendees) lines.push(`- **With** ${ev.attendees} people`);
-    if (ev.link) lines.push(`- **Join** ${ev.link}`);
-    lines.push("", "## Notes", "", "");
-    await api("POST", "/api/file", { path: r.path, text: lines.join("\n"), force: true });
-  }
+  const r = await api("POST", "/api/calendar/note", { event: ev, create: true });
+  XN.cache.set(calKey(ev), { path: r.path, text: r.text || "" });
   return r.path;
 }
 /* P (or Prep in a menu): a Fleet helper prepares you; its brief lands in the note. */
@@ -41,45 +26,55 @@ async function prepMeeting(ev) {
     XN.prepping.set(path, r.session.name);
     if (!EMBED) openSide({ kind: "session", sid: r.session.id }, { focus: false });  // the helper at work, beside
     toast(`${r.session.name} is preparing “${ev.title || "the meeting"}”: the brief goes into its note`);
-    if (calNoteOn() && XN.path === path) drawCalNote();
+    if (calNoteOn() && XN.open === calKey(ev)) { XN.path = path; if (XN.text == null) XN.text = (XN.cache.get(calKey(ev)) || {}).text || ""; drawCalNote(); }
   } catch (e) { toast(e.message); }
 }
 
-/* The note shows under the opened meeting the cursor is on (it follows the cursor among the opened ones). */
-const calNoteKey = () => XV.opened && XV.opened.has(XV.cur) ? XV.cur : null;
-function calNoteEvent() { const r = XV.rows.find(x => x.k === calNoteKey()); return r && r.ev ? r.ev : null; }
-/* After the list is drawn: the open meeting's note goes under its row (its box keeps an editor that is open). */
+/* The pane shows the cursor's meeting; hidden in Schedules, with no meeting, or with the Calendar off. */
+function calNoteEvent() { const r = XV.rows.find(x => x.k === XN.open); return r && r.ev ? r.ev : null; }
+function calNoteHide() {
+  const box = xnote(); if (!box) return;
+  if (XN.editing) leaveCalNote(false);
+  box.hidden = true; XN.open = null;
+  $("#xview").classList.remove("xpin");
+}
+/* After the list is drawn: the cursor's meeting's note (fetched after a short pause while the cursor moves). */
 async function showCalNote() {
   const box = xnote();
-  if (!calNoteOn() || !box) return;
-  XN.open = calNoteKey();
-  const ev = calNoteEvent(), row = ev && ($(`#xbody .mopen[data-for="${CSS.escape(XN.open)}"]`) || $(`#xbody .xrow[data-xk="${CSS.escape(XN.open)}"]`));
-  box.hidden = !row;
-  if (!row) { if (XN.editing) leaveCalNote(false); $("#xview").appendChild(box); return; }
-  row.after(box);
-  const path = meetingNotePath(ev);
-  if (XN.editing && XN.path === path) return;  // being edited: leave it be
+  if (!box) return;
+  const r = calNoteOn() && XV.rows.find(x => x.k === XV.cur), ev = r && r.ev;
+  if (!ev) return calNoteHide();
+  box.hidden = false;
+  $("#xview").classList.add("xpin");
+  if (!box.style.height) { const h = LS.get("calNoteH", 0); if (h) box.style.height = h + "px"; }
+  if (XN.open === r.k) { XN.ev = ev; return; }  // the same meeting: as it is (an editor stays open)
   if (XN.editing) await leaveCalNote(false);
-  if (XN.path === path && XN.text != null) return drawCalNote();
-  XN.path = path; XN.ev = ev; XN.text = null;
+  const hit = XN.cache.get(r.k);
+  XN.open = r.k; XN.ev = ev; XN.path = hit ? hit.path : null; XN.text = hit ? hit.text : null;
+  drawCalNote();
   const my = ++XN.seq;
-  drawCalNote();
-  let text = "";
-  try { text = (await api("GET", "/api/file?path=" + encodeURIComponent(path))).text || ""; } catch { text = ""; }
-  if (my !== XN.seq) return;
-  XN.text = text;
-  drawCalNote();
+  clearTimeout(XN.timer);
+  XN.timer = setTimeout(async () => {
+    let d;
+    try { d = await api("POST", "/api/calendar/note", { event: ev }); } catch (e) { d = { error: e.message }; }
+    if (my !== XN.seq || XN.editing) return;
+    if (d.error) { XN.text = null; XN.err = d.error; }
+    else { XN.err = null; XN.path = d.path; XN.text = d.exists ? d.text || "" : ""; XN.cache.set(r.k, { path: d.path, text: XN.text }); }
+    drawCalNote();
+  }, hit ? 250 : 90);
 }
 function drawCalNote() {
   const box = xnote(), ev = XN.ev;
   if (!box || !ev) return;
-  const prep = XN.prepping.get(XN.path);
-  const head = `<div class="xnhead">` +
-    `<span class="s">${prep ? `${esc(prep)} is preparing…` : XN.editing ? "Notes · editing, autosaved · Esc: back to the list" : "Notes · ⏎ to write"}</span>` +
+  const prep = XN.path && XN.prepping.get(XN.path);
+  const what = `<b>${esc(ev.title || "(no title)")}</b> · ${esc(calRange(ev))}`;
+  const head = `<div class="xngrip" title="Drag: the pane's height"></div><div class="xnhead">` +
+    `<span class="s">${what} · ${prep ? `${esc(prep)} is preparing…` : XN.editing ? "editing, autosaved · Esc: back to the list" : "⏎ to write"}</span>` +
     `<span class="acts"><button class="btn sm" data-xn="edit" title="Edit the note (⏎)">${XN.editing ? "Done" : "Edit"}</button>` +
     `<button class="btn sm" data-xn="tab" title="Open the note as a file tab (N)">Open as file</button></span></div>`;
-  if (XN.editing) { const h = box.querySelector(".xnhead"); if (h) h.outerHTML = head; box.querySelector(".xnbody").classList.add("editing"); return; }
-  const body = XN.text == null ? `<div class="xnempty">Loading…</div>`
+  if (XN.editing) { const h = box.querySelector(".xnhead"); if (h) h.outerHTML = head.replace(/^<div class="xngrip"[^>]*><\/div>/, ""); box.querySelector(".xnbody").classList.add("editing"); return; }
+  const body = XN.err ? `<div class="xnempty">${esc(XN.err)}</div>`
+    : XN.text == null ? `<div class="xnempty">Loading…</div>`
     : XN.text.trim() ? `<div class="xnview md">${renderMd(XN.text)}</div>`
     : `<div class="xnempty">No note yet. ⏎ starts one (when, who, the link) · P has an agent prepare you, into the note.</div>`;
   box.innerHTML = head + `<div class="xnbody">${body}</div>`;
@@ -121,12 +116,14 @@ async function leaveCalNote(focusList = true) {
     XN.text = ed.ed ? ed.ed.getDoc() : XN.text;
     disposeEditor(path);
   }
+  if (XN.open && path) XN.cache.set(XN.open, { path, text: XN.text || "" });
   drawCalNote();
   if (focusList) $("#xbody").focus({ preventScroll: true });
 }
 /* The agent's brief arrived (or any append to a note): an open editor takes it at the end, where you are stays. */
 function noteAppended(m) {
   XN.prepping.delete(m.path);
+  for (const [k, c] of XN.cache) if (c.path === m.path) XN.cache.set(k, { ...c, text: (c.text || "") + m.text });
   const ed = EDITORS.get(m.path);
   if (ed && ed.ed) {
     const v = ed.ed.view, end = v.state.doc.length;
@@ -136,7 +133,7 @@ function noteAppended(m) {
     resyncNote(m.path);
   }
   if (calNoteOn() && XN.path === m.path) {
-    if (!XN.editing) { XN.text = (XN.text || "") + m.text; }
+    if (!XN.editing) { XN.text = (XN.cache.get(XN.open) || {}).text ?? (XN.text || "") + m.text; }
     drawCalNote();
   }
 }
@@ -167,4 +164,13 @@ function prepFailed(m) {
     else if (b.dataset.xn === "tab") meetingNote(ev);
   });
   xnote().addEventListener("dblclick", e => { if (!XN.editing && e.target.closest(".xnbody")) editCalNote(); });
+  xnote().addEventListener("pointerdown", e => {  // its top edge: the pane's height (kept on this screen)
+    if (!e.target.closest(".xngrip")) return;
+    e.preventDefault();
+    const box = xnote(), y0 = e.clientY, h0 = box.getBoundingClientRect().height, k = rectScale();
+    const max = () => $("#xview").getBoundingClientRect().height / k - 140;
+    const move = ev => { box.style.height = Math.round(Math.max(120, Math.min(max(), h0 / k + (y0 - ev.clientY) / k))) + "px"; };
+    const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); LS.set("calNoteH", parseInt(box.style.height) || 0); };
+    addEventListener("pointermove", move); addEventListener("pointerup", up);
+  });
 }

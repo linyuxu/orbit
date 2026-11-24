@@ -362,6 +362,9 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
                 raise ValueError(f"open_in is one of {', '.join(OPEN_IN)}")
             if k.startswith("live_"):
                 live_config.check(k, v)
+            if k == "meeting_notes":
+                from orbit.desk.meetings import check_note_pattern
+                b[k] = check_note_pattern(v)
         if "live_budget" in b:
             b["live_budget_at"] = time.time()  # (the balance as of now: calls from here on count down from it)
         with self.lock:

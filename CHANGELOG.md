@@ -8,6 +8,16 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The Calendar (request #27): the cursor's meeting's note is a pane pinned under the list (the list scrolls, the
+  pane stays; its top edge drags its height): read-only while you move, ⏎ edits it (autosaved), Esc back to the list.
+  Where a note is made is a setting, `meeting_notes` (Settings → General): `{vault}/` or `{data}/`, then a path with
+  `{date}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{YYYYMM}` `{HHMM}` `{title}`; the server makes it
+  (`POST /api/calendar/note`). A meeting's menu (⌘E, right-click) has **Quote to session ▸**: its title, time,
+  organizer and note as a quote in that session's input. ⏎ and P no longer open the meeting in place.
+- **Plugin API 2.1** (added): `[meeting]`, hooks on the Calendar's meetings: `related` (items shown when a meeting is
+  opened: a link or a file; `POST /api/calendar/related`) and `prep` (context added to its Prep prompt)
+  ([builddoc/plugins.md](builddoc/plugins.md) §5 Meetings).
+- Fixed: a page load could fail with `pviewsReloaded is not defined` (plugins.js ran before pviews.js loaded).
 - The left panel's background (light theme) is #f4f4f2, a quiet light grey, instead of #f5f4ef's warm paper.
 - "Sessions" is "Groups" now (the left panel's tab on the Mac, the phone's first tab): a group holds its sessions and
   its other tabs. Under its sessions each group lists its file tabs (files, notes, plugin views, Schedules, Calendar),

@@ -19,6 +19,7 @@ them over stdin/stdout or HTTP; nothing of the plugin runs inside Orbit's proces
 | **main tabs of its own kinds** | `[[ui.tab]]` | real tabs: ⌘W, history, a session beside, kept across reloads (§5, 1.1) |
 | **notifications** | `POST …/notify` | the bell and a macOS notification; a click opens its tab (§5, 1.1) |
 | **people** (who a name is: an avatar, a handle) | `[people]` | asks its command about the names it shows (the Calendar's people), caches the answers (§5, 1.2) |
+| **meetings** (what relates to one; what its Prep should know) | `[meeting]` | asks its command when a meeting is opened in the Calendar, and adds its context to the Prep prompt (§5, 2.1) |
 | **shortcuts** (a key for its tab or panel) | `shortcut` on `[[ui.sidebar]]` / `[[ui.panel]]` | binds it wherever the keyboard is; shows it in the tooltip, the More menu and ⌘/ (§5, 1.3) |
 | **a ⌘O tab** (threads, tickets, commands) | `[[ui.palette]]` | keeps the items it pushes (or a command refreshes), filters them in the page; a live search goes to its running service (§5, 1.3) |
 | **its agent's conversations** to resume | the source `conversations` | Resume another session lists them with Claude Code's and Codex's, without running anything (§5, 1.3) |
@@ -94,6 +95,10 @@ args = ["share"]
 
 [people]                         # (1.2) who a name is: runs [cli] with these args (§5)
 args = ["people"]
+
+[meeting]                        # (2.1) hooks on the Calendar's meetings: runs [cli] with these args (§5)
+related = ["meeting-related"]    # what relates to a meeting (shown when it is opened)
+prep = ["meeting-prep"]          # context added to its Prep
 
 [[ui.palette]]                   # (1.3) a tab in ⌘O: items the bridge pushes; typing also asks it (§5 Item sources)
 id = "slack"
@@ -529,6 +534,44 @@ most for names not yet cached): ask in the background and draw initials meanwhil
 `examples/hello/` has a toy one that works offline: any name gets its initials on a colour derived from the name (a
 `data:image/svg+xml` URI) and its first name, lower-cased, as a handle.
 
+### Meetings (2.1)
+
+A meeting opened in the Calendar lists its people, the invitation and the Orbit sessions whose names share a word with
+its title; Prep (P) has a helper agent write a brief into the meeting's note. A plugin can add to both (a ticket
+tracker: the tickets the meeting is about; a CRM: the account's last notes):
+
+```toml
+[meeting]                       # needs a [cli]; either key or both
+related = ["meeting-related"]   # the [cli] command is run with these arguments
+prep = ["meeting-prep"]
+```
+
+**The call.** Orbit runs the plugin's `[cli]` command with those arguments (its environment and secrets, §3), the
+meeting as JSON on stdin, 8 s for an answer; every such plugin is asked at once. The event has the Calendar's fields:
+`id`, `title`, `start`, `end` (epoch seconds), `all_day`, `organizer`, `people`, `guests` ([{`name`, `status`,
+`me`}]), `attendees`, `location`, `calendar`, `notes` (the invitation, 4000 characters at most), `link`, `recurring`.
+
+```
+stdin   {"event": {"title": "Design review", "start": 1795530600, …}}
+related {"items": [{"title": "ORB-12 Ship v2", "url": "https://…", "detail": "in progress"}, {"title": "Spec", "path": "/Users/…/spec.md"}]}
+prep    {"context": "Markdown: what the helper should know"}
+```
+
+| `related` item field | |
+|---|---|
+| `title` | required, 200 characters at most (an item without one is left out) |
+| `detail` | optional, 300 characters (the tooltip) |
+| `url` | optional, `http:` or `https:`: a click opens it |
+| `path` | optional, absolute: a click opens the file in Orbit |
+
+Eight items per plugin at most. `prep`'s `context` (6000 characters at most) is added to the helper's prompt under
+"From <plugin>". A plugin that exits non-zero, is late or prints anything but a JSON object is left out; the error goes
+to `~/.orbit/logs/plugins/<plugin>.meeting.log`. `/api/plugins` lists a plugin's hooks as `meeting` (`["prep",
+"related"]`).
+
+**The route** (this machine only: from another machine it answers `{"items": [], "local": false}`):
+`POST /api/calendar/related` `{"event": {…}}` → `{"items": [{"plugin", "title", "detail"?, "url"?, "path"?}]}`.
+
 ## 6. Versions
 
 | API | Added |
@@ -538,6 +581,7 @@ most for names not yet cached): ask in the background and draw initials meanwhil
 | 1.2 | `[people]` (who a name is: avatars and handles for the Calendar), `/api/people` |
 | 1.3 | `shortcut` on `[[ui.sidebar]]` and `[[ui.panel]]`; a harness's `quota` in `--usage` (the status bar, [harness-protocol.md](harness-protocol.md) §3); `[[ui.palette]]` item sources (pushed, or refreshed by a command) and the live search through a service (`$ORBIT_SERVICE_PORT`, `/orbit/search`); `/api/palette`, `…/items/{source}`; the `conversations` source; `--list-conversations` in the background |
 | 2.0 | **Changed**: no iframes. `path` pages, the page bridge (`plugin-bridge.js`, postMessage) and the serving of a plugin's `ui/` folder are gone (an entry with `path` is ignored with an error; a plugin needing 1.x still loads). **Added**: views Orbit draws: `view = "thread"` (pushed, fetched from `/orbit/thread`, replies to `/orbit/send`), `"list"` (an item source), `"doc"`; `[[ui.message.menu]]`, `schemes`, a service's `files` and the `svc:` proxy; items' `unread`, `group`, `open`; `…/threads/…`, `…/docs/…`, `plugin-thread`, `plugin-doc` |
+| 2.1 | `[meeting]` (`related`, `prep`: hooks on the Calendar's meetings), `POST /api/calendar/related` |
 
 
 `requires_api` is checked against `orbit.API_VERSION` (`orbit --version`). A minor version adds (old plugins keep

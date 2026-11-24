@@ -69,14 +69,19 @@
 .cmtv .tx { flex:1; white-space:pre-wrap; }
 .rvnote { color:var(--ink-3); padding:10px; font-size:calc(12px * var(--ui-k)); }
 
-/* The Calendar tab's meeting note, under the list (calnote.js) */
-#xnote { margin:2px 10px 12px 96px; border:1px solid var(--line); border-radius:var(--r-m); background:var(--surface);
-  overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04); }  /* under the meeting it belongs to (calnote.js) */
-.xnhead { display:flex; align-items:center; gap:10px; padding:6px 8px 6px 14px; border-bottom:1px solid var(--line); font-size:calc(12px * var(--ui-k)); }
+/* The Calendar tab's meeting note: a pane pinned under the list (calnote.js); the list scrolls above it */
+#xview.xpin #xbody { padding-bottom:16px; }  /* (no 30vh to scroll the last row up: the pane is below, not over it) */
+#xnote { position:relative; flex:none; height:clamp(150px, 38%, 460px); display:flex; flex-direction:column;
+  margin:0 max(8px, calc((100% - 900px) / 2)) 8px; border:1px solid var(--line); border-radius:var(--r-m);
+  background:var(--surface); overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+#xnote[hidden] { display:none; }
+.xngrip { position:absolute; left:0; right:0; top:0; height:5px; cursor:ns-resize; z-index:2; }
+.xnhead { flex:none; display:flex; align-items:center; gap:10px; padding:6px 8px 6px 14px; border-bottom:1px solid var(--line); font-size:calc(12px * var(--ui-k)); }
 .xnhead .s { color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.xnhead .s b { color:var(--ink-2); font-weight:calc(600 + var(--wd)); }
 .xnhead .acts { margin-left:auto; display:flex; gap:6px; flex:none; }
-.xnbody { position:relative; max-height:min(60vh, 640px); overflow:auto; }
-.xnbody.editing { height:min(50vh, 460px); max-height:none; overflow:hidden; resize:vertical; }  /* drag its corner */
+.xnbody { position:relative; flex:1; min-height:0; overflow:auto; }
+.xnbody.editing { overflow:hidden; }
 .xnbody > .host { position:absolute; inset:0; }
 .xnview { padding:10px 16px 16px; font-size:calc(13px * var(--ui-k)); }
 .xnempty { padding:12px 14px; color:var(--ink-3); font-size:calc(12px * var(--ui-k)); }
@@ -127,7 +132,6 @@
 .mses { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:6px; background:var(--hover); cursor:pointer; }
 .mses:hover { background:var(--sel); }
 .macts { display:flex; gap:6px; }
-#xnote { margin-left:138px; }
 /* the status bar's meeting: a countdown chip */
 .mchipc { margin-left:6px; font-size:calc(10.5px * var(--ui-k)); padding:0 5px; border-radius:8px; background:var(--hover); color:var(--ink-2); }
 .mchipc.soon { background:var(--run-soft); color:var(--warn); font-weight:calc(600 + var(--wd)); }
