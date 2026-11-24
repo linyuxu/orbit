@@ -75,7 +75,20 @@ function renderSide() {
     const a = tabs.querySelector(".stab.active"); if (a) a.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
   $("#revbadge").classList.toggle("on", !!sp && sp.kind === "review");
+  const peek = $("#sidepeek"), off = !!e && !!e.hidden;  // hidden side tabs: a handle at the right edge brings them back
+  peek.hidden = !off;
+  if (off) { peek.innerHTML = `${I("panel", 13)}<span>${e.list.length}</span>`; peek.title = `Show the side panel: ${e.list.map(sideTitle).join(", ")} (⌘\\)`; }
   applySideWidth();
+}
+/* Hide the side panel (its tabs are kept) or show it again (⌘\, the panel's –, the handle at the right edge). */
+function toggleSidePanel() {
+  if (EMBED) return;
+  const e = sideEntry();
+  if (!e) { toast("No side tabs here: ⌘⌃O opens one beside"); return; }
+  const wasFocused = sideFocused();
+  e.hidden = !e.hidden;
+  renderSide(); renderReviewBadge(); saveUi();
+  if (wasFocused) focusMain();
 }
 /* Open a side tab in the current main tab, or in the main tab `key` (an agent's page goes with its session's tab);
    or show it again if that tab has it already. */
@@ -83,6 +96,7 @@ function openSide(spec, { focus = true, key = sideKey() } = {}) {
   if (EMBED) { window.parent.postMessage({ orbit: "open-side", spec }, location.origin); return; }
   if (key !== sideKey()) focus = false;
   const e = S.sides[key] = sideEntry(key) || { list: [], i: 0 };
+  e.hidden = false;  // (a new or shown again side tab: the panel shows)
   const k = e.list.findIndex(x => sameSide(x, spec));
   if (k >= 0) {
     const old = e.list[k], fr = FRAMES.get(old.id);
@@ -101,7 +115,7 @@ function openSide(spec, { focus = true, key = sideKey() } = {}) {
 function showSideAt(k, { focus } = {}) {
   const e = sideEntry(); if (!e) return;
   const wasFocused = sideFocused();
-  e.i = k;
+  e.i = k; e.hidden = false;
   renderSide(); renderReviewBadge(); saveUi();
   if (focus ?? wasFocused) focusSide();
 }
@@ -167,6 +181,9 @@ function toggleReview() {  // ⌘⇧I
   if (!root && !(sideEntry() || { list: [] }).list.some(x => x.kind === "review")) { toast("Open a session: ± Review shows its folder's uncommitted changes"); return; }
   toggleSideOf("review", { kind: "review", root, sid: S.current });
 }
+$("#sidehide").innerHTML = I("panel", 12);
+$("#sidehide").addEventListener("click", toggleSidePanel);
+$("#sidepeek").addEventListener("click", toggleSidePanel);
 $("#sideclose").innerHTML = I("x", 12);
 $("#sideclose").addEventListener("click", () => closeSide());
 $("#sidefocus").innerHTML = I("swap", 12);

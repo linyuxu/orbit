@@ -101,6 +101,7 @@ function tabMenu(sid = S.current, where) {
     EMBED ? null : { label: "Side tab", sub: () => [
       { label: "Open this session in the side tab", run: () => openSide({ kind: "session", sid }) },
       { label: "± Review of its folder", key: "⌘⇧I", run: () => openSide({ kind: "review", root: s.cwd, sid }) },
+      { label: S.side || !sideEntry() ? "Hide the side panel" : "Show the side panel", key: "⌘\\", disabled: !sideEntry(), run: toggleSidePanel },
       { label: "Close the side tab", disabled: !S.side, run: () => closeSide() },
     ] },
     { label: "Session", sub: () => [
@@ -179,6 +180,7 @@ function moreItems() {
     { label: "Schedules in the side pane", run: () => toggleSideKind("schedules") },
     { label: "Calendar", key: "⌘⌃C", run: () => toggleView("orbit:calendar") },
     { label: "Calendar in the side pane", run: () => toggleSideKind("calendar") },
+    EMBED ? null : { label: S.side || !sideEntry() ? "Hide the side panel" : "Show the side panel", key: "⌘\\", disabled: !sideEntry(), run: toggleSidePanel },
     { label: "Reload UI", key: "⌘⇧R", run: reloadUi },
     HOSTING && HOSTING.mode === "hosted" ? { label: "Restart Harness Server…", run: restartHarnessServer } : null,
     { label: "Reset panel sizes", run: resetPanels },
@@ -261,6 +263,7 @@ const SHORTCUTS = [
     ["⌘J", "Shell in the session's folder (three-state toggle); Esc Esc back to the input", "M:KeyJ", toggleShell],
     ["⌃X 1", "Close every panel beside the main one"],
     ["⌘⇧O", "Keyboard: main panel ⇄ side tab", "MS:KeyO", toggleSideFocus],
+    ["⌘\\", "Hide the side panel (its tabs are kept), or show it again", "M:Backslash", toggleSidePanel],
     ["⌥⇧[ ⌥⇧]", "Previous / next side tab of this tab (from the main page or the side pane); in the left panel's Sessions tab: the machine filter (All · This Mac · each machine)", ["AS:BracketLeft", "AS:BracketRight"], [() => cycleSide(-1), () => cycleSide(1)]],
     ["⌃⌥H ⌃⌥L · ⌃⌥K ⌃⌥J", "Move the focused panel's edge", ["CA:KeyH", "CA:KeyL", "CA:KeyK", "CA:KeyJ"], [() => nudgeSplit(-24), () => nudgeSplit(24), () => nudgeShell(24), () => nudgeShell(-24)]],
     ["⌘T", "The agent's own terminal (a harness that has one: Harness Protocol 1.1); three-state like ⌘J", "M:KeyT", toggleTerminal],

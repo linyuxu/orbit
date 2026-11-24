@@ -101,10 +101,12 @@ try { if (window.top === window && matchMedia("(pointer: coarse) and (max-width:
       <div class="vsplit" id="ssplit" hidden title="Drag to resize (⌃⌥H ⌃⌥L)"></div>
       <section id="side" hidden>
         <div class="shead"><div id="sidetabs" role="tablist"></div>
+          <button class="ibtn sm" id="sidehide" title="Hide the side panel: its tabs are kept (⌘\)"></button>
           <button class="ibtn sm" id="sidefocus" title="Keyboard: main ⇄ side tab (⌘⇧O)"></button>
           <button class="ibtn sm" id="sideclose" title="Close the side tab (⌘W there)"></button></div>
         <div id="sideframes"></div>
       </section>
+      <button id="sidepeek" hidden></button>
     </main>
   <button id="quotebtn" title="Quote the selection into the input (⌘E: more)"></button>
     <div class="hsplit" id="hsplit" hidden title="Drag to resize (⌃⌥K ⌃⌥J)"></div>

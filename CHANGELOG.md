@@ -8,6 +8,8 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The side panel can be hidden and shown again, its tabs kept: ⌘\\, the panel's ◫ button, the session's menu → Side
+  tab, or ⋯; hidden, a handle at the right edge (◫ and the number of tabs) brings it back. Kept per tab, across reloads.
 - `orbit-agent show` / `open --side`: the side tab goes with the session that asked (its tab's side tabs), not the tab
   in front; from another tab a toast offers to go there. The events carry `sid`.
 - The status bar's usage: Antigravity (agy) too, from `agy -p /usage` (a local command: no model call, no

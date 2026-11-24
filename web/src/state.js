@@ -45,7 +45,7 @@ const S = {
 };
 const cur = () => S.sessions.get(S.current);
 /* The side tab the pane shows: the current main tab's chosen one ({kind, sid?, path?, root?, url?, id}) or null. */
-Object.defineProperty(S, "side", { get() { const e = sideEntry(); return e && e.list[e.i] || null; } });
+Object.defineProperty(S, "side", { get() { const e = sideEntry(); return e && !e.hidden && e.list[e.i] || null; } });  // (hidden: kept, not shown)
 const harnessLabel = id => (S.harnesses.find(h => h.id === id) || { label: id }).label;
 const ACTIVE = new Set(["thinking", "running"]);
 const groupName = gid => gid === FAV ? "Favorites" : (S.groups.find(g => g.id === gid) || { name: "?" }).name;

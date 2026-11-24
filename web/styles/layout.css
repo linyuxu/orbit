@@ -87,6 +87,12 @@ body.app #titlebar { --bar:max(calc(30px * var(--ui-k)), calc(max(32px, 38px * v
 #term .xterm { height:100%; }
 #term .xterm-viewport { background:transparent !important; }
 #pane { flex:1; min-width:48px; min-height:0; display:flex; flex-direction:column; position:relative; }
+#main { position:relative; }
+#sidepeek { position:absolute; right:0; top:50%; transform:translateY(-50%); z-index:5; display:flex; flex-direction:column; align-items:center; gap:3px;
+  padding:8px 4px 7px 5px; border:1px solid var(--line); border-right:0; border-radius:8px 0 0 8px; background:var(--surface, var(--bg)); color:var(--ink-3);
+  font-size:calc(11px * var(--ui-k)); font-variant-numeric:tabular-nums; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+#sidepeek[hidden] { display:none; }
+#sidepeek:hover { color:var(--ink); background:var(--btn-hover); }
 #side { width:var(--sidew, 45%); min-width:120px; flex:none; display:flex; flex-direction:column; background:var(--bg); }
 #side .shead { height:calc(30px * var(--ui-k)); flex:none; display:flex; align-items:center; gap:calc(6px * var(--ui-k)); padding:0 calc(4px * var(--ui-k)); border-bottom:1px solid var(--line);
   background:var(--surface); font-size:calc(12px * var(--ui-k)); color:var(--ink-2); }
