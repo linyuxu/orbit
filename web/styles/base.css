@@ -24,7 +24,7 @@
   --note-font:Consolas,"Orbit Mono","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Noto Sans SC",monospace; --note-size:15.5px; --code-size:12px; --ui-k:1; --read-font:var(--font);
   /* code highlighting: the same palette as the highlight.js GitHub theme used in answers */
   --hl-kw:#cf222e; --hl-str:#0a3069; --hl-num:#0550ae; --hl-fn:#8250df; --hl-type:#953800;
-  --panel:#f5f4ef;  /* the left panel: faint warm paper, a shade under the page */
+  --panel:#f4f4f2;  /* the left panel: a quiet light grey, a shade under the page (the request room asked for this one) */
   --row:30px; --guide:#e3e3df;  /* file tree rows and their indent guides */
   --folder:#e6e6e2; --folder-line:#a6a6a0; --folder-open:#dbe5f5; --folder-open-line:#7d97c4;
   --fs-xs:10px; --read-size:14px; --r-s:6px; --r-m:10px;

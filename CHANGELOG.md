@@ -8,6 +8,7 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The left panel's background (light theme) is #f4f4f2, a quiet light grey, instead of #f5f4ef's warm paper.
 - "Sessions" is "Groups" now (the left panel's tab on the Mac, the phone's first tab): a group holds its sessions and
   its other tabs. Under its sessions each group lists its file tabs (files, notes, plugin views, Schedules, Calendar),
   one quieter line each, in the tab row's order, icon and name under the sessions'; the filter finds them too. On the
