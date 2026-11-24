@@ -97,7 +97,8 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
         with self.lock:
             text = json.dumps({"groups": self.groups, "sessions": [s.meta() for s in self.sessions.values()],
                                "order": self.tab_order}, indent=1, ensure_ascii=False)
-            tmp = self.path.with_suffix(".tmp")
+            # (a temp file of its own: during a restart's hand-off two servers may save into the same folder at once)
+            tmp = self.path.with_name(f"{self.path.stem}.{os.getpid()}.{threading.get_ident()}.tmp")
             tmp.write_text(text)
             os.replace(tmp, self.path)  # atomic: a crash never leaves a half-written file
 
@@ -337,7 +338,7 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
         with self.lock:
             self.settings.update(b)
             snap = dict(self.settings)
-        tmp = self.settings_path.with_suffix(".tmp")
+        tmp = self.settings_path.with_name(f"{self.settings_path.stem}.{os.getpid()}.{threading.get_ident()}.tmp")
         tmp.write_text(json.dumps(snap, indent=1))
         os.replace(tmp, self.settings_path)
         self.broadcast({"t": "settings", "settings": snap})
