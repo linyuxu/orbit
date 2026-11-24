@@ -8,6 +8,11 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The state folder (sessions, settings, logs) is made 0700 at start; the README says what 127.0.0.1 without a token means
+  on a machine shared with others; the CI workflow reads the repository only (`permissions: contents: read`).
+- Defaults: Appearance as Regular weight, the conversation in Consolas 14 (the built-in Inconsolata where Consolas, which
+  cannot be shipped, is missing) at full width; the voice says when a task starts (`live_ack` on) and its sound is Single.
+  Saved preferences stay as they are.
 - The side panel can be hidden and shown again, its tabs kept: ⌘\\, the panel's ◫ button, the session's menu → Side
   tab, or ⋯; hidden, a handle at the right edge (◫ and the number of tabs) brings it back. Kept per tab, across reloads.
 - `orbit-agent show` / `open --side`: the side tab goes with the session that asked (its tab's side tabs), not the tab
@@ -19,7 +24,7 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   in Settings → Voice, what is left (a bar of the share spent); its popover has calls, talking and standby minutes and
   the talking time left. Orbit's own calls only (`/api/live/usage`): an API key cannot read the account.
 - Voice: a soft rising ding once the call is connected and listening (speak then), a falling one when it ends;
-  Settings → Voice → Sound: Off, Wood, Low bell (default), Single, Bowl, Temple; a click plays it (`live_chime`,
+  Settings → Voice → Sound: Off, Wood, Low bell, Single (default), Bowl, Temple; a click plays it (`live_chime`,
   `live_chime_sound`). Made by the page (Web Audio), desktop and phone.
 - Voice: several OpenAI API keys, each with a name, tried in order: one refused (a bad key, no quota, rate-limited:
   401 / 402 / 403 / 429) and the call goes on with the next (its sideband attaches with the key that made it); a key

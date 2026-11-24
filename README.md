@@ -87,6 +87,10 @@ on 127.0.0.1 (`orbit serve`), and the other side connects to the proxy's address
 --rotate` replaces it); `<state dir>/remotes.json` (0600) keeps the servers this one reaches. One hop: a server shows the
 sessions of the servers it reaches, not theirs in turn, so two servers that reach each other do not loop.
 
+On a machine other people log in to as well: requests from 127.0.0.1 need no token, so another local user could reach
+your Orbit server (its agents, shells and files) through that port. Run Orbit on machines that are yours alone, or reach
+a shared one from your own machine with the token (above). The state folder (`~/.orbit`) is made readable by you only.
+
 Another machine's files work the same as this one's: a path over there is written `/@gpu-box/<its path>` here (shown as
 `gpu-box:~/…`), so a gpu-box session's tree, file tabs (open, edit, save), ± Review, file links and images in answers all
 come from gpu-box, and you edit and save them in Orbit's editor; they open only there (not in an outside editor or

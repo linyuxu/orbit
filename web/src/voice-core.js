@@ -247,7 +247,7 @@ const CHIMES = {
   temple: { label: "Temple", notes: [174.61, 261.63], gap: 0.12, peak: 0.22, attack: 0.002, decay: 0.55, lp: 3200,
             partials: [[1, 1, 1], [2.76, 0.14, 0.5], [4, 0.3, 0.12], [9.2, 0.06, 0.06]] },                  // a bell with a wooden tap
 };
-const CHIME_DEFAULT = "bell";
+const CHIME_DEFAULT = "single";
 function chime(kind, name = VOICE.chime) {
   const c = CHIME.ctx;
   if (!c || name === false) return;

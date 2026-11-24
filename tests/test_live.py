@@ -51,6 +51,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         cls.fake = fake_live.FakeLive().start()
         cls._base, keys.OPENAI_BASE = keys.OPENAI_BASE, cls.fake.base
         keys.set_key(cls.state, "openai", fake_live.KEY)
+        cls.desk.set_settings({"live_ack": False})  # (on by default; these tests follow the quiet path: the empty thinking append)
 
     @classmethod
     def tearDownClass(cls):
@@ -168,7 +169,7 @@ class LiveTest(test_skeleton.SkeletonTest):
             self.fake.wait_got("session.commentary.append")
             self.assertEqual([e for e in self.fake.got("session.thinking.append") if e.get("content") == ""], [])  # it may say "on it"
         finally:
-            self.req("POST", "/api/settings", {k: live.config.DEFAULTS[k] for k in set_})
+            self.req("POST", "/api/settings", {**{k: live.config.DEFAULTS[k] for k in set_}, "live_ack": False})
         self.assertEqual(self.req("POST", "/api/settings", {"live_wake": 1})[0], 400)  # (an int for a float: 1.0, not a choice)
 
     def test_voice_preview(self):

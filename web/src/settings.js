@@ -8,8 +8,10 @@
 /* The defaults are the built-in fonts, so Orbit looks the same on every machine. PREFS_V: a change of the defaults
    that everyone should get drops the Appearance prefs saved before it, once. */
 const PREFS_V = 2;
-const PREFS_DEFAULT = { v: PREFS_V, weight: "light", readSize: 13.5, noteFont: "Inconsolata", noteSize: 15,
-                        uiFont: "Inter", uiSize: 12, readFont: "", codeFont: "Inconsolata", codeSize: 14 };  // (Inconsolata 14 ≈ Consolas 13)
+const PREFS_DEFAULT = { v: PREFS_V, weight: "regular", readSize: 14, noteFont: "Inconsolata", noteSize: 15, readWidth: "full",
+                        uiFont: "Inter", uiSize: 12, readFont: "Consolas", codeFont: "Inconsolata", codeSize: 14 };  // (Inconsolata 14 ≈ Consolas 13)
+/* (The conversation's Consolas is Microsoft's and cannot be shipped: where it is not installed, its stack falls to the
+   built-in Inconsolata, a font made after it.) */
 /* A font missing on this machine (SF Pro and SF Mono are Apple's, Consolas Microsoft's: neither may be shipped) falls
    back to the one Orbit ships (base.css: "Orbit Sans" is Inter, "Orbit Mono" Inconsolata, after Consolas); a system
    font's Chinese is the system's (PingFang, YaHei, Noto CJK), else Orbit's ("Orbit CJK", vendor/fonts/orbit-cjk.css). */
@@ -32,7 +34,8 @@ const MONO_PRESETS = {
   "Monaco": `Monaco,"Orbit Mono",${CJK_STACK},monospace`,
   "Consolas": `Consolas,"Orbit Mono",${CJK_STACK},monospace`,
 };
-const FONT_LABELS = { "New York": "New York (serif)", "Inter": "Inter · built in", "Inconsolata": "Inconsolata · built in" };
+const FONT_LABELS = { "New York": "New York (serif)", "Inter": "Inter · built in", "Inconsolata": "Inconsolata · built in",
+                      "Consolas": "Consolas · else Inconsolata" };
 const quoteFont = name => `"${String(name).replace(/["\\]/g, "")}"`;
 const fontStack = name => FONT_PRESETS[name] || MONO_PRESETS[name] || `${quoteFont(name)},"Orbit Sans",${CJK_STACK},sans-serif`;
 const monoStack = name => MONO_PRESETS[name] || `${quoteFont(name)},"Orbit Mono",${CJK_STACK},monospace`;
@@ -450,7 +453,7 @@ function settingsAppearance(pane, keys) {
   sizeControl(setRow(pane, "Note size", "Notes and Markdown files."), { value: p.noteSize, dflt: PREFS_DEFAULT.noteSize, onChange: v => setPref("noteSize", v) });
   fontPicker(pane, keys, { label: "Code font", desc: "Code files, code in answers and notes, the terminal.", key: "codeFont", mono: true });
   sizeControl(setRow(pane, "Code size", "Code files and the terminal."), { value: p.codeSize, dflt: PREFS_DEFAULT.codeSize, onChange: v => setPref("codeSize", v) });
-  const reset = setRow(pane, "Defaults", "Every setting above back to Orbit's: the built-in fonts, the same on every machine.");
+  const reset = setRow(pane, "Defaults", "Every setting above back to Orbit's. Its fonts are built in (Inter, Inconsolata), except the conversation's Consolas (Microsoft's: it cannot be shipped); where it is not installed, Inconsolata, made after it, takes its place.");
   reset.innerHTML = `<button type="button" class="btn sm">Reset</button>`;
   reset.querySelector("button").addEventListener("click", () => {
     LS.set("prefs", { v: PREFS_V }); applyPrefs(); toast("Appearance: Orbit's defaults");

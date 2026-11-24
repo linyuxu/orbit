@@ -34,6 +34,11 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
     def __init__(self, state_dir: Path):
         self.state_dir = state_dir
         self.state_dir.mkdir(parents=True, exist_ok=True)
+        try:  # this user's only: sessions, settings and logs are in it (on a machine shared with others too)
+            if self.state_dir.stat().st_uid == os.getuid():
+                os.chmod(self.state_dir, 0o700)
+        except OSError:
+            pass
         self.path = state_dir / "sessions.json"
         self.lock = threading.RLock()
         self.stopping_all = False  # the server is stopping: agents going away now are not retried

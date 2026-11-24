@@ -65,9 +65,12 @@ Fixed (no token): favorite star `#d4a017`; dialog backdrop `rgba(0,0,0,.18)`; im
 
 ## 3. Type
 
-Font: `--font` = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-sans-serif`; `--mono` = `"SF Mono", ui-monospace, Menlo, Consolas, monospace`. Text weight is a setting (⌘, → Text weight, the whole app): **Full** (default) = the system's font smoothing; **Light** =
-`-webkit-font-smoothing: antialiased`, which on macOS drops the stroke weight (thin, grayer text).
+Fonts are settings (⌘, → Appearance; `PREFS_DEFAULT` in `web/src/settings.js`). Defaults: the interface in Inter 12
+(built in, "Orbit Sans"), the conversation in Consolas 14 (Microsoft's, not shipped: where it is missing, the built-in
+Inconsolata, made after it), notes in Inconsolata 15, code in Inconsolata 14 ("Orbit Mono"); Chinese from the system
+(PingFang, YaHei, Noto CJK), else the built-in "Orbit CJK". Text weight (the whole app): **Regular** (default) = the
+system's font smoothing; **Thin** / **Light** = `-webkit-font-smoothing: antialiased`, thinner grayer strokes;
+**Medium** / **Bold** move every weight up.
 
 | Size | Use |
 |---|---|
@@ -87,7 +90,7 @@ Settings (⌘,): any installed font; size 8–40 px (a slider for 10–28, or ty
 
 | Element | Value |
 |---|---|
-| Reading column `--col` | Comfortable (the default): `min(100%, 900px)`, centred; Full (Settings → Appearance → Reading width): `min(100%, 2000px)`, the whole pane. The input follows it; padding 28 / 22 / 24px; 40px between cards |
+| Reading column `--col` | Full (the default): `min(100%, 2000px)`, the whole pane; Comfortable (Settings → Appearance → Reading width): `min(100%, 900px)`, centred. The input follows it; padding 28 / 22 / 24px; 40px between cards |
 | Calendar tab | drawn in the page (no frame) over the main pane; the list centred, 900px at most. Head `Calendar · today N · tomorrow M` and quiet buttons: Attach session (drawn caret) · Week · open in Calendar.app · refresh (icons). Content carries the colour, the chrome is hairlines and tints. Days as `TODAY` / `TOMORROW` (11px 600, .06em, `--ink-3`, margin 18 / 12 / 4px) with `N blocks · show`. A meeting row: 44px, no box, a hairline (`--hover`) below; time `09:00–09:30` (UI font 500 12px, tabular figures, `--ink-2`, 84px); the organizer's initial (22px, `--r-s`, `--sel` with `--av-fg`; a photo when one is known); title 13.5px 600; badges as coloured text, no pill: `now` (`--ok`) / `overlap` (`--warn`), 600 11px; `organizer · accepted/total` (12px `--ink-3`); Join (a quiet text button). The meeting now / next: its time in `--accent` 600, nothing louder; past dimmed; hover a faint tint; keyboard row: a 3px `--focus` bar on the left + a 9% `--focus` tint, radius 0 8px 8px 0. Opened in place: its body starts under the title (138px), a faint tint: a line (day · time · calendar · place · repeats), people chips (accepted: a green border; declined: 45% and struck), Invitation (`<details>`), Related sessions, Prep · Copy link; the note box under it (`--surface`, `--line`, `--r-m`; head `Notes · ⏎ to write` · Edit · Open as file). Schedules use the same keyboard row and times |
 | Meetings popover | ⌘⇧C, or a click on the status bar's meeting: a popover right above that meeting (not a dialog), up to 520px wide, `--surface`, `--r-m`, `--menu-shadow`. Today's and tomorrow's meetings under `TODAY` / `TOMORROW` heads, as compact Calendar rows (34px: time · initial · title · `now` / `in 24m` · organizer · accepted/total · a quiet Join). The cursor starts on the current or next meeting. A click or ⏎ opens that meeting in the Calendar tab; ⌘⏎ or Join joins; right-click shows its menu. The foot has Open the Calendar and its keys. Esc, ⌘⇧C again or a click elsewhere closes it; the status bar's meeting shows as pressed while it is open |
 | Meeting reminder | fixed bottom-right card (`--surface`, `--menu-shadow`): 📅 time title, `in N min`, Join (primary) · ✨ Prep · Open · × ; 10 minutes |
