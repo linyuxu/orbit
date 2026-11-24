@@ -35,6 +35,8 @@ try { localStorage.removeItem("orbit.forceDesktop"); } catch (e) {}</script>
 <script defer src="/m/m-cards.js"></script>
 <script defer src="/m/m-list.js"></script>
 <script defer src="/m/m-conv.js"></script>
+<script defer src="/src/voice-core.js"></script>
+<script defer src="/m/m-voice.js"></script>
 <script defer src="/m/m-sheets.js"></script>
 <script defer src="/m/m-tabs.js"></script>
 <script defer src="/m/m-files.js"></script>
@@ -76,16 +78,28 @@ try { localStorage.removeItem("orbit.forceDesktop"); } catch (e) {}</script>
       <button class="nbtn" id="cmore" aria-label="Session actions"><svg class="i" width="22" height="22" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.2" cy="8" r="1.15"/><circle cx="8" cy="8" r="1.15"/><circle cx="12.8" cy="8" r="1.15"/></svg></button>
     </header>
     <div class="offline-bar">Reconnecting to Orbit…</div>
-    <div class="scroll" id="conv"><div id="cards"></div></div>
+    <div class="scroll" id="conv"><div id="cards"></div><div id="livecaps" hidden></div></div>
     <footer id="foot">
       <button id="jump"><svg class="i" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5"/></svg><span>Latest</span></button>
       <div id="agentbar" hidden></div>
+      <!-- a voice call (m-voice.js): the bar ("in a call with X"; off the conversation it moves above the tab bar), and the
+           call view in the input's place: the gyroscope, the state, type instead · hang up · mute -->
+      <div id="callbar" hidden></div>
+      <div id="callview" hidden>
+        <svg class="vorb" viewBox="0 0 100 100" aria-hidden="true"></svg>
+        <div class="vcst" aria-live="polite"></div>
+        <div class="vcctl">
+          <button class="vcb" id="vctype" aria-label="Type instead (the call goes on)"><span class="disc"></span><span class="lbl">Type</span></button>
+          <button class="vcb end" id="vcend" aria-label="Hang up"><span class="disc"></span><span class="lbl">End</span></button>
+          <button class="vcb" id="vcmute" aria-label="Mute the microphone"><span class="disc"></span><span class="lbl">Mute</span></button>
+        </div>
+      </div>
       <div class="crow">
         <button class="cbtn" id="attach" aria-label="Attach a photo"><svg class="i" width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.6"/><circle cx="5.8" cy="6.4" r="1.1"/><path d="M2.5 11.5l3.4-3.2 2.6 2.4 2-1.8 3 2.6"/></svg></button>
         <input type="file" id="photo" accept="image/*" multiple hidden>
-        <!-- MIC (next phase: voice): its .cbtn goes here, beside Attach, the same 44px cell. Nothing is drawn until it works. -->
         <div class="cfield" id="composer">
           <div id="inputhost"></div>
+          <button class="cbtn" id="callbtn" aria-label="Voice call with this session"></button>
           <button class="cbtn round stop" id="stop" hidden aria-label="Stop the request"><span class="disc"><svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" rx="2" fill="currentColor"/></svg></span></button>
           <button class="cbtn round send" id="send" disabled aria-label="Send"></button>
         </div>

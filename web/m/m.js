@@ -63,12 +63,15 @@ function onEvent(m) {
   if (m.t === "hello" || m.t.startsWith("plugin-")) pviewEvent(m);  // (m-pviews.js: a plugin's thread, doc or list on screen)
   if (m.t === "hello") {
     setOnline(true);
+    voiceResync();  // (a voice call: what became of it while the stream was away)
     S.machines = m.machines || [];
     setSessions(m.sessions, m.groups);
     for (const sid of [...S.cards.keys()]) if (!S.sessions.has(sid)) S.cards.delete(sid);
     if (S.current && !S.sessions.has(S.current)) { toast("This session was closed"); history.replaceState(null, "", location.pathname + location.search); closeSession(); return; }
     renderList(); sessionsChanged();
     if (S.current) { renderNav(); renderComposer(); loadCards(S.current); }
+  } else if (m.t === "live") {
+    voiceEvent(m);
   } else if (m.t === "session") {
     const s = m.session;
     if (s.closed) { removeSession(s.id); return; }

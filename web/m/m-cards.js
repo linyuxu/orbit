@@ -111,7 +111,21 @@ function cardHtml(c) {
   MD_MACHINE = sess.remote || ""; MD_CWD = sess.cwd || "";
   try { return cardHtml0(c); } finally { MD_MACHINE = ""; MD_CWD = ""; }
 }
+/* A voice call's note card (kind "note"): folded to its head (the desktop's noteHtml), the call's title over its
+   turns and the requests it made; a tap shows the transcript. */
+const NOTE_OPEN = new Set();
+function noteHtml(c) {
+  const key = `${c.sid}:${c.id}`, open = NOTE_OPEN.has(key);
+  const m = /(Requests from this call: [^\n]*|No requests from this call\.)/.exec(c.answer || "");
+  const turns = ((c.answer || "").match(/^\*\*(You|Voice)\*\* · /gm) || []).length;
+  const sum = [turns ? `${turns} turn${turns > 1 ? "s" : ""}` : "", m ? m[1].replace("Requests from this call: ", "requests ").replace("No requests from this call.", "no requests") : ""].filter(Boolean).join(" · ");
+  return `<div class="vnote${open ? " open" : ""}"><button type="button" class="vhead" data-note="${esc(key)}" aria-expanded="${open}">` +
+    `${I("chev", 14)}<span class="vic">${I("mic", 15)}</span><span class="vtx"><span class="vt">${esc(c.text)}</span>` +
+    `<span class="vsum">${esc(sum)}${sum ? " · " : ""}${esc(dayTime(c.time))}</span></span></button>` +
+    (open ? `<div class="md">${renderMd(c.answer || "")}</div>` : "") + `</div>`;
+}
 function cardHtml0(c) {
+  if (c.kind === "note") return noteHtml(c);
   const active = ACTIVE.has(c.state), tool = active ? currentTool(c) : "";
   const body = c.answer || [c.live, c.partial].filter(Boolean).join("\n\n");
   const acts = c.state === "queued"

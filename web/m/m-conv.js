@@ -21,6 +21,7 @@ function openSession(sid, { push = true } = {}) {
   autosize(); renderNav(); renderComposer();
   showView("conv");
   if (S.cards.has(sid)) renderConv(); else { $("#cards").innerHTML = `<div class="loading">${markSvg("run", 18)}</div>`; renderAgentBar(); }
+  renderVoice();  // (a voice call: its view and captions in its own session, the bar in another)
   loadCards(sid);
 }
 function closeSession() {  // back to the list
@@ -30,6 +31,7 @@ function closeSession() {  // back to the list
   S.current = null;
   showView("list");
   renderList();
+  renderVoice();
 }
 async function loadCards(sid) {
   try {
@@ -173,6 +175,12 @@ $("#cards").addEventListener("click", e => {
     return;
   }
   if (t.closest("[data-earlier]")) { showEarlier(); return; }
+  const nb = t.closest("[data-note]");
+  if (nb) {  // a voice call's note card: its transcript shown or folded
+    const key = nb.dataset.note; NOTE_OPEN.has(key) ? NOTE_OPEN.delete(key) : NOTE_OPEN.add(key);
+    const c = (S.cards.get(s.id) || []).find(x => s.id + ":" + x.id === key); if (c) renderCard(c);
+    return;
+  }
   if (t.closest("[data-copy]")) { copyText(t.closest(".pre").querySelector("code").innerText); return; }
   const card = attr => { const b = t.closest(`[${attr}]`); return b && (S.cards.get(s.id) || []).find(c => c.id == b.getAttribute(attr)); };
   const rm = t.closest("[data-reqmore]");

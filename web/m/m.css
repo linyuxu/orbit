@@ -610,3 +610,94 @@ body.kb .edta { padding-bottom:12px; }
 .arow .asub { font-size:var(--fs-meta); line-height:1.35; color:var(--ink-3); white-space:normal; }
 .arow .acheck { flex:none; width:18px; display:grid; place-items:center; color:var(--accent); }
 .arow.on .acheck svg { color:var(--accent); }
+
+/* ===================================================================== a voice call (m-voice.js; the desktop's in conversation.css)
+   The voice button: five blue bars beside Send, as big as its arrow; in a call they follow the sound, pulse while
+   connecting, rest as dots in standby. */
+#callbtn { color:var(--voice-2); }
+#callbtn svg { width:22px; height:22px; }
+#callbtn:disabled { opacity:.4; }
+#callbtn .wb, #callbar .wb { transform-box:fill-box; transform-origin:center; transition:transform .06s linear; }
+:is(#callbtn, #callbar).call-connecting .wb { animation:wavepulse 1s ease-in-out infinite; animation-delay:calc(var(--i) * .12s); }
+#callbtn:is(.call-standby, .call-ended), #callbar:is(.call-standby, .call-ended) .vcgo svg { color:var(--ink-3); }
+:is(#callbtn, #callbar):is(.call-standby, .call-ended) .wb { transform:scaleY(.18) !important; }
+@keyframes wavepulse { 0%,100% { transform:scaleY(.35); opacity:.6 } 50% { transform:scaleY(1); opacity:1 } }
+@keyframes vpulse { 0%,100% { opacity:1 } 50% { opacity:.55 } }
+/* The call view, in the input's place: the gyroscope, the state, then type instead · hang up · mute (60px discs). */
+#callview { display:flex; flex-direction:column; align-items:center; margin-left:14px; padding:4px 0 2px; }
+#callview[hidden] { display:none; }
+#foot.vcall .crow { display:none; }
+#callview .vorb { width:116px; height:116px; overflow:visible; transition:filter .4s ease; }
+#callview.call-connecting .vorb { animation:vpulse 1.4s ease-in-out infinite; }
+#callview.call-standby .vorb { filter:saturate(.25) brightness(1.04); }
+#callview.call-ended .vorb { filter:grayscale(1) opacity(.6); }
+.vcst { min-height:22px; margin-top:2px; max-width:100%; font-size:16px; line-height:22px; font-weight:500; color:var(--ink); text-align:center; }
+.vcst .sub { font-weight:400; color:var(--ink-3); }
+#callview:is(.call-standby, .call-ended) .vcst { color:var(--ink-3); }
+.vcctl { display:flex; justify-content:center; gap:40px; margin-top:14px; }
+.vcb { display:flex; flex-direction:column; align-items:center; gap:6px; width:64px; font-size:var(--fs-meta); line-height:16px; color:var(--ink-2); }
+.vcb .disc { width:60px; height:60px; border-radius:50%; display:grid; place-items:center; background:var(--surface); box-shadow:0 0 0 1px var(--line); color:var(--ink); transition:background .15s, color .15s; }
+.vcb.end .disc { background:var(--err); color:#fff; box-shadow:none; }
+.vcb.on .disc { background:var(--ink); color:var(--bg); box-shadow:none; }
+.vcb.lost .disc { background:var(--accent); color:var(--on-accent); box-shadow:none; }
+.vcb:active .disc { opacity:.65; }
+.vcb:disabled { opacity:.4; }
+/* The bar: a call the call view does not show (typing instead, another session; off the conversation, above the tab
+   bar, the pages one bar shorter). A tap goes to the call; the red disc hangs up. */
+#callbar { display:flex; align-items:center; gap:4px; height:48px; }
+#callbar[hidden] { display:none; }
+#foot > #callbar { margin:0 0 6px 14px; padding:0 2px 0 4px; border:1px solid var(--line); border-radius:var(--r-m); background:var(--surface); }
+#app > #callbar { position:absolute; left:0; right:0; bottom:var(--tabh); z-index:5; height:var(--callh); padding:0 calc(var(--pr) - 8px) 0 calc(var(--pl) - 8px);
+  background:var(--bg); box-shadow:inset 0 var(--hair) 0 var(--line); }
+body.callbar { --callh:52px; }
+body.callbar .tabarea > .page:not(.cover) { bottom:calc(var(--tabh) + var(--callh)); }
+body.kb #app > #callbar { display:none; }
+body.kb.callbar .tabarea > .page:not(.cover) { bottom:var(--tabh); }
+#callbar .vcgo { flex:1; min-width:0; height:44px; display:flex; align-items:center; gap:10px; padding:0 8px; border-radius:var(--r-s); text-align:left; color:var(--voice-2); }
+#callbar .vcgo:active { background:var(--btn-hover); }
+#callbar .vcgo svg { width:22px; height:22px; }
+#callbar .vct { min-width:0; display:flex; align-items:baseline; gap:6px; color:var(--ink); white-space:nowrap; }
+#callbar .vct b { flex:none; font-weight:600; font-size:15px; }
+#callbar .vcs { min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--ink-3); font-size:var(--fs-ui); }
+#callbar .vchang { flex:none; width:44px; height:44px; display:grid; place-items:center; }
+#callbar .vchang .disc { width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:var(--err); color:#fff; }
+#callbar .vchang:active .disc { opacity:.65; }
+#callbar .vchang:disabled { opacity:.35; }
+body.vcall #toast { bottom:calc(268px + var(--sab)); }  /* (over the call view, not on its controls) */
+/* Landscape (a phone on its side): the call view in one row, so the conversation keeps some height. */
+@media (orientation: landscape) and (max-height: 500px) {
+  #callview { flex-direction:row; justify-content:center; gap:16px; padding:0; }
+  #callview .vorb { width:76px; height:76px; }
+  .vcst { width:150px; margin:0; text-align:left; }
+  .vcctl { margin:0; gap:24px; }
+  .vcb .disc { width:50px; height:50px; }
+  body.vcall #toast { bottom:calc(110px + var(--sab)); }
+}
+/* Captions while the call is on (the call's session only), after the cards. */
+#livecaps { padding:0 var(--pr) 16px var(--pl); }
+#livecaps .lchead { position:relative; display:flex; align-items:center; gap:7px; width:100%; min-height:44px; font-size:var(--fs-ui); color:var(--ink-3); text-align:left; }
+#livecaps .lchead:active { color:var(--ink); }
+#livecaps .lchead > svg:first-child { flex:none; margin-left:-4px; transform:rotate(90deg); transition:transform .15s; }
+#livecaps.folded .lchead > svg:first-child { transform:none; }
+#livecaps .lcdot { flex:none; width:7px; height:7px; border-radius:50%; background:var(--err); animation:pulse 1.6s infinite; }
+#livecaps .lctitle { flex:none; font-weight:500; color:var(--ink-2); }
+#livecaps .lclast { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-left:2px; }
+#livecaps .lclast b { font-weight:600; color:var(--ink-2); margin-right:3px; }
+#livecaps .lc { display:flex; margin:4px 0 12px; }
+#livecaps .lc.user { justify-content:flex-end; }
+#livecaps .lcb { white-space:pre-wrap; overflow-wrap:anywhere; -webkit-user-select:text; user-select:text; }
+#livecaps .lc.user .lcb { max-width:88%; padding:10px 14px; border-radius:14px; background:var(--req-bg); font:var(--fs-req)/1.5 var(--read-font); }
+#livecaps .lc.voice .lcb { color:var(--ink-2); font:var(--fs-read)/1.6 var(--read-font); }
+#livecaps .lc.sys { justify-content:center; font-size:var(--fs-meta); color:var(--ink-3); }
+#cards:has(+ #livecaps:not([hidden])) > .empty { display:none; }  /* a call in a session with no request yet: the captions alone */
+/* A voice call's note card: one line folded (the call · its turns and requests), the transcript under it. */
+.vnote { border-left:2px solid var(--line); padding-left:12px; }
+.vnote .vhead { display:flex; align-items:center; gap:6px; width:100%; min-height:48px; padding:4px 0; text-align:left; color:var(--ink-3); }
+.vnote .vhead:active { color:var(--ink); }
+.vnote .vhead > svg:first-child { flex:none; margin-left:-3px; transition:transform .15s; }
+.vnote.open .vhead > svg:first-child { transform:rotate(90deg); }
+.vnote .vic { flex:none; display:grid; place-items:center; width:18px; color:var(--ink-3); }
+.vnote .vtx { min-width:0; display:flex; flex-direction:column; gap:1px; }
+.vnote .vt { font-size:var(--fs-ui); font-weight:500; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vnote .vsum { font-size:var(--fs-meta); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+.vnote .md { margin:2px 0 6px; color:var(--ink-2); }

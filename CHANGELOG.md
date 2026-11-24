@@ -17,6 +17,8 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - The voice button: five bars in a circle where Send is while the input is empty; in a call they follow the sound.
 - Voice: after each request the voice is told what became of it (running, queued behind another, joined to the
   waiting one), so it says "queued" instead of guessing; "via Voice" on a card explains what the agent got.
+- Settings → Appearance → Text weight: Thin · Light · Regular · Medium · Bold. Every weight moves together (`--wd`;
+  the built-in fonts are variable), so bold stays as much bolder; Thin and Light draw thinner antialiased strokes.
 - Settings → Voice → Usage: what Orbit's calls cost this month (from GPT Live's own active and standby seconds, by the
   second: $0.05 and $0.02 a minute), and, once the user gives what is left on their OpenAI account (an API key cannot
   read it: the billing endpoints answer 403), the talking time it buys, counting down by the calls since.
@@ -29,6 +31,14 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   clears once the pointer has been away a moment, the rows sliding to their places.
 - A voice call's note card is folded to its head (turns, the requests it made); a click shows the transcript, where
   each of the user's turns that became a request says so (`→ #706`): the words no longer seem sent twice.
+- Voice calls from the phone (`/m/`): the five blue bars beside Send; in a call the gyroscope takes the input's place
+  with the state word and big Type · End · Mute controls, captions (folded or not) at the end of the conversation,
+  and the note card folds as on the desktop. Away from the call's session (another session, the list, another area)
+  a bar says "in a call with X": a tap goes back, its red button hangs up. iOS: the microphone, the AudioContext and
+  the voice's playback start in the tap; back from the background the sound resumes, a microphone iOS ended comes
+  back with one tap (same call), and the event stream's reconnect re-syncs the call (`GET /api/live`); leaving the
+  page hangs up. The call itself (WebRTC, phases, captions, the sound level, the gyroscope) is now
+  `web/src/voice-core.js`, shared by both pages; a call starting no longer takes the last call's "ended" for its own.
 - Voice calls work with another machine's sessions too (`name~id`): this server holds the call; the requests,
   the session's context and the call's note card go to that machine through the federation, and its answers come
   back on this server's events to be spoken. A session's `steer` takes `origin` and `client_id` like `send`; `note`

@@ -239,7 +239,7 @@ Built: `orbit/services/live/` (`session.py` the call, `ws.py` the websocket clie
 - **Note cards.** `kind: "note"`, `state: "note"`, kept in `sessions.json` (`notes`, the last 200); its id sits after
   the last request (`4.001`, `4.002`) so request ids stay the harness's history numbers. Title "Voice call · 15:02 ·
   3 min", the transcript by turn with its time in the call, the requests it made, why it ended if not hung up. A call
-  with no words and no request leaves none. (The phone shows it as a plain card for now.)
+  with no words and no request leaves none. The phone folds it as the desktop does.
 - **`client_id`** (1–200 characters) is kept per session (`client_ids`, the last 500) and put back on the cards when
   they are rebuilt; a send with a known one returns that card with `"duplicate": true`.
 - **The log**, `<state>/live/<call>.jsonl`: `create` / `created` (`ms_create`), `attached` (`ms_attach`, `n`),
@@ -248,6 +248,14 @@ Built: `orbit/services/live/` (`session.py` the call, `ws.py` the websocket clie
   audio never. End of speech → first audio and barge-in → silence need the audio and are not measured.
 - **⌘⇧V** is in `plugins.RESERVED_SHORTCUTS` and ⌘/. The app's Edit menu has no Paste and Match Style, so nothing
   else holds it.
+- **The phone** (`web/m/m-voice.js`, phase 2's phone part). The call itself is `web/src/voice-core.js`, shared with
+  the desktop's `voice.js`: state, phases, captions, `/api/live/start · stop`, the data channel, the sound level, the
+  gyroscope; each page fills in `VOICE_UI` (render, toast, failed, blocked, ended). The phone holds a call with its
+  token like any client; no settings or key there. In a call the gyroscope takes the input's place (Type · End · Mute);
+  elsewhere a bar ("in a call with X"). iOS needs the tap for `getUserMedia`, the `AudioContext` and playback (all
+  before `startCall`'s first await); the background may end the microphone track (Mic puts a new one on the same
+  sender: `replaceTrack`, no new call) and drop `/api/events` (its `hello` calls `voiceResync`: `GET /api/live`, the
+  captions missed, or the call ended meanwhile). `pagehide` hangs up with `keepalive`.
 - **Browsers.** Checked with Playwright on a temp server against the fake: Chromium (with
   `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream`) and WebKit (its mock microphone and the
   `microphone` permission need no flags) both make the call, connect the peer (a second peer connection answers

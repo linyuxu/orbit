@@ -129,6 +129,11 @@ const ICONS = {
   /* the tab bar's: Sessions, Files (folder), Notes, Misc */
   chat: '<path d="M2.5 4a1.5 1.5 0 0 1 1.5-1.5h8A1.5 1.5 0 0 1 13.5 4v5.5A1.5 1.5 0 0 1 12 11H7.2L4.5 13.5V11H4a1.5 1.5 0 0 1-1.5-1.5z"/>',
   note: '<path d="M4 1.5h8a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M5.5 5h5M5.5 8h5M5.5 11h3"/>',
+  /* a voice call (m-voice.js): the microphone (the desktop's), muted, the keyboard (type instead), the handset down */
+  mic: '<rect x="6" y="1.75" width="4" height="7.75" rx="2"/><path d="M3.75 7.75a4.25 4.25 0 0 0 8.5 0M8 12v2.25"/>',
+  micoff: '<rect x="6" y="1.75" width="4" height="7.75" rx="2"/><path d="M3.75 7.75a4.25 4.25 0 0 0 8.5 0M8 12v2.25M2.25 2.25l11.5 11.5"/>',
+  keyboard: '<rect x="1.75" y="4" width="12.5" height="8" rx="1.5"/><path d="M4.5 6.6h.01M7 6.6h.01M9.5 6.6h.01M12 6.6h.01M5 9.4h6"/>',
+  hangup: '<path d="M1.6 9.1c3.5-3.4 9.3-3.4 12.8 0 .4.4.4 1 0 1.4l-1.2 1.2c-.3.3-.8.4-1.2.1l-1.7-1.1c-.3-.2-.5-.5-.5-.9V8.6a8 8 0 0 0-3.6 0v1.2c0 .4-.2.7-.5.9l-1.7 1.1c-.4.3-.9.2-1.2-.1l-1.2-1.2c-.4-.4-.4-1 0-1.4z" fill="currentColor" stroke="none"/>',
   grid: '<rect x="2" y="2" width="5" height="5" rx="1.3"/><rect x="9" y="2" width="5" height="5" rx="1.3"/><rect x="2" y="9" width="5" height="5" rx="1.3"/><rect x="9" y="9" width="5" height="5" rx="1.3"/>',
 };
 function I(name, size = 16, cls = "") {
@@ -182,9 +187,9 @@ const TOKEN = (() => {
   try { if (q) localStorage.setItem("orbit.m.token", q); return q || localStorage.getItem("orbit.m.token") || ""; } catch { return q; }
 })();
 const withToken = url => TOKEN ? url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(TOKEN) : url;
-async function api(method, path, body) {
+async function api(method, path, body, opts = {}) {  // (opts.keepalive: a request that outlives the page, the voice's hang-up)
   const headers = { "Content-Type": "application/json", ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}) };
-  const r = await fetch(path, { method, credentials: "same-origin", headers, body: body ? JSON.stringify(body) : undefined });
+  const r = await fetch(path, { method, credentials: "same-origin", headers, body: body ? JSON.stringify(body) : undefined, keepalive: !!opts.keepalive });
   if (r.status === 401) { showUnpaired(); throw new NotPaired("not paired"); }
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error(d.error || `HTTP ${r.status}`); e.status = r.status; e.data = d; throw e; }  // (a save's 409 carries the disk's version)

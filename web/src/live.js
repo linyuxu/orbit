@@ -12,6 +12,7 @@ function connect() {
       setSessions(m.sessions, m.groups);
       for (const sid of [...S.cards.keys()]) if (!S.sessions.has(sid)) S.cards.delete(sid);
       renderAll(); renderSide();
+      if (typeof voiceResync === "function") voiceResync();  // (a voice call: what became of it while the stream was away)
       if (!EMBED) { loadPluginUi(); loadHosting(); }  // (also after a server restart: plugins, hosting may have changed)
       else pviewsReloaded();  // (a side tab's view: what it missed)
       if (EMBED_REVIEW) { renderReview(); return; }
