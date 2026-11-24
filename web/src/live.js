@@ -82,14 +82,14 @@ function connect() {
 /* An agent ran `orbit-agent open` / `orbit-agent show`: add the tab, never move the keyboard (interaction.md rule 5). */
 function agentOpened(m) {
   const who = m.by ? m.by + " " : "An agent ";
-  if (m.t === "show") {
-    openSide({ kind: "web", url: m.url, title: m.title }, { focus: false });
-    toast(`${who}shows “${m.title}” in the side tab`);
-    return;
-  }
-  if (m.side) {
-    openSide({ kind: "file", path: m.path, line: m.line || undefined }, { focus: false });
-    toast(`${who}opened ${basename(m.path)} in the side tab`);
+  if (m.t === "show" || m.side) {
+    // beside the session that asked (its tab's side tabs), not whatever is in front; elsewhere: a toast to go there
+    const s = m.sid && S.sessions.get(m.sid), key = s ? "s:" + s.id : sideKey(), here = key === sideKey();
+    const spec = m.t === "show" ? { kind: "web", url: m.url, title: m.title } : { kind: "file", path: m.path, line: m.line || undefined };
+    openSide(spec, { focus: false, key });
+    const what = m.t === "show" ? `shows “${m.title}”` : `opened ${basename(m.path)}`;
+    if (here) toast(`${who}${what} in the side tab`);
+    else toast(`${who}${what} in its side tab — click to go there`, () => switchTo(s.id));
     return;
   }
   if (m.line) S.reveal = { path: m.path, line: m.line };

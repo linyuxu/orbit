@@ -8,6 +8,8 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- `orbit-agent show` / `open --side`: the side tab goes with the session that asked (its tab's side tabs), not the tab
+  in front; from another tab a toast offers to go there. The events carry `sid`.
 - The status bar's usage: Antigravity (agy) too, from `agy -p /usage` (a local command: no model call, no
   conversation): Gemini and Claude/GPT, each week and 5 h, the tightest on the bar; the popover lays out more than two
   windows as a grid.

@@ -77,10 +77,11 @@ function renderSide() {
   $("#revbadge").classList.toggle("on", !!sp && sp.kind === "review");
   applySideWidth();
 }
-/* Open a side tab in the current main tab (or show it again if that tab has it already). */
-function openSide(spec, { focus = true } = {}) {
+/* Open a side tab in the current main tab, or in the main tab `key` (an agent's page goes with its session's tab);
+   or show it again if that tab has it already. */
+function openSide(spec, { focus = true, key = sideKey() } = {}) {
   if (EMBED) { window.parent.postMessage({ orbit: "open-side", spec }, location.origin); return; }
-  const key = sideKey();
+  if (key !== sideKey()) focus = false;
   const e = S.sides[key] = sideEntry(key) || { list: [], i: 0 };
   const k = e.list.findIndex(x => sameSide(x, spec));
   if (k >= 0) {

@@ -25,11 +25,14 @@ class Agents:
         s = self.sessions.get(sid or "")
         return s.name if s else ""
 
+    def _by_sid(self, sid: str | None) -> str:
+        return sid if sid and sid in self.sessions else ""
+
     def open_for_user(self, path: str, line: int | None = None, side: bool = False, by: str = "") -> dict:
         p = os.path.realpath(os.path.expanduser(path))
         if not os.path.exists(p):
             raise ValueError(f"no such file: {p}")
-        ev = {"t": "open", "path": p, "line": line, "side": side, "by": self.by_name(by)}
+        ev = {"t": "open", "path": p, "line": line, "side": side, "by": self.by_name(by), "sid": self._by_sid(by)}
         self.broadcast(ev)
         return ev
 
@@ -40,7 +43,8 @@ class Agents:
         self.show_dir.mkdir(parents=True, exist_ok=True)
         pid = uuid.uuid4().hex[:12]
         (self.show_dir / f"{pid}.html").write_text(html, encoding="utf-8")
-        ev = {"t": "show", "id": pid, "url": f"/show/{pid}", "title": title.strip() or "Page", "by": self.by_name(by)}
+        ev = {"t": "show", "id": pid, "url": f"/show/{pid}", "title": title.strip() or "Page", "by": self.by_name(by),
+              "sid": self._by_sid(by)}  # (sid: the side tab goes with that session's tab, not whichever is in front)
         self.broadcast(ev)
         return ev
 

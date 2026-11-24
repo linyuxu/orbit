@@ -90,7 +90,8 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         r = self.agent("open", f"{f}:3", "--side", session=s["id"])
         self.assertEqual(r.returncode, 0, r.stderr)
         th.join(5)
-        self.assertEqual(got[0], {"t": "open", "path": os.path.realpath(f), "line": 3, "side": True, "by": "opener"})
+        self.assertEqual(got[0], {"t": "open", "path": os.path.realpath(f), "line": 3, "side": True, "by": "opener",
+                                  "sid": s["id"]})
         self.assertNotEqual(self.agent("open", "/no/such/file").returncode, 0)
 
     def test_show_serves_a_sandboxed_page(self):
@@ -99,7 +100,7 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         self.assertEqual(r.returncode, 0, r.stderr)
         th.join(5)
         ev = got[0]
-        self.assertEqual(ev["title"], "Chart")
+        self.assertEqual((ev["title"], ev["sid"]), ("Chart", ""))  # (from a terminal: no session; the page then uses the tab in front)
         with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{ev['url']}") as resp:
             self.assertEqual(resp.read(), b"<h1>hello</h1>")
             self.assertIn("sandbox", resp.headers["Content-Security-Policy"])
