@@ -453,7 +453,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual(len(self.cards(s["id"])), 1)
         self.assertEqual([(d["cid"], d["how"]) for d in self.live_state()["delegations"]], [(1, "steer")])
         st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_si"])
-        self.assertIn("added these words to request #1 while the agent works on it", st[0]["content"])
+        self.assertIn("added these words to request #1 while your backend works on it", st[0]["content"])
         self.assertTrue(wait(lambda: self.commentary("del_si")))  # (its result now answers these words)
         self.assertIn("steered: 只看错误日志", self.commentary("del_si")[0]["content"])
 
@@ -479,8 +479,8 @@ class LiveTest(test_skeleton.SkeletonTest):
             c2 = self.wait_card(s["id"], 2, ("queued",))
             self.assertEqual(c2["text"], "skip the docs")
             st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_ns"])
-            self.assertIn("This agent can't take additions while a request runs, so Orbit queued these words as "
-                          "request #2; it waits: the agent is busy with request #1", st[0]["content"])
+            self.assertIn("Your backend can't take additions while a request runs, so Orbit queued these words as "
+                          "request #2; it waits: your backend is busy with request #1", st[0]["content"])
             self.assertEqual(self.cards(s["id"])[0].get("steers"), None)
         finally:
             cls.steers = True
@@ -531,7 +531,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         s, r = self.start_call("Idle")
         self.fake.emit(t_in("check the logs", 500, 1500, "i1"), delegation("del_i", 1600, "di"))
         st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_i"])
-        self.assertEqual(st[0]["content"], "Orbit sent this as request #1; the agent started on it. Don't state the "
+        self.assertEqual(st[0]["content"], "Orbit sent this as request #1; your backend started on it. Don't state the "
                                            "answer until the result arrives.")  # ("nothing else runs before it" was read back)
 
     def test_status_while_the_agent_is_busy(self):
@@ -544,7 +544,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertTrue(self.fake.wait_attached(1))
         self.fake.emit(t_in("check the logs", 500, 1500, "b1"), delegation("del_q", 1600, "dq"))
         st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_q"])
-        self.assertIn("request #2; it waits: the agent is busy with request #1", st[0]["content"])
+        self.assertIn("request #2; it waits: your backend is busy with request #1", st[0]["content"])
         self.assertNotIn("Tell the user", st[0]["content"])  # (#1 has run for a moment only: no wait worth saying)
         self.fake.emit(t_in("and the build", 2000, 2800, "b2"), delegation("del_q2", 2900, "dq2"))
         st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_q2"])

@@ -325,8 +325,12 @@ def instructions(name: str, cwd: str, model: str, cfg: dict | None = None) -> st
         " Speak the language the user speaks; for Chinese, speak Mandarin and use Simplified characters."
     detail = "give the takeaway in one to three short sentences" if cfg["live_detail"] == "brief" else \
         "give the result in a few sentences with its key details (names, numbers, what changed, what is left)"
-    text = f"""You are the voice of Orbit, an IDE where the user works with coding agents. You talk with the user; an agent \
-session named "{name}" (folder {cwd}) does the work: it is your backend.
+    text = f"""You are the voice in Orbit, an IDE where the user works with coding agents. An agent session named \
+"{name}" (folder {cwd}) is your backend, and its work is yours: speak of whatever it does, reading, checking or \
+changing things, in the first person ("I'll look at the logs", "I'm still on request #3", "I've fixed the test"), not as \
+"the agent" or by the session's name (unless the user asks which session). Session state and Orbit's facts describe \
+your backend's work: say it the same way. Name another agent only when a result or Orbit's facts say the work went to \
+one. Orbit is the platform that routes requests and reports their status: mention it only when that matters.
 Speak naturally and briefly. Be clear and direct.{lang}
 
 Backchannel policy: Listen mostly in silence. An occasional quiet "mm-hm" at a natural pause is fine.
@@ -353,15 +357,15 @@ Do not delegate when:
 - The question is self-contained, or about what was already said or reported in this call.
 - The user asks about status, progress, what is running or queued, or how long something has taken: answer at once \
 from the latest Session state. Give elapsed times; never invent an estimate. If the state does not answer it, say what \
-you know and offer to ask the agent.
+you know and offer to check.
 - You need a brief clarification to understand the request.
 Use a previous result when it still answers the question (more of an answer may have come with it as silent context); \
 delegate again if it is missing, out of date, or the user asks to check again.
 Delegate to the backend before giving an answer that depends on backend work. Do not guess the result while waiting.
-Never describe how Orbit or the agent handles requests beyond what Orbit tells you in this call.
+Never describe how Orbit or your backend handles requests beyond what Orbit tells you in this call.
 Results and Orbit's facts are authoritative: do not add to them or contradict them. Say the key takeaway, status or \
 next step in your own words. Never invent facts, names, numbers or details that are not in a result, in Orbit's facts \
-or in this call; if the result does not answer what the user asked, say so plainly and offer to ask the agent again.
+or in this call; if the result does not answer what the user asked, say so plainly and offer to check again.
 
 Orbit sends you background facts (session state, progress) silently. Do not announce them, and do not say you are \
 still working, unless the user asks or a meaningful change happened (a step that matters finished, a delay that \
@@ -456,8 +460,8 @@ def startup_input(desk, s, history: bool = True) -> list[dict]:
     items = [_msg("developer", facts)]
     done = [c for c in cards if c["state"] in FINAL][-3:] if history else []
     if done:
-        items.append(_msg("developer", f"Its last {len(done)} requests and the agent's answers follow: user is the "
-                                       f"request as sent to the agent, assistant the agent's answer, cut. (observed_at {at})"))
+        items.append(_msg("developer", f"Its last {len(done)} requests and your backend's answers follow: user is the "
+                                       f"request as sent to it, assistant its answer, cut. (observed_at {at})"))
         for c in done:
             items.append(_msg("user", f"#{c['id']}: {clip(strip_orbit_line(c.get('text') or ''), 300)}"))
             ans = (c.get("answer") or "").strip()
@@ -969,14 +973,14 @@ class Call:
             elif run is None:
                 fact = f"Nothing is running to add request #{q['id']} to; it stays queued and starts next."
             elif not t.info().get("steers"):
-                fact = f"This agent can't take additions while a request runs: request #{q['id']} stays queued."
+                fact = f"Your backend can't take additions while a request runs: request #{q['id']} stays queued."
             else:
                 t.withdraw(q["id"])
                 c = t.steer(strip_orbit_line(q.get("text") or ""), {"label": "Voice", "data": {"live": self.live_id, "delegation": did}},
                             f"live:{self.live_id}:{did}")
                 if c.get("steered"):
                     how, fact = "steer", (f"Orbit took back request #{q['id']} and added its words to request #{c['id']} "
-                                          "while the agent works on it.")
+                                          "while your backend works on it.")
                 else:  # (the running one ended just now)
                     how, fact = "new", f"Request #{run['id']} had just ended, so request #{q['id']}'s words were sent as request #{c['id']}."
         except Exception as e:  # noqa: BLE001 - the voice is told, the call goes on
@@ -1014,9 +1018,9 @@ class Call:
         self.log("request", delegation=did, cid=c["id"], how="urgent", state=c["state"], words=words,
                  stopped=run["id"] if run else None, ms_delegation_to_card=int((time.time() - d["at"]) * 1000))
         self._tell("delegation", delegation=did, cid=c["id"], how="urgent", sid=self.sid, offset=d["offset"])
-        fact = (f"Orbit stopped request #{run['id']} and put this first, as request #{c['id']}: the agent starts on it now "
+        fact = (f"Orbit stopped request #{run['id']} and put this first, as request #{c['id']}: your backend starts on it now "
                 "(what was waiting stays queued after it)." if run else
-                f"Orbit put this first, as request #{c['id']}: nothing was running, so the agent starts on it now.")
+                f"Orbit put this first, as request #{c['id']}: nothing was running, so your backend starts on it now.")
         self._send({"type": "session.thinking.append", "event_id": f"status_{did}", "delegation_id": did,
                     "content": fact + " Don't state the answer until the result arrives."})
 
@@ -1073,26 +1077,26 @@ class Call:
         run = next((x for x in cards if x["state"] in ACTIVE and x["id"] != c["id"]), None)
         ahead = [x for x in cards if x["state"] == "queued" and x["id"] < c["id"]]
         now = next((x for x in cards if x["id"] == c["id"]), c)
-        busy = (f'the agent is busy with request #{run["id"]}' if run else
+        busy = (f'your backend is busy with request #{run["id"]}' if run else
                 f'request #{ahead[0]["id"]} waits before it' if ahead else "")
         wait_ = " Don't state the answer until the result arrives."  # (a real call said "yes" before the result said "not yet")
         speak = False
         if how == "edit":
             fact = (f"Orbit added these words to request #{c['id']}, which has not started" + (f": {busy}" if busy else "")
-                    + ". It is one request, not several. Its answer comes when the agent gets to it." + wait_)
+                    + ". It is one request, not several. Its answer comes when your backend gets to it." + wait_)
         elif how == "steer":
-            fact = f"Orbit added these words to request #{c['id']} while the agent works on it." + wait_
+            fact = f"Orbit added these words to request #{c['id']} while your backend works on it." + wait_
         elif cant_steer:  # (asked to add to the running request; its agent cannot take that mid-request)
-            fact = (f"This agent can't take additions while a request runs, so Orbit queued these words as request "
-                    f"#{c['id']}" + (f"; it waits: {busy}" if busy else "") + ". Its answer comes when the agent gets to it." + wait_)
+            fact = (f"Your backend can't take additions while a request runs, so Orbit queued these words as request "
+                    f"#{c['id']}" + (f"; it waits: {busy}" if busy else "") + ". Its answer comes when your backend gets to it." + wait_)
             speak = True  # (the user asked for something else: they should hear it)
         elif now["state"] == "queued" and busy:
             speak = run is not None and time.time() - (run.get("started") or time.time()) > QUEUE_REAL_S
             fact = (f"Orbit sent this as request #{c['id']}; it waits: {busy}."
                     + (" Tell the user in a few words that it is queued; its" if speak else " Its")
-                    + " answer comes when the agent gets to it." + wait_)
+                    + " answer comes when your backend gets to it." + wait_)
         else:
-            fact = f"Orbit sent this as request #{c['id']}; the agent started on it." + wait_
+            fact = f"Orbit sent this as request #{c['id']}; your backend started on it." + wait_
         ev = {"type": "session.thinking.append", "event_id": f"status_{did}", "delegation_id": did, "content": fact}
         out = (lambda: self._say([ev])) if speak else (lambda: self._send(ev))
         wait = ACK_DELAY_MS / 1000 + 0.3 - (time.time() - self.dels[did]["at"]) if self.cfg["live_ack"] else 0

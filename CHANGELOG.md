@@ -8,6 +8,12 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Voice and agents speak of their own work in the first person. The voice: its backend's work is its own ("I'll look
+  at the logs", "I'm still on request #3"), never "the agent" or the session's name unless asked; another agent is named
+  only when a result says the work went there; Orbit is the platform that routes requests and reports their status.
+  Its rules and Orbit's facts say "your backend" instead of "the agent". Agents: Orbit routes requests and gives the
+  orbit-agent commands (their other tools are their own); reads and checks in the first person; a session they hand
+  work to is named. Checked in real calls on gpt-live-1.1 and gpt-live-1 (Chinese).
 - The live stream sends a streaming card's changes as patches to clients that ask (`/api/events?delta=1`: the page, the
   phone, another Orbit server following this one): `{"t": "cardp", sid, id, rev, base, ops}`, what changed since
   revision `base` (text appended, a step's fields, new steps; `orbit/desk/cardpatch.py`), instead of the whole card on
