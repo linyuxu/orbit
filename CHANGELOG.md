@@ -17,6 +17,10 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - The voice button: five bars in a circle where Send is while the input is empty; in a call they follow the sound.
 - Voice: after each request the voice is told what became of it (running, queued behind another, joined to the
   waiting one), so it says "queued" instead of guessing; "via Voice" on a card explains what the agent got.
+- One voice call at a time, everywhere: the server refuses a second (409, saying which call is on) instead of
+  hanging up the first. Every page knows of a call another page or device holds (its state events, `GET /api/live`):
+  the voice buttons wait (grey), the pill says "another device" (go to its session, hang it up), and ⌘⇧V hangs up
+  whichever call is on, never starting a second. The phone's voice button waits the same way.
 - A voice call shows wherever you are: a pill first in the status bar (its state and session; red when muted); a
   click: mute or unmute, go to its session (or show the voice again), hang up. From anywhere in the window (a dialog,
   a menu, an editor, the terminal) ⌘⇧A mutes or unmutes and ⌘⇧V hangs up. Mute is shared with the phone's.

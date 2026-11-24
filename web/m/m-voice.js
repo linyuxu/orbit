@@ -23,6 +23,7 @@ VOICE_UI.ended = why => { if (why) toast(`Call ended: ${why}`, 4000); };
 VOICE_UI.blocked = () => { VC.blocked = true; renderVoice(); };  // (the next tap anywhere plays it)
 VOICE_UI.failed = e => toast(micWhy(e), 6000);
 function micWhy(e) {
+  if (e && e.status === 409) return "A voice call is on already (another window or device): hang it up first";
   if (e && e.data && e.data.need === "openai-key") return "A voice call needs an OpenAI API key: on the Mac, Settings → Voice";
   if (e && e.name === "NoWebRTC" || e && e.name === "SecurityError" || !window.isSecureContext)
     return window.isSecureContext ? "No microphone here: this browser has no WebRTC" : "The microphone needs Orbit over HTTPS (on the Mac: orbit https on), then open the phone's link again";
@@ -40,7 +41,8 @@ function renderVoice() {
   watchMic();
   /* The voice button: this session's call (its bars follow the sound; a tap shows the call view), else a new call. */
   const b = $("#callbtn");
-  b.className = `cbtn${here ? " call-" + VOICE.phase : ""}`;
+  const busy = (live && !here) || (!on && voiceAway());  // (one call at a time: another session's or device's)
+  b.className = `cbtn${here ? " call-" + VOICE.phase : ""}${busy ? " vbusy" : ""}`;
   b.disabled = VOICE.starting && !here;
   b.setAttribute("aria-label", here && live ? "Show the call" : "Voice call with this session");
   b.setAttribute("aria-pressed", String(here && live));
@@ -67,18 +69,21 @@ function renderVoice() {
   m.setAttribute("aria-label", VC.micLost ? "Turn the microphone back on" : VOICE.muted ? "Unmute the microphone" : "Mute the microphone");
   m.setAttribute("aria-pressed", String(VOICE.muted));
   /* The bar: a call the call view does not show. In the conversation it sits on the input; elsewhere above the tab bar. */
-  const bar = $("#callbar"), showBar = on && !view;
+  const away = !on && voiceAway(), awayS = away && S.sessions.get(VOICE.away.sid);
+  const bar = $("#callbar"), showBar = (on && !view) || away;
   bar.hidden = !showBar;
   const inConv = !!S.current;
   if (inConv && bar.parentNode !== $("#foot")) $("#foot").insertBefore(bar, $("#callview"));
   else if (!inConv && bar.parentNode !== $("#app")) $("#app").appendChild(bar);
   document.body.classList.toggle("callbar", showBar && !inConv);
-  bar.className = on ? "call-" + VOICE.phase : "";
-  bar.querySelector(".vct").innerHTML = !showBar ? "" : here
+  bar.className = on ? "call-" + VOICE.phase : away ? `call-${VOICE.away.phase} away` : "";
+  bar.querySelector(".vct").innerHTML = !showBar ? "" : away
+    ? `<b>${esc(VOICE_WORD[VOICE.away.phase])}</b><span class="vcs">${awayS ? "with " + esc(sessionTitle(awayS)) + " · " : ""}on another device</span>`
+    : here
     ? `<b>${esc(word)}</b><span class="vcs">${live ? "Show the call" : ""}</span>`
     : `<b>${esc(word)}</b><span class="vcs">${live ? "with " : ""}${esc(callName())}</span>`;
   bar.querySelector(".vcgo").setAttribute("aria-label", here ? "Show the call" : `Back to the call with ${callName()}`);
-  bar.querySelector(".vchang").disabled = !live;
+  bar.querySelector(".vchang").disabled = !live && !away;
   renderCaps();
 }
 /* Captions while the call is on, at the end of the call's conversation: the user's words as a request bubble, the
@@ -115,16 +120,9 @@ $("#callbtn").addEventListener("click", () => {
   const sid = S.current; if (!sid || VOICE.starting) return;
   const live = VOICE.phase !== "idle" && VOICE.phase !== "ended";
   if (live && VOICE.sid === sid) { VOICE.typing = false; renderVoice(); return; }
-  if (live) {
-    const other = callName(), mine = S.sessions.get(sid);
-    actionSheet(`In a call with ${other}`, [
-      { label: `Call ${mine ? sessionTitle(mine) : "this session"} instead`, sub: `Hangs up the call with ${other}`, icon: "mic", run: () => {
-        if (VOICE.call) api("POST", "/api/live/stop", { call: VOICE.call }).catch(() => {});
-        endMedia(); VOICE.call = null;
-        callHere(sid);
-      } },
-      { label: `Back to the call with ${other}`, icon: "back", run: () => { VOICE.typing = false; openSession(VOICE.sid); } },
-    ]);
+  if (live || voiceAway()) {  // one call at a time: the bar goes to it or hangs it up
+    const s = S.sessions.get(live ? VOICE.sid : VOICE.away.sid);
+    toast(`A voice call is on${s ? ` with ${sessionTitle(s)}` : ""}${live ? "" : " (another device)"}: hang it up first (the bar below)`, 3600);
     return;
   }
   callHere(sid);
@@ -138,9 +136,10 @@ $("#vcmute").addEventListener("click", () => {
 });
 $("#callbar .vcgo").addEventListener("click", () => {
   VOICE.typing = false;
-  if (VOICE.sid !== S.current && S.sessions.has(VOICE.sid)) openSession(VOICE.sid); else renderVoice();
+  const sid = VOICE.phase !== "idle" ? VOICE.sid : VOICE.away && VOICE.away.sid;  // (this phone's call, or another device's)
+  if (sid && sid !== S.current && S.sessions.has(sid)) openSession(sid); else renderVoice();
 });
-$("#callbar .vchang").addEventListener("click", () => hangUp());
+$("#callbar .vchang").addEventListener("click", () => voiceStop());
 /* The voice could not play (no gesture allowed it yet): the next tap anywhere does. */
 document.addEventListener("pointerdown", () => {
   if (!VC.blocked) return;

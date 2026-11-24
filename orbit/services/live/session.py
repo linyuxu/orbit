@@ -45,6 +45,14 @@ REFERS = re.compile(r"\b(that|this|it|those|these|them|the (first|second|third|l
 CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]")
 
 
+class Busy(ValueError):
+    """A call is on already (one at a time, on every page and device): hang it up first."""
+
+    def __init__(self, call: "Call"):
+        self.call = call
+        super().__init__("a voice call is on already: hang it up first (⌘⇧V)")
+
+
 class NoKey(ValueError):
     """No OpenAI API key is set (Settings → Voice)."""
 
@@ -860,11 +868,10 @@ class Live:
         Target(self.desk, sid)  # (KeyError: no such session, here or on a machine this server reaches)
         if not keys.get(self.desk.state_dir, "openai"):
             raise NoKey("No OpenAI API key: set one in Settings → Voice")
-        with self.lock:
-            old, self.call = self.call, Call(self, sid, self.model())
-            new = self.call
-        if old is not None and not old.ended:  # one call at a time: a new one hangs up the last
-            threading.Thread(target=old.hang_up, daemon=True).start()
+        with self.lock:  # one call at a time, whoever asks: a second is refused, not put in the first's place
+            if self.call is not None and not self.call.ended:
+                raise Busy(self.call)
+            new = self.call = Call(self, sid, self.model())
         return new.create(sdp)
 
     def stop(self, call: str = "") -> dict:

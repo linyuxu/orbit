@@ -16,22 +16,26 @@ VOICE_UI.blocked = () => toast("Click in the page to hear the voice", () => voic
 VOICE_UI.ended = why => { if (why) toast(`Call ended: ${why}`); };
 VOICE_UI.failed = e => {
   if (e && e.name === "NoWebRTC") toast("No microphone here: this page has no WebRTC");
+  else if (e && e.status === 409) toast("A voice call is on already (another window or device): one at a time · ⌘⇧V hangs it up");
   else if (e && e.data && e.data.need === "openai-key") toast("A voice call needs an OpenAI API key: Settings → Voice (click)", () => settingsDialog("voice"));
   else if (e && (e.name === "NotAllowedError" || e.name === "SecurityError")) toast("Orbit may not use the microphone: allow it in System Settings → Privacy & Security → Microphone");
   else if (e && e.name === "NotFoundError") toast("No microphone found");
   else toast("Voice call failed: " + (e && e.message || e));
 };
 
-function toggleCall() { if (VOICE.phase === "idle" || VOICE.phase === "ended") { const s = cur(); if (s) startCall(s.id); } else hangUp(); }
+/* ⌘⇧V and the button: with a call on anywhere, hang it up (never a second one); else a call with this session. */
+function toggleCall() { if (voiceBusy()) voiceStop(); else if (!voiceLive()) { const s = cur(); if (s) startCall(s.id); } }
 /* The button and the captions (also from renderConv: a switch to another session hides this call's captions). */
 function renderCallBtn() {
   const b = $("#callbtn"), st = $("#callst"), s = cur();
   const on = VOICE.phase !== "idle", here = on && VOICE.sid === S.current;
   const name = VOICE.sid && S.sessions.get(VOICE.sid) ? S.sessions.get(VOICE.sid).name : "";
-  b.disabled = !on && (!s || VOICE.starting);
+  const away = voiceAway(), awayS = away && S.sessions.get(VOICE.away.sid);
+  b.disabled = on ? VOICE.sid !== S.current : (!s || VOICE.starting || away);  // (one call at a time: the others wait)
   b.className = `ibtn sm${on ? " call-" + VOICE.phase : ""}${VOICE.mic && on && VOICE.phase !== "ended" && !VOICE.muted ? " mic-open" : ""}`;
   b.setAttribute("aria-pressed", String(on && VOICE.phase !== "ended"));
-  b.title = on ? `${VOICE_WORD[VOICE.phase]}${name ? ` with ${name}` : ""}${VOICE.phase === "ended" ? "" : " · click or ⌘⇧V to hang up"}`
+  b.title = on && here ? `${VOICE_WORD[VOICE.phase]}${VOICE.phase === "ended" ? "" : " · click or ⌘⇧V to hang up"}`
+    : on || away ? `A voice call is on with ${on ? name || "another session" : awayS ? awayS.name : "a session"}${away ? " (another device)" : ""}: one at a time · ⌘⇧V hangs it up`
     : "Voice call with this session (⌘⇧V): talk, and it does the work";
   /* In a call with the session in front: the orb in the input's place (unless typing instead); the state under it. */
   const orb = on && here && !S.file && !VOICE.typing, ob = $("#voiceorb");
@@ -49,16 +53,24 @@ function renderCallBtn() {
 }
 /* The call wherever you are (the status bar, every tab): its state and session; a click: mute, go to it, hang up. */
 function renderCallPill(name) {
-  const p = $("#callpill"), on = VOICE.phase !== "idle";
-  p.hidden = !on;
-  if (!on) return;
-  p.className = `callpill call-${VOICE.phase}${VOICE.muted ? " muted" : ""}`;
-  p.querySelector(".cpw").innerHTML = VOICE.muted && voiceLive() ? `${I("micoff", 12)}Muted` : esc(VOICE_WORD[VOICE.phase]);
-  p.querySelector(".cpn").textContent = name ? `· ${name}` : "";
-  p.title = `Voice call${name ? ` with ${name}` : ""}: click for mute, the session, hang up · ⌘⇧A mute · ⌘⇧V hang up`;
+  const p = $("#callpill"), on = VOICE.phase !== "idle", away = !on && VOICE.away;
+  p.hidden = !on && !away;
+  if (p.hidden) return;
+  const phase = on ? VOICE.phase : VOICE.away.phase, awayS = away && S.sessions.get(VOICE.away.sid);
+  p.className = `callpill call-${phase}${on && VOICE.muted ? " muted" : ""}${away ? " away" : ""}`;
+  p.querySelector(".cpw").innerHTML = on && VOICE.muted && voiceLive() ? `${I("micoff", 12)}Muted` : esc(VOICE_WORD[phase]);
+  p.querySelector(".cpn").textContent = away ? `· ${awayS ? awayS.name : "a session"} · another device` : name ? `· ${name}` : "";
+  p.title = away ? "A voice call another device holds: click to go to its session or hang it up · ⌘⇧V hang up"
+    : `Voice call${name ? ` with ${name}` : ""}: click for mute, the session, hang up · ⌘⇧A mute · ⌘⇧V hang up`;
 }
 $("#callpill").addEventListener("mousedown", e => e.preventDefault());
 $("#callpill").addEventListener("click", () => {
+  if (!voiceLive() && voiceAway()) {  // (another device's call: this page can go to it, or end it)
+    const s = S.sessions.get(VOICE.away.sid);
+    menu([...(s ? [{ label: `Go to ${s.name}`, run: () => switchTo(s.id) }, { sep: true }] : []),
+          { label: "Hang up (on the other device too)", key: "⌘⇧V", danger: true, run: () => voiceStop() }], { anchor: $("#callpill") });
+    return;
+  }
   if (!voiceLive()) return;
   const s = S.sessions.get(VOICE.sid), here = VOICE.sid === S.current && !S.file;
   menu([

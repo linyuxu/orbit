@@ -36,8 +36,12 @@ function onKey(e) {
   const combo = comboOf(e);
   const consume = () => { e.preventDefault(); e.stopPropagation(); };
   // A voice call's keys work anywhere (a dialog, a menu, an editor, the terminal): ⌘⇧A mutes, ⌘⇧V hangs up.
-  if (!EMBED && typeof voiceLive === "function" && voiceLive() && (combo === "MS:KeyA" || combo === "MS:KeyV")) {
-    consume(); if (combo === "MS:KeyA") voiceMute(); else hangUp(); return;
+  if (!EMBED && typeof voiceBusy === "function" && voiceBusy() && (combo === "MS:KeyA" || combo === "MS:KeyV")) {
+    consume();
+    if (combo === "MS:KeyV") voiceStop();  // (this page's call or another device's: never a second one)
+    else if (voiceLive()) voiceMute();
+    else toast("Mute works on the device that holds the call");
+    return;
   }
   if (document.activeElement === findq && !modal) {
     if (combo === "Enter" || combo === "S:Enter") { consume(); findStep(combo === "Enter" ? 1 : -1); return; }

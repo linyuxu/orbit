@@ -7,7 +7,8 @@
    made, errors); the data channel gives a quicker copy of the captions. Here: that state (VOICE), the phase, the
    captions, the sound level (METER), the gyroscope's drawing, start and hang-up. The page fills in VOICE_UI (how it
    draws and speaks) and provides api(method, path, body, {keepalive}). Nothing here touches the page at load. */
-const VOICE = { call: null, sid: null, phase: "idle", starting: false, pc: null, mic: null, dc: null, caps: new Map(), endTm: 0, spTm: 0, typing: false, muted: false };
+const VOICE = { call: null, sid: null, phase: "idle", starting: false, pc: null, mic: null, dc: null, caps: new Map(), endTm: 0, spTm: 0, typing: false, muted: false,
+                away: null };  // away: a call another page or device holds ({call, sid, phase}): one at a time, everywhere
 const VOICE_WORD = { connecting: "Connecting…", listening: "Listening", speaking: "Speaking", standby: "Standby", ended: "Call ended" };
 const VOICE_UI = {
   render() {},           // the phase, the captions or the microphone changed: draw the call
@@ -49,7 +50,8 @@ const VOICE_WHY = { expired: "the voice session's time ran out", remote_hangup: 
 function voiceEvent(m) {
   // (the new call's state may come before /api/live/start answers; the last call on this session ending is not it)
   if (!VOICE.call && VOICE.starting && m.kind === "state" && m.state && m.state.sid === VOICE.sid && m.state.phase !== "ended") VOICE.call = m.call;
-  if (!m.call || m.call !== VOICE.call) return;
+  if (m.call && m.call !== VOICE.call) { if (m.kind === "state") voiceAwayState(m.call, m.state || {}); return; }
+  if (!m.call) return;
   if (m.kind === "caption") addCaption(m.caption);
   else if (m.kind === "delegation") {
     const how = m.how === "edit" ? `changes request #${m.cid}` : m.how === "steer" ? `steers request #${m.cid}` : `→ request #${m.cid}`;
@@ -58,6 +60,14 @@ function voiceEvent(m) {
   } else if (m.kind === "error") VOICE_UI.toast("Voice: " + m.message);
   else if (m.kind === "state") voiceState(m.state || {});
 }
+/* A call this page does not hold (the phone's, another window's): only one at a time, so this page's voice buttons
+   wait, and ⌘⇧V (or the pill) hangs it up. */
+function voiceAwayState(call, st) {
+  if (st.phase === "ended" || !st.phase) { if (VOICE.away && VOICE.away.call === call) VOICE.away = null; }
+  else VOICE.away = { call, sid: st.sid, phase: st.phase };
+  VOICE_UI.render();
+}
+const voiceAway = () => !!(VOICE.away && VOICE.away.phase !== "ended");
 function voiceState(st) {
   if (st.phase === "ended") {
     endMedia();
@@ -69,7 +79,15 @@ function voiceState(st) {
    call ended meanwhile (missed its last event), or goes on: its phase and the captions missed. */
 async function voiceResync() {
   const call = VOICE.call;
-  if (!call || VOICE.phase === "ended" || VOICE.phase === "idle") return;
+  if (!call || VOICE.phase === "ended" || VOICE.phase === "idle") {  // (none here: is there one elsewhere?)
+    let st;
+    try { st = await api("GET", "/api/live"); } catch { return; }
+    if (VOICE.call || VOICE.starting) return;
+    const was = VOICE.away && VOICE.away.call;
+    if (st.call && st.phase && st.phase !== "ended") voiceAwayState(st.call, st);
+    else if (was) voiceAwayState(was, { phase: "ended" });
+    return;
+  }
   let st;
   try { st = await api("GET", "/api/live"); } catch { return; }
   if (VOICE.call !== call) return;
@@ -202,6 +220,7 @@ function iceGathered(pc, ms = 10000) {
    (Safari: the AudioContext, and the microphone's request) happens before the first await. */
 async function startCall(sid) {
   if (!sid || VOICE.starting) return;
+  if (voiceBusy()) { VOICE_UI.toast("A voice call is on already: one at a time (⌘⇧V hangs it up)"); return; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection) { VOICE_UI.failed({ name: "NoWebRTC" }); return; }
   VOICE.starting = true; VOICE.sid = sid; VOICE.call = null; VOICE.caps.clear(); VOICE.typing = false; VOICE.muted = false;
   try { METER.ctx = new AudioContext(); if (METER.ctx.state === "suspended") METER.ctx.resume().catch(() => {}); } catch { METER.ctx = null; }  // (made in the click: Safari lets it play)
@@ -237,6 +256,7 @@ async function startCall(sid) {
     VOICE.call = null;
     if (call) api("POST", "/api/live/stop", { call }).catch(() => {});
     setVoicePhase("idle");
+    if (e && e.status === 409 && e.data && e.data.busy) VOICE.away = { ...e.data.busy, phase: "listening" };  // (one began elsewhere)
     VOICE_UI.failed(e);
   } finally {
     VOICE.starting = false;
@@ -245,6 +265,16 @@ async function startCall(sid) {
 }
 /* Mute: the microphone's track sends silence (the call goes on; GPT Live hears nothing, and may rest in standby). */
 const voiceLive = () => VOICE.phase !== "idle" && VOICE.phase !== "ended";
+const voiceBusy = () => voiceLive() || voiceAway();  // (a call here, or anywhere else)
+/* Hang up whichever call is on: this page's, or the one another page or device holds. */
+function voiceStop() {
+  if (voiceLive()) return hangUp();
+  if (!voiceAway()) return;
+  const call = VOICE.away.call;
+  VOICE.away = { ...VOICE.away, phase: "ended" };
+  VOICE_UI.render();
+  api("POST", "/api/live/stop", { call }).catch(e => { if (e.status !== 404) VOICE_UI.toast("Hang-up: " + e.message); });
+}
 function voiceMute(on = !VOICE.muted) {
   if (!voiceLive()) return;
   VOICE.muted = !!on;

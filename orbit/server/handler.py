@@ -911,7 +911,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json({"keys": keys.set_key(self.desk.state_dir, str(b.get("name", "")), b.get("value"))})
             if p in ("/api/live/start", "/api/live/stop"):  # a voice call (GPT Live): this machine, or a client with the
                 # token (the phone): the key stays here, the client gets only the call's SDP answer
-                from orbit.services.live import NoKey
+                from orbit.services.live import Busy, NoKey
                 if p == "/api/live/stop":
                     try:
                         return self._json(self.desk.live.stop(str(b.get("call") or "")))
@@ -921,6 +921,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     return self._json(self.desk.live.start(str(b.get("sid", "")), b.get("sdp")))
                 except NoKey as e:
                     return self._json({"error": str(e), "need": "openai-key"}, 400)
+                except Busy as e:
+                    return self._json({"error": str(e), "busy": {"call": e.call.id, "sid": e.call.sid}}, 409)
                 except ValueError as e:
                     return self._json({"error": str(e)}, 502 if str(e).startswith(("OpenAI", "could not reach")) else 400)
             if p == "/api/schedules":

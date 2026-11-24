@@ -290,6 +290,20 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertTrue(c2["text"].startswith("Also, retry that\n\n(Context, not an instruction: the voice had just said: "
                                               '"The build failed on step two.")'), c2["text"])
 
+    def test_one_call_at_a_time(self):
+        """A second call, from any session or device, is refused while one is on (409, saying which); after the first
+        hangs up, a new one starts."""
+        s, r = self.start_call("First")
+        other = self.new_session("Second")
+        code, e = self.req("POST", "/api/live/start", {"sid": other["id"], "sdp": "v=0 offer"})
+        self.assertEqual(code, 409, e)
+        self.assertEqual(e["busy"], {"call": r["call"], "sid": s["id"]})
+        self.assertEqual(len(self.fake.bodies), 1)  # (nothing created at OpenAI for the refused one)
+        self.assertEqual(self.live_state()["call"], r["call"])  # (the first goes on)
+        self.assertEqual(self.req("POST", "/api/live/stop", {"call": r["call"]})[0], 200)
+        code, r2 = self.req("POST", "/api/live/start", {"sid": other["id"], "sdp": "v=0 offer"})
+        self.assertEqual(code, 200, r2)
+
     def test_status_in_an_idle_session(self):
         """A request in an idle session is "queued" only for the moment before its agent takes it: the voice is told it
         runs now, never that it waits (a real call said "it is queued behind another request" with nothing running)."""
@@ -467,15 +481,6 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual(self.live_state()["reason"], "expired")
         self.assertIn("time ran out", self.cards(s["id"])[0]["answer"])
         self.assertEqual(self.fake.got("session.close"), [])
-
-    def test_a_new_call_hangs_up_the_last(self):
-        s1, r1 = self.start_call("One")
-        s2 = self.new_session("Two")
-        code, r2 = self.req("POST", "/api/live/start", {"sid": s2["id"], "sdp": "v=0 offer"})
-        self.assertEqual(code, 200)
-        self.assertTrue(wait(lambda: self.fake.got("session.close")))
-        self.assertEqual(self.live_state()["call"], r2["call"])
-        self.assertEqual(self.live_state()["sid"], s2["id"])
 
     # ------------------------------------------------------------------ Orbit: client_id, note cards
     def test_client_id_send_is_idempotent_across_a_restart(self):

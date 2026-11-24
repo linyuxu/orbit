@@ -701,3 +701,6 @@ body.vcall #toast { bottom:calc(268px + var(--sab)); }  /* (over the call view, 
 .vnote .vt { font-size:var(--fs-ui); font-weight:500; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .vnote .vsum { font-size:var(--fs-meta); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
 .vnote .md { margin:2px 0 6px; color:var(--ink-2); }
+
+/* One call at a time: while one is on (another session's, or another device's), the voice button waits. */
+#callbtn.vbusy { color:var(--ink-3); opacity:.45; }
