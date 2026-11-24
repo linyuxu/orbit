@@ -41,6 +41,7 @@ try { localStorage.removeItem("orbit.forceDesktop"); } catch (e) {}</script>
 <script defer src="/m/m-sheets.js"></script>
 <script defer src="/m/m-tabs.js"></script>
 <script defer src="/m/m-files.js"></script>
+<script defer src="/m/m-side.js"></script>
 <script defer src="/m/m-notes.js"></script>
 <script defer src="/m/m-misc.js"></script>
 <script defer src="/m/m-pviews.js"></script>
@@ -76,10 +77,16 @@ try { localStorage.removeItem("orbit.forceDesktop"); } catch (e) {}</script>
     <header class="nav conv">
       <button class="nbtn" id="cback" aria-label="Back to Sessions"><svg class="i" width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5L4.5 8l5.5 5.5"/></svg></button>
       <div class="ntitle"><span id="cname"></span><span id="csub"></span></div>
+      <div class="cseg" id="cseg" role="group" aria-label="Show">
+        <button data-v="chat" aria-label="Conversation"><svg class="i" width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4a1.5 1.5 0 0 1 1.5-1.5h8A1.5 1.5 0 0 1 13.5 4v5.5A1.5 1.5 0 0 1 12 11H7.2L4.5 13.5V11H4a1.5 1.5 0 0 1-1.5-1.5z"/></svg></button>
+        <button data-v="side" aria-label="Side panel"><svg class="i" width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5"/><path d="M9.75 2.75v10.5"/></svg><span class="n"></span></button>
+      </div>
       <button class="nbtn" id="cmore" aria-label="Session actions"><svg class="i" width="22" height="22" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.2" cy="8" r="1.15"/><circle cx="8" cy="8" r="1.15"/><circle cx="12.8" cy="8" r="1.15"/></svg></button>
     </header>
     <div class="offline-bar">Reconnecting to Orbit…</div>
     <div class="scroll" id="conv"><div id="cards"></div><div id="livecaps" hidden></div></div>
+    <!-- the Side view (m-side.js): what the session's agent put beside the conversation -->
+    <div id="sideview"><div class="schips"></div><div class="sbody"></div></div>
     <footer id="foot">
       <button id="jump"><svg class="i" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5"/></svg><span>Latest</span></button>
       <div id="agentbar" hidden></div>

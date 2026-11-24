@@ -717,6 +717,12 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             fed = federation.split(m.group(1))
             return self._json(*reversed(self.desk.federation.call(fed[0], "GET", f"/api/sessions/{fed[1]}/{m.group(2)}"
                                                                   + (f"?{u.query}" if u.query else ""))))
+        m = re.fullmatch(r"/api/sessions/([\w-]+)/side", p)
+        if m:  # what its agent put beside the conversation (the phone's Side view)
+            try:
+                return self._json({"items": self.desk.side_items(m.group(1))})
+            except KeyError:
+                return self._json({"error": "no such session"}, 404)
         m = re.fullmatch(r"/api/sessions/([\w-]+)/resume-command", p)
         if m:  # Copy resume command: the session's conversation, continued in a terminal
             try:
@@ -899,6 +905,12 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 line = b.get("line")
                 return self._json(self.desk.open_for_user(str(b.get("path", "")), int(line) if line else None,
                                                           bool(b.get("side")), str(b.get("by", ""))))
+            m = re.fullmatch(r"/api/sessions/([\w-]+)/side/remove", p)
+            if m:  # {"id"}: one of its side items, gone from the list (the phone's ×)
+                try:
+                    return self._json({"items": self.desk.side_remove(m.group(1), str(b.get("id", "")))})
+                except KeyError:
+                    return self._json({"error": "no such session"}, 404)
             if p == "/api/show":
                 html = b.get("html")
                 if html is None and b.get("path"):

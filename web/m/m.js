@@ -86,6 +86,8 @@ function onEvent(m) {
     const list = S.cards.get(m.sid), act = S.active.get(m.sid);  // (the list shows a working session's card too)
     const have = (list && list.find(x => x.id === m.id)) || (act && act.id === m.id ? act : null);
     onCardPatch(m, have, c => { upsertCard(c); if (!S.current) renderListSoon(); });
+  } else if (m.t === "show" || m.t === "open" || m.t === "side") {
+    sideEvent(m);
   } else if (m.t === "closed") {
     removeSession(m.id);
   } else if (m.t === "order") {

@@ -8,6 +8,11 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The phone: a toggle in a session's title bar switches the conversation for its Side view: what its agent put beside it
+  (the pages `orbit-agent show` made, sandboxed and live; the files `orbit-agent open --side` opened, drawn), newest
+  first, chips to pick one, × to take one off; a new one while in the conversation counts up on the toggle with a toast.
+  The server keeps them per session (`<state>/show/side.json`, 20 each; `GET /api/sessions/<id>/side`, `POST …/side/remove`;
+  the Mac's own side tabs stay in its browser). Another machine's session: not yet.
 - Voice and agents speak of their own work in the first person. The voice: its backend's work is its own ("I'll look
   at the logs", "I'm still on request #3"), never "the agent" or the session's name unless asked; another agent is named
   only when a result says the work went there; Orbit is the platform that routes requests and reports their status.

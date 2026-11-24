@@ -113,6 +113,34 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         th.join(5)
         self.assertTrue(got[0]["side"])
 
+    def test_side_items_of_a_session(self):
+        """What a session's agent shows or opens beside it is kept for it (the phone's Side view), newest first; the same
+        file again moves up; a page or file that is gone is left out; × takes one off; another session's are its own."""
+        s, other = self.new_session("sider"), self.new_session("other")
+        self.assertEqual(self.req("GET", f"/api/sessions/{s['id']}/side")[1], {"items": []})
+        r = self.agent("show", "-", "--title", "Bells", inp="<h1>b</h1>", session=s["id"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        f = Path(self.work) / "notes.py"
+        f.write_text("x = 1\n")
+        self.agent("open", f"{f}:1", "--side", session=s["id"])
+        self.agent("show", "-", "--title", "Elsewhere", inp="<h1>o</h1>", session=other["id"])
+        self.agent("show", "-", "--title", "Nobody's", inp="<h1>n</h1>")  # (from a terminal: no session)
+        items = self.req("GET", f"/api/sessions/{s['id']}/side")[1]["items"]
+        self.assertEqual([(x["kind"], x["title"]) for x in items], [("file", "notes.py"), ("web", "Bells")])
+        self.assertEqual((items[0]["path"], items[0]["line"]), (os.path.realpath(f), 1))
+        self.assertTrue(items[1]["url"].startswith("/show/"))
+        self.assertEqual([x["title"] for x in self.req("GET", f"/api/sessions/{other['id']}/side")[1]["items"]], ["Elsewhere"])
+        self.agent("show", "-", "--title", "Bells 2", inp="<h1>c</h1>", session=s["id"])
+        self.agent("open", str(f), "--side", session=s["id"])  # (the same file again: it moves up, once)
+        self.assertEqual([x["title"] for x in self.req("GET", f"/api/sessions/{s['id']}/side")[1]["items"]],
+                         ["notes.py", "Bells 2", "Bells"])
+        f.unlink()  # (gone: left out)
+        self.assertEqual([x["title"] for x in self.req("GET", f"/api/sessions/{s['id']}/side")[1]["items"]], ["Bells 2", "Bells"])
+        bells = items[1]["id"]
+        code, r = self.req("POST", f"/api/sessions/{s['id']}/side/remove", {"id": bells})
+        self.assertEqual((code, [x["title"] for x in r["items"]]), (200, ["Bells 2"]))
+        self.assertEqual(self.req("GET", "/api/sessions/nope/side")[0], 404)
+
     # ------------------------------------------------------------------ sessions / send
     def test_sessions_and_send(self):
         a = self.new_session("asker")

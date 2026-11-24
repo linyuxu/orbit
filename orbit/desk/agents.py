@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import time
 import uuid
@@ -33,6 +35,9 @@ class Agents:
         if not os.path.exists(p):
             raise ValueError(f"no such file: {p}")
         ev = {"t": "open", "path": p, "line": line, "side": side, "by": self.by_name(by), "sid": self._by_sid(by)}
+        if side and ev["sid"]:
+            self._side_add(ev["sid"], {"id": "f" + hashlib.sha1(p.encode()).hexdigest()[:11], "kind": "file", "path": p,
+                                       "line": line, "title": os.path.basename(p)})
         self.broadcast(ev)
         return ev
 
@@ -45,8 +50,61 @@ class Agents:
         (self.show_dir / f"{pid}.html").write_text(html, encoding="utf-8")
         ev = {"t": "show", "id": pid, "url": f"/show/{pid}", "title": title.strip() or "Page", "by": self.by_name(by),
               "sid": self._by_sid(by)}  # (sid: the side tab goes with that session's tab, not whichever is in front)
+        if ev["sid"]:
+            self._side_add(ev["sid"], {"id": pid, "kind": "web", "url": ev["url"], "title": ev["title"]})
         self.broadcast(ev)
         return ev
+
+    # ---------------------------------------------------------------- a session's side items (the phone's Side view)
+    # What its agent put beside the conversation (orbit-agent show, open --side), kept in <state>/show/side.json
+    # ({sid: [item]}, the newest last, SIDE_KEPT each): the page's side tabs are its own (its storage); the phone, which
+    # has none, lists these.
+    SIDE_KEPT = 20
+
+    def _side_file(self) -> Path:
+        return self.show_dir / "side.json"
+
+    def _side_read(self) -> dict:
+        try:
+            d = json.loads(self._side_file().read_text())
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _side_write(self, d: dict) -> None:
+        self.show_dir.mkdir(parents=True, exist_ok=True)
+        f = self._side_file()
+        tmp = f.with_name(f"side.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(d))
+        os.replace(tmp, f)
+
+    def _side_add(self, sid: str, item: dict) -> None:
+        with self.lock:
+            d = self._side_read()
+            items = [x for x in d.get(sid, []) if x.get("id") != item["id"]]  # (the same file again: it moves to the end)
+            items.append({**item, "time": time.time()})
+            d[sid] = items[-self.SIDE_KEPT:]
+            self._side_write(d)
+
+    def side_items(self, sid: str) -> list[dict]:
+        """A session's side items, newest first; a page or file that is gone is left out."""
+        self.get(sid)  # (KeyError: no such session)
+        with self.lock:
+            items = list(self._side_read().get(sid, []))
+        alive = [x for x in items if (x.get("kind") == "web" and self.show_path(str(x.get("id", ""))))
+                 or (x.get("kind") == "file" and os.path.exists(str(x.get("path", ""))))]
+        return alive[::-1]
+
+    def side_remove(self, sid: str, item_id: str) -> list[dict]:
+        self.get(sid)
+        with self.lock:
+            d = self._side_read()
+            d[sid] = [x for x in d.get(sid, []) if x.get("id") != item_id]
+            if not d[sid]:
+                d.pop(sid)
+            self._side_write(d)
+        self.broadcast({"t": "side", "sid": sid})
+        return self.side_items(sid)
 
     def show_path(self, pid: str) -> Path | None:
         p = self.show_dir / f"{pid}.html"

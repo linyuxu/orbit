@@ -732,3 +732,26 @@ body.vcall #toast { bottom:calc(268px + var(--sab)); }  /* (over the call view, 
 #dimmer .dword { color:#5b6b85; font-size:15px; min-height:20px; letter-spacing:.01em; }
 #dimmer .dtime { color:#3a3f48; font-size:44px; font-weight:300; font-variant-numeric:tabular-nums; }
 #dimmer.call .dtime { font-size:15px; color:#30343b; }
+
+/* The title bar's toggle (m-side.js): the conversation, or what its agent put beside it */
+.nav.conv .cseg { flex:none; display:flex; align-items:center; gap:2px; padding:2px; margin-right:2px; border-radius:10px; background:var(--fill, rgba(120,120,128,.12)); }
+.nav.conv .cseg button { position:relative; display:flex; align-items:center; justify-content:center; gap:3px; height:28px; min-width:34px; padding:0 7px;
+  border:0; border-radius:8px; background:transparent; color:var(--ink-3, #8a8a8e); font:600 12px/1 var(--font, -apple-system, sans-serif); }
+.nav.conv .cseg button.on { background:var(--bg, #fff); color:var(--ink, #1d1d1f); box-shadow:0 1px 2px rgba(0,0,0,.12); }
+.nav.conv .cseg .n:empty { display:none; }
+.nav.conv .cseg .n { font-variant-numeric:tabular-nums; }
+#sideview { display:none; }
+#vconv.sidemode #conv, #vconv.sidemode #foot { display:none; }
+#vconv.sidemode #sideview { display:flex; flex-direction:column; flex:1; min-height:0; }
+#sideview .schips { flex:none; display:flex; gap:6px; overflow-x:auto; padding:8px 12px; scrollbar-width:none; border-bottom:1px solid var(--line, rgba(0,0,0,.08)); }
+#sideview .schips:empty { display:none; }
+#sideview .schips::-webkit-scrollbar { display:none; }
+#sideview .schip { flex:none; display:flex; align-items:center; gap:6px; max-width:70vw; height:32px; padding:0 6px 0 10px; border-radius:16px;
+  border:1px solid var(--line, rgba(0,0,0,.1)); background:var(--bg, #fff); color:var(--ink-2, #3a3a3c); font:500 13px var(--font, -apple-system, sans-serif); }
+#sideview .schip.on { border-color:var(--ink, #1d1d1f); color:var(--ink, #1d1d1f); }
+#sideview .schip .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#sideview .schip .x { display:flex; padding:6px; margin-left:-2px; color:var(--ink-3, #8a8a8e); }
+#sideview .sbody { flex:1; min-height:0; overflow:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; }
+#sideview .sframe { flex:1; width:100%; min-height:0; border:0; background:#fff; }
+#sideview .sfile { padding:10px 14px 30px; }
+#sideview .sfpath { color:var(--ink-3, #8a8a8e); font-size:12px; margin-bottom:8px; word-break:break-all; }

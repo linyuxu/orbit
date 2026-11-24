@@ -12,6 +12,7 @@ function openSession(sid, { push = true } = {}) {
   if (S.current && S.current !== sid) saveDraft();
   S.current = sid;
   markSeen(sid);
+  if (typeof sideOpened === "function") sideOpened(sid);  // (m-side.js: the view it was left in, conversation or Side)
   // One history entry, its address naming the open session (a reload comes back to it). No entry is pushed: iOS's own
   // back and forward swipes (edges) would go through them, a forward one reopening a session closed long ago.
   if (push) history.replaceState({ sid }, "", "#s/" + encodeURIComponent(sid));
