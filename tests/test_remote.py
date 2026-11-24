@@ -361,8 +361,9 @@ for name in [n for n in dir(test_skeleton.SkeletonTest) if n.startswith("test_")
 class RemoteVoiceTest(RemoteTest):
     def test_voice_call_with_another_machines_session(self):
         """A voice call held by this server with a session on another machine: its requests go there (origin Voice,
-        idempotent), the context comes from there, the answer comes back on this server's events and is spoken, and
-        the call's transcript becomes a note card over there."""
+        idempotent), the context comes from there, the answer comes back on this server's events and is spoken, the
+        session's state (a request typed over there too) is told silently, and the call's transcript becomes a note
+        card over there."""
         import fake_live
         from orbit.machines.federation import wait_for
         from orbit.services import keys
@@ -391,6 +392,12 @@ class RemoteVoiceTest(RemoteTest):
             self.assertEqual((c["text"], c["origin"]["label"]), ("run the build", "Voice"))
             com = fake.wait_got("session.commentary.append")
             self.assertIn("answer: run the build", com[0]["content"])
+            # a request typed over there (not by the call): its state reaches the voice through this server's events
+            self.rdesk.send(rid, "typed over there")
+            snap = lambda: [e["content"] for e in fake.got("session.thinking.append") if e["delegation_id"] is None
+                            and 'Last finished: request #3 ("typed over there")' in e["content"]]
+            self.assertTrue(wait_for(snap, 10), [e["content"] for e in fake.got("session.thinking.append")])
+            self.assertIn('"far" is idle', snap()[-1])
             self.req("POST", "/api/live/stop", {})
             ok = wait_for(lambda: any(x.get("kind") == "note" for x in self.rdesk.cards(rid)), 10)
             self.assertTrue(ok, [l for f in Path(self.state, "live").glob("*.jsonl") for l in f.read_text().splitlines() if "note" in l])

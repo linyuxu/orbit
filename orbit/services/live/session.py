@@ -3,9 +3,9 @@
 The page sends its SDP offer; this server creates the Live session with POST /v1/live/sessions (the key never leaves
 it), hands the SDP answer back, and attaches the sideband websocket (/v1/live/sessions/{id}/attach). Everything else
 happens there: transcripts (kept by start_ms), delegations (a request in the bound Orbit session, sent once), the
-card's progress (silent thinking) and its result (one commentary), standby, hang-up (session.close, then the
-transcript as a note card). Each stage is logged with its time and ids in <state>/live/<call>.jsonl (never the key,
-never audio).
+session's state (silent snapshots when it changes), each request's result (one commentary, held while the user
+talks), standby, hang-up (session.close, then the transcript as a note card). Each stage is logged with its time and
+ids in <state>/live/<call>.jsonl (never the key, never audio).
 """
 
 from __future__ import annotations
@@ -29,8 +29,17 @@ from orbit.services.live import ws as wsock
 
 ACK_DELAY_MS = 800  # time to cancel the automatic spoken acknowledgement with an empty thinking append (§5)
 GRACE_S = 0.4  # after a delegation, late transcript fragments still join its request
-PROGRESS_EVERY_S = 10.0  # at most one progress line per delegation this often
 SPEAKING_HOLD_S = 1.2  # "speaking" this long after the last fragment of the voice's speech
+# The session's state, told silently (§6): changes within COALESCE_S go out as one snapshot; one that only moves the
+# agent's step on, at most every STEP_EVERY_S (each append is a chance for the voice to speak: real calls answered a
+# 10 s progress feed with "still working, one moment" 9 times in 13).
+COALESCE_S, STEP_EVERY_S, SNAPSHOT_TOKENS = 2.0, 30.0, 150
+# A result is never spoken over the user: it waits while a fragment of theirs came within USER_HOLD_S (they arrive
+# every ~200 ms while someone talks), at most HOLD_MAX_S.
+USER_HOLD_S, HOLD_MAX_S = 1.2, 8.0
+QUEUE_REAL_S = 30.0  # a request waits "for real" (worth saying) when the one before it has run this long
+SPEAK_TOKENS = {"brief": 100, "detailed": 200}  # the spoken part of a result: ~75 / ~150 English words
+DETAIL_TOKENS = 300  # the next part of the answer, as silent context for follow-up questions
 RECONNECT_BASE_S, RECONNECT_MAX_S, STABLE_S = 0.2, 5.0, 30.0  # sideband reattach backoff (as Codex)
 ATTACH_GIVE_UP_S = 30.0  # never attached in this long: the call ends
 CLOSE_WAIT_S = 5.0  # hang-up: wait this long for session.closed
@@ -41,23 +50,54 @@ ACTIVE = ("thinking", "running")
 # nothing (only this server delegates, adds context or closes the call).
 PAGE_EVENTS = ("session.started", "session.input_transcript.delta", "session.output_transcript.delta",
                "session.paused", "session.resumed", "session.closed")
-# "Take it back": the user's words are only that (a verb of withdrawing or stopping, and words naming the request): the
-# last request of the call is withdrawn (not started) or stopped (running). Anything more ("cancel the nightly job")
-# is a task for the agent.
+# "Take it back": the user's words are only that (a verb of withdrawing or stopping, and words naming the request):
+# by what they name, the running request is stopped ("停止当前在跑的任务", "stop the running task") or a waiting one
+# withdrawn ("撤回"); else the call's last request is withdrawn (not started) or stopped (running). Anything more
+# ("cancel the nightly job", "stop the server") is a task for the agent.
 TAKE_BACK_VERBS = ("撤回", "撤掉", "撤销", "收回", "取消", "不要了", "别做了", "不用做了", "不用了", "算了", "停掉", "停下来", "停下", "停止",
                    "cancel", "withdraw", "nevermind", "forgetit", "scratchthat", "stop", "drop")
 TAKE_BACK_FILL = ("request", "请求", "任务", "那个", "这个", "刚才", "刚刚", "上一个", "前面", "之前", "那条", "这条", "的", "把", "将", "你",
                   "请", "麻烦", "先", "就", "那", "吧", "了", "掉", "一下", "它", "啊", "嗯", "呃", "好", "ok", "please", "that",
-                  "the", "this", "it", "last", "one", "my", "just", "okay", "yes")
+                  "the", "this", "it", "last", "one", "my", "just", "okay", "yes",
+                  "运行中", "进行中", "当前", "现在", "正在", "在跑", "跑的", "运行", "在", "current", "running", "now", "task", "job")
+RUNNING_WORDS = ("在跑", "正在", "当前", "运行", "进行中", "running", "current")  # words naming the running request
+STOP_VERBS = ("停下来", "停下", "停止", "停掉", "stop")
+WITHDRAW_VERBS = ("撤回", "收回", "撤销", "撤掉", "withdraw")
+# "Put it in the running one": a waiting request moved into the running one (withdrawn, its words steered in).
+MOVE_IN_VERBS = ("插进去", "放进去", "加进去", "放到当前任务里", "放到当前任务", "加到当前任务", "插到当前任务", "steeritin", "steerin",
+                 "putitin", "addittotherunningone", "addittothecurrentone", "addittotherunningrequest", "addittotherunningtask")
+# "Tell it, while it works: …": the words after a cue join the running request (any of the session's, if its agent
+# takes additions mid-request).
+STEER_CUE = re.compile(r"^\s*(?:(?:请|麻烦)?你?(?:插一句|插个话|补充一下|补充|告诉它|跟它说|顺便(?:跟它说|告诉它)?)"
+                       r"|(?:please\s+)?(?:also\s+tell\s+it(?:\s+to)?|tell\s+it(?:\s+to)?|steer(?:\s+it)?"
+                       r"|add\s+(?:this\s+)?to\s+the\s+(?:current|running)(?:\s+(?:one|request|task))?)\b)[\s,，:：、;；.。!！-]*", re.I)
+
+
+def _norm(words: str) -> str:
+    return re.sub(r"[\s\W_]+", "", (words or "").lower())
+
+
+def _only(w: str, verbs: tuple, fill: tuple) -> bool:
+    """w (normalized) is one of verbs and nothing but fill words besides."""
+    if not w or len(w) > 24 or not any(v in w for v in verbs):
+        return False
+    for t in sorted(verbs + fill, key=len, reverse=True):
+        w = w.replace(t, "")
+    return not w
 
 
 def takes_back(words: str) -> bool:
-    w = re.sub(r"[\s\W_]+", "", (words or "").lower())
-    if not w or len(w) > 24 or not any(v in w for v in TAKE_BACK_VERBS):
-        return False
-    for t in sorted(TAKE_BACK_VERBS + TAKE_BACK_FILL, key=len, reverse=True):
-        w = w.replace(t, "")
-    return not w
+    return _only(_norm(words), TAKE_BACK_VERBS, TAKE_BACK_FILL)
+
+
+def moves_in(words: str) -> bool:
+    return _only(_norm(words), MOVE_IN_VERBS, TAKE_BACK_FILL + ("里", "中", "into", "to", "add", "put"))
+
+
+def steer_words(words: str) -> str:
+    """The words to add to the running request when they start with a steer cue ("插一句 …", "tell it to …"), else ""."""
+    m = STEER_CUE.match(words or "")
+    return (words[m.end():].strip() if m and m.group(0).strip() else "")
 
 
 REFERS = re.compile(r"\b(that|this|it|those|these|them|the (first|second|third|last|other|same) one|the same)\b", re.I)
@@ -104,6 +144,65 @@ def cut_tokens(text: str, limit: int) -> tuple[str, bool]:
     elif " " in head[lo // 2:]:
         head = head[: head.rfind(" ")]
     return head.rstrip(), True
+
+
+FENCED = re.compile(r"(?ms)^\s*(```|~~~).*?^\s*\1[^\n]*$")
+TABLE_ROW = re.compile(r"\s*\|")
+TABLE_RULE = re.compile(r"\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
+BULLET = re.compile(r"\s*([-*+•]|\d{1,3}[.)])\s+")
+
+
+def unmark(line: str) -> str:
+    """A line of Markdown as plain words to say: no heading, bullet or quote marks, emphasis, links (their text kept),
+    images or code backticks. (A voice reads "**" and "- " aloud, or stumbles on them.)"""
+    t = re.sub(r"^\s*(#{1,6}\s+|>\s?)", "", line)
+    t = BULLET.sub("", t, count=1) if BULLET.match(t) else t
+    t = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", t)
+    t = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", t)
+    t = re.sub(r"`([^`\n]+)`", r"\1", t)
+    t = re.sub(r"(\*\*|__|~~)(.+?)\1", r"\2", t)
+    t = re.sub(r"(?<![\w*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w*])", r"\1", t)
+    return " ".join(t.split())
+
+
+def plain(answer: str) -> tuple[list[str], bool]:
+    """An answer as plain paragraphs to say: fenced code, tables, images, headings and rules left out, Markdown marks
+    removed, a list's items joined into one sentence-like paragraph. (paragraphs, whether code or tables were left out)."""
+    text, left = FENCED.subn("", answer or "")
+    paras: list[str] = []
+    cur: list[str] = []
+    for ln in text.splitlines() + [""]:
+        if TABLE_ROW.match(ln) or TABLE_RULE.match(ln):
+            left += 1
+            continue
+        if not ln.strip() or re.match(r"\s*#{1,6}\s", ln) or re.match(r"\s*([-*_]\s*){3,}$", ln):
+            if cur:  # a blank line, a heading or a rule ends the paragraph (a heading is display structure)
+                p = "".join(x if not k or (CJK.match(cur[k - 1][-1]) or cur[k - 1][-1] in "；。") and CJK.match(x[0])
+                            else " " + x for k, x in enumerate(cur))  # (no space between Chinese lines)
+                paras.append(p if p[-1] in ".!?…。！？" else p + ("。" if CJK.match(p[-1]) else "."))  # (said in one run)
+                cur = []
+            continue
+        t = unmark(ln)
+        if not t:
+            continue
+        if BULLET.match(ln) and cur and cur[-1][-1] not in ".!?;:…。！？；：":
+            cur[-1] += "；" if CJK.match(cur[-1][-1]) else ";"  # list items read as one sentence
+        cur.append(t)
+    return [p for p in paras if p], bool(left)
+
+
+def gist(text: str, limit: int = 14) -> str:
+    """A short name for a request (or an answer) to say: its first line, the [orbit] line and Markdown left out,
+    within about limit tokens."""
+    from orbit.drivers.base import strip_orbit_line
+    line = next((t for t in (unmark(x) for x in strip_orbit_line(text or "").splitlines()) if t), "")
+    out, cut = cut_tokens(line, limit)
+    return out + "…" if cut else out
+
+
+def dur(s: float) -> str:
+    s = int(max(0, s))
+    return f"{s} s" if s < 60 else f"{s // 60} min {s % 60} s" if s < 3600 else f"{s // 3600} h {s // 60 % 60} min"
 
 
 def http_base() -> str:
@@ -182,9 +281,10 @@ class Target:
         self._call("POST", "/withdraw", {"cid": cid})
 
     def stop(self) -> None:
+        """The running request only: what waits behind it goes on (the voice said which one it stopped)."""
         if self.remote is None:
-            return self.desk.stop(self.sid)
-        self._call("POST", "/stop", {})
+            return self.desk.stop(self.sid, keep_queue=True)
+        self._call("POST", "/stop", {"keep_queue": True})
 
     def note(self, title: str, text: str, origin: dict) -> dict:
         if self.remote is None:
@@ -198,8 +298,10 @@ def instructions(name: str, cwd: str, model: str, cfg: dict | None = None) -> st
     headings), with Orbit's noise rule; then Settings → Voice (its language, how much of a result to say, the user's own
     instructions). For gpt-live-1 the guide's handoff words are its token."""
     cfg = cfg or config.current(None)
+    # (auto: a real call drifted into Traditional characters mid-answer)
     lang = f" Always speak {config.LANGUAGES[cfg['live_language']]}, whatever language the user or a result uses." \
-        if cfg["live_language"] != "auto" else " Speak the language the user speaks."
+        if cfg["live_language"] != "auto" else \
+        " Speak the language the user speaks; for Chinese, speak Mandarin and use Simplified characters."
     detail = "give the takeaway in one to three short sentences" if cfg["live_detail"] == "brief" else \
         "give the result in a few sentences with its key details (names, numbers, what changed, what is left)"
     text = f"""You are the voice of Orbit, an IDE where the user works with coding agents. You talk with the user; an agent \
@@ -216,21 +318,32 @@ result, a blocker or a missing detail arrives.
 Delegation policy:
 Backend tools:
 - The agent session "{name}": it reads and edits the files in {cwd}, runs commands and tools, and knows the session's \
-history and current state.
+history.
 Delegate to the backend when:
 - The user asks for any action or task.
-- The answer needs the session's files, tools, current state or history.
+- The answer needs the session's files, tools or history.
 - A correction changes the work already requested.
-- The user wants to withdraw, cancel or stop a request: Orbit takes back one that has not started, or stops the one \
-running, and tells you which.
+- The user wants to stop, add to, withdraw or cancel a request.
+What Orbit can do with requests (answer questions about it yourself): they run one at a time in this session; to stop \
+the running request, add something to it while it runs, or take back one that has not started, delegate the user's \
+words: Orbit does it and tells you which.
 Do not delegate when:
 - The question is self-contained, or about what was already said or reported in this call.
+- The user asks about status, progress, what is running or queued, or how long something has taken: answer at once \
+from the latest Session state. Give elapsed times; never invent an estimate. If the state does not answer it, say what \
+you know and offer to ask the agent.
 - You need a brief clarification to understand the request.
+Use a previous result when it still answers the question (more of an answer may have come with it as silent context); \
+delegate again if it is missing, out of date, or the user asks to check again.
 Delegate to the backend before giving an answer that depends on backend work. Do not guess the result while waiting.
 Never describe how Orbit or the agent handles requests beyond what Orbit tells you in this call.
-When a result arrives, say only what it says. Never add facts, names or details that are not in the result or in this \
-call; if the result does not answer what the user asked, say so plainly and offer to ask the agent again.
+Results and Orbit's facts are authoritative: do not add to them or contradict them. Say the key takeaway, status or \
+next step in your own words. Never invent facts, names, numbers or details that are not in a result, in Orbit's facts \
+or in this call; if the result does not answer what the user asked, say so plainly and offer to ask the agent again.
 
+Orbit sends you background facts (session state, progress) silently. Do not announce them, and do not say you are \
+still working, unless the user asks or a meaningful change happened (a step that matters finished, a delay that \
+matters, or the user must answer something).
 Avoid unnecessary narration: no repeated confirmations, filler, re-acknowledgements or play-by-play. When a result \
 arrives, {detail}; code, tables and logs stay in Orbit."""
     if cfg["live_prompt"].strip():
@@ -247,9 +360,62 @@ def _msg(role: str, text: str) -> dict:
             "content": [{"type": "output_text" if role == "assistant" else "input_text", "text": text}]}
 
 
+def state_snapshot(name: str, cards: list[dict], now: float | None = None) -> tuple[str, tuple, tuple]:
+    """§6: the bound session's state in a few facts (< ~150 tokens): what runs, for how long, the agent's latest words
+    (its last interim text, never a tool command), what is queued, the last finished request with a gist of its
+    answer. (text, the key of its big changes: started, finished, queued; the key of a step change.) The voice answers
+    "is it done / what is it doing / how long" from this instead of queuing the question behind the work."""
+    now = now or time.time()
+    cs = [c for c in cards if c.get("kind") != "note" and not c.get("hidden")]
+    run = next((c for c in cs if c.get("state") in ACTIVE), None)
+    waiting = [c for c in cs if c.get("state") == "queued"]
+    done = [c for c in cs if c.get("state") in FINAL]
+    last = done[-1] if done else None
+    out = f'Session state at {datetime.fromtimestamp(now).strftime("%H:%M:%S")}: "{name}"'
+    step: tuple = ()
+    if run:
+        out += f' is working on request #{run["id"]} ("{gist(run.get("text") or "")}") for ' \
+               f'{dur(now - (run.get("started") or run.get("time") or now))}'
+        steps = run.get("steps") or []
+        tools = sum(1 for x in steps if x.get("kind") == "tool")
+        if tools:
+            out += f", {tools} step{'s' if tools > 1 else ''} so far"
+        i = max((k for k, x in enumerate(steps) if x.get("kind") == "note"), default=-1)
+        words = gist(" ".join((steps[i].get("text") or steps[i].get("summary") or "").split()), 30).rstrip(".。") \
+            if i >= 0 else ""
+        if words:  # (a note is recorded as its tool starts: that tool's start is when it was said)
+            said = steps[i + 1].get("t0") if i + 1 < len(steps) else None
+            out += f'; its latest words{f" ({dur(now - said)} ago)" if said else ""}: "{words}"'
+        step = (run["id"], tools, words)
+    else:
+        out += " has nothing running" if waiting else " is idle: nothing running or queued"
+    if waiting:
+        out += f'. Queued{" after it" if run else ""}: ' + ", ".join(
+            f'#{c["id"]} ("{gist(c.get("text") or "", 10)}")' for c in waiting[:2]) + \
+            (f" and {len(waiting) - 2} more" if len(waiting) > 2 else "")
+    if last:
+        st = last["state"]
+        retrying = st == "paused" and "retrying in" in (last.get("error") or "")
+        out += f'. Last finished: request #{last["id"]} ("{gist(last.get("text") or "", 10)}")'
+        if last.get("finished"):
+            out += " at " + datetime.fromtimestamp(last["finished"]).strftime("%H:%M")
+        if st == "completed":
+            paras, _ = plain(last.get("answer") or "")
+            out += f', done: "{cut_tokens(paras[0], 30)[0].rstrip(".。")}"' if paras else ", done"
+        else:
+            err = " ".join((last.get("error") or "").split())
+            out += {"cancelled": ", stopped", "paused": ", paused (it retries by itself)" if retrying else ", paused"}.get(
+                st, ", failed") + (f": {cut_tokens(err, 20)[0]}" if err and st != "cancelled" and not retrying else "")
+    out, _ = cut_tokens(out + ".", SNAPSHOT_TOKENS)
+    big = (run["id"] if run else None, tuple(c["id"] for c in waiting),
+           (last["id"], last["state"]) if last else None)
+    return out, big, step
+
+
 def startup_input(desk, s, history: bool = True) -> list[dict]:
-    """§4: the session, its last 3 requests and answers (each answer cut to 600 characters), what still runs or
-    waits; observed_at on each. About 2 000 tokens at most. (s: a Target, or one of the desk's sessions.)"""
+    """§4: the session and its state (the same snapshot the call sends on changes), its last 3 requests and answers
+    (each answer cut to 600 characters), what still runs or waits; observed_at on each. About 2 000 tokens at most.
+    (s: a Target, or one of the desk's sessions.)"""
     from orbit.desk.session import DRIVERS, clip
     from orbit.drivers.base import strip_orbit_line
     t = s if isinstance(s, Target) else Target(desk, s.id)
@@ -260,9 +426,8 @@ def startup_input(desk, s, history: bool = True) -> list[dict]:
     running = [c for c in cards if c["state"] in ACTIVE]
     waiting = [c for c in cards if c["state"] == "queued"]
     line = lambda c: clip(strip_orbit_line(c.get("text") or ""), 160)
-    facts = (f'The Orbit session "{pub["name"]}": harness {label}, folder {pub["cwd"]}, permission mode {pub["mode"]}, '
-             f'{"working" if running else pub.get("state", "ready")}'
-             + (f' on request #{running[0]["id"]}: {line(running[0])}' if running else "") + f". (observed_at {at})")
+    facts = (f'The Orbit session "{pub["name"]}": harness {label}, folder {pub["cwd"]}, permission mode {pub["mode"]}. '
+             + state_snapshot(pub["name"], cards)[0] + f" (observed_at {at})")
     items = [_msg("developer", facts)]
     done = [c for c in cards if c["state"] in FINAL][-3:] if history else []
     if done:
@@ -339,55 +504,55 @@ def turns(frags: list[dict]) -> list[tuple[str, int, str]]:
     return [(w, t, x.strip()) for w, t, x in out if x.strip()]
 
 
-def takeaway(answer: str) -> tuple[str, bool]:
-    """An answer for speaking (§6): code blocks, tables and images left out, cut to its first paragraphs within an
-    append's limit. (text, whether anything stays only in Orbit)."""
-    text, left = re.subn(r"(?ms)^\s*(```|~~~).*?^\s*\1[^\n]*$", "", answer or "")
-    lines, kept = [], False
-    for ln in text.splitlines():
-        if re.match(r"\s*\|", ln) or re.match(r"\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$", ln):
-            left += 1
-            continue
-        lines.append(ln)
-    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", "\n".join(lines))
-    text = re.sub(r"`([^`\n]+)`", r"\1", text)
-    paras = [" ".join(p.split()) for p in re.split(r"\n\s*\n", text) if p.strip()]
-    out = ""
-    for p in paras:
-        nxt = (out + "\n\n" + p) if out else p
-        if est_tokens(nxt) > APPEND_TOKENS - 60:
-            if not out:
-                out, _ = cut_tokens(p, APPEND_TOKENS - 60)
-            left += 1
-            kept = True
+def takeaway(answer: str, limit: int = SPEAK_TOKENS["brief"], more: int = DETAIL_TOKENS) -> tuple[str, str, bool]:
+    """An answer for speaking (§6): plain paragraphs (plain()); whole ones while they fit in limit tokens (the first
+    cut at a sentence when it alone is longer); the next ~more tokens as silent context for follow-up questions.
+    (what to say, the detail, whether anything stays only in Orbit)."""
+    paras, left = plain(answer)
+    say, k = "", 0
+    for k, p in enumerate(paras):
+        if est_tokens((say + " " + p) if say else p) > limit:
             break
-        out = nxt
-    return out, bool(left) or kept
+        say, k = (say + " " + p) if say else p, k + 1
+    rest = paras[k:]
+    if not say and rest:
+        say, _ = cut_tokens(rest[0], limit)
+        rest = [rest[0][len(say):].strip()] + rest[1:]
+    detail, cut = cut_tokens("\n\n".join(x for x in rest if x), more)
+    return say, detail, left or cut
 
 
-def result_text(c: dict) -> str:
-    """The one commentary for a finished card."""
-    n = c["id"]
+def result_text(c: dict, length: str = "brief") -> str:
+    """The one commentary for a finished card: facts to say, not a report to read out. The request named by a gist
+    (not only its number), the answer's opening in plain words within SPEAK_TOKENS[length], and a question it ends
+    with (the next step it asks of the user). No quote framing: GPT-Live is given the facts and says them its way;
+    the grounding is the instructions' "authoritative, add nothing" rule."""
+    n, what = c["id"], gist(c.get("text") or "")
+    name = f'Request #{n} ("{what}")' if what else f"Request #{n}"
     if c["state"] == "completed":
-        body, more = takeaway(c.get("answer") or "")
-        if not body:
-            return f"Request #{n} is done; its answer is only code or tables: it is in Orbit."
-        return f"Request #{n} is done. The agent's answer: \u201c{body}\u201d" + (" The rest is in Orbit." if more else "")
+        say, _, more = takeaway(c.get("answer") or "", SPEAK_TOKENS.get(length, SPEAK_TOKENS["brief"]))
+        if not say:
+            return f"{name} is done; its answer is only code or tables, which stay in Orbit."
+        paras, _ = plain(c.get("answer") or "")
+        ask = paras[-1] if paras and paras[-1].rstrip()[-1:] in "?？" and paras[-1] not in say else ""
+        return (f"{name} is done: {say}" + (f" It ends by asking: {cut_tokens(ask, 40)[0]}" if ask else "")
+                + (" The full answer is in Orbit." if more else ""))
     err = " ".join((c.get("error") or "").split())[:300]
     if c["state"] == "cancelled":
-        return f"Request #{n} was stopped."
+        return f"{name} was stopped."
     if c["state"] == "paused":
-        return f"Request #{n} paused" + (f": {err}" if err else "") + "."
-    return f"Request #{n} failed" + (f": {err}" if err else "") + "."
+        return f"{name} paused" + (f": {err}" if err else "") + "."
+    return f"{name} failed" + (f": {err}" if err else "") + "."
 
 
-def progress_line(c: dict) -> str:
-    """A factual line about a running card: the step at work."""
-    tool = next((st for st in reversed(c.get("steps") or []) if st.get("kind") == "tool" and not st.get("done")), None)
-    if tool:
-        what = " ".join(f"{tool.get('name', '')} {tool.get('summary', '')}".split())[:200]
-        return f"Request #{c['id']} is still running: {what}. Nothing to say yet."
-    return f"Request #{c['id']} is still running. Nothing to say yet."
+def result_detail(c: dict, length: str = "brief") -> str:
+    """More of a finished card's answer than result_text says (~DETAIL_TOKENS), to go silently with it: "what were
+    the other commits?" is answered from it, without a new request. "" when there is no more."""
+    if c["state"] != "completed":
+        return ""
+    _, detail, _ = takeaway(c.get("answer") or "", SPEAK_TOKENS.get(length, SPEAK_TOKENS["brief"]))
+    return (f"More of request #{c['id']}'s answer, context for follow-up questions (do not read it out): {detail}"
+            if detail else "")
 
 
 # ---------------------------------------------------------------------------------------------- the call
@@ -418,6 +583,16 @@ class Call:
         self.attached = 0
         self.outbox: list[dict] = []
         self.last_voice = 0.0
+        self.last_user = 0.0  # when a fragment of the user's speech last came (results wait while they talk)
+        self.held: list[dict] = []  # appends that make the voice speak, waiting for the user to finish
+        self.cache: dict = {}  # the bound session's cards as the event stream last showed them (card id → card)
+        self.name = ""
+        self.seeded = False
+        self.snap_due = 0.0  # when the next session-state snapshot is due (0: no change since the last)
+        self.snap_big: tuple | None = None  # the last snapshot told (its keys), and when
+        self.snap_step: tuple | None = None
+        self.snap_at = 0.0
+        self.snap_n = 0
         self.closing = False
         self.ended = False
         self.closed_ev = threading.Event()
@@ -641,6 +816,8 @@ class Call:
             self.frags.append(f)
             if who == "voice":
                 self.last_voice = time.time()
+            else:
+                self.last_user = time.time()
         self.log("transcript", who=who, event_id=f["key"], start_ms=f["start"], end_ms=f["end"], text=f["text"])
         self._tell("caption", caption=self._cap(f))
         if who == "voice":
@@ -658,7 +835,7 @@ class Call:
         with self.lock:
             if did in self.dels or self.ended:
                 return
-            self.dels[did] = {"offset": int(ev.get("offset_ms") or 0), "at": time.time(), "last_append": time.time()}
+            self.dels[did] = {"offset": int(ev.get("offset_ms") or 0), "at": time.time()}
             self.order.append(did)
         self.log("delegation", event_id=ev.get("event_id"), delegation=did, offset_ms=self.dels[did]["offset"])
         # At once: an empty thinking append cancels the automatic spoken acknowledgement (§5.1), unless the user
@@ -687,17 +864,27 @@ class Call:
             with self.lock:
                 d.update(done=True, how="none")
             return
+        if moves_in(words):
+            return self._move_in(did, d, prev, words)
         if takes_back(words):
             return self._take_back(did, d, prev, words)
-        text = words + (f'\n\n(Context, not an instruction: the voice had just said: "{reply[:600]}")' if reply else "")
+        add = steer_words(words)  # "插一句 / tell it to …": for the running request, whoever made it
+        text = (add or words) + (f'\n\n(Context, not an instruction: the voice had just said: "{reply[:600]}")' if reply else "")
         origin = {"label": "Voice", "data": {"live": self.live_id, "delegation": did}}
-        how, c = "new", None
+        how, c, cant_steer = "new", None, False
         try:
             t = self.target
-            pc = None
-            if prev is not None:
-                pc = next((x for x in t.cards() if x["id"] == prev["cid"]), None)
-            if pc is not None and pc["state"] == "queued" and not pc.get("hidden"):
+            cards = t.cards() if prev is not None or add else []
+            pc = next((x for x in cards if x["id"] == prev["cid"]), None) if prev is not None else None
+            run = next((x for x in cards if x["state"] in ACTIVE), None)
+            if add and run is not None:
+                cant_steer = not t.info().get("steers")
+                c = t.send(text, origin, f"live:{self.live_id}:{did}") if cant_steer else \
+                    t.steer(text, origin, f"live:{self.live_id}:{did}")
+                how = "steer" if c.get("steered") else "new"  # (not steered: it ended just now, a request then)
+            elif add:  # nothing runs: an ordinary request
+                c = t.send(text, origin, f"live:{self.live_id}:{did}")
+            elif pc is not None and pc["state"] == "queued" and not pc.get("hidden"):
                 c, how = t.edit(pc["id"], pc["text"] + "\n\n" + text), "edit"  # the correction joins it
             elif pc is not None and pc["state"] in ACTIVE and t.info().get("steers"):
                 c = t.steer(text, origin, f"live:{self.live_id}:{did}")
@@ -720,16 +907,64 @@ class Call:
                  ms_delegation_to_card=int((time.time() - d["at"]) * 1000), duplicate=bool(c.get("duplicate")))
         self._tell("delegation", delegation=did, cid=c["id"], how=how, sid=self.sid, offset=d["offset"])
         if not c.get("duplicate") and c["state"] not in FINAL:
-            self._status(did, c, how)
+            self._status(did, c, how, cant_steer)
         self._on_card(c)  # (a duplicate may already be done)
+
+    def _move_in(self, did: str, d: dict, prev: dict | None, words: str) -> None:
+        """"Put it in the running one": the waiting request (the call's last, else the session's latest) is withdrawn
+        and its words steered into the running request, when its agent takes additions; the voice is told what
+        happened (spoken: the user asked)."""
+        from orbit.drivers.base import strip_orbit_line
+        t, how, fact, c = self.target, "none", "", None
+        try:
+            cards = t.cards()
+            run = next((x for x in cards if x["state"] in ACTIVE), None)
+            mine = next((x for x in cards if prev is not None and x["id"] == prev["cid"]), None)
+            q = mine if mine is not None and mine["state"] == "queued" and not mine.get("hidden") else \
+                next((x for x in reversed(cards) if x["state"] == "queued" and not x.get("hidden")), None)
+            if q is None:
+                fact = "There is no waiting request to add to the running one."
+            elif run is None:
+                fact = f"Nothing is running to add request #{q['id']} to; it stays queued and starts next."
+            elif not t.info().get("steers"):
+                fact = f"This agent can't take additions while a request runs: request #{q['id']} stays queued."
+            else:
+                t.withdraw(q["id"])
+                c = t.steer(strip_orbit_line(q.get("text") or ""), {"label": "Voice", "data": {"live": self.live_id, "delegation": did}},
+                            f"live:{self.live_id}:{did}")
+                if c.get("steered"):
+                    how, fact = "steer", (f"Orbit took back request #{q['id']} and added its words to request #{c['id']} "
+                                          "while the agent works on it.")
+                else:  # (the running one ended just now)
+                    how, fact = "new", f"Request #{run['id']} had just ended, so request #{q['id']}'s words were sent as request #{c['id']}."
+        except Exception as e:  # noqa: BLE001 - the voice is told, the call goes on
+            fact = f"Orbit could not move the request: {e}"[:300]
+        with self.lock:
+            d.update(how=how, text=words, cid=(c or {}).get("id"), done=c is None)
+            if c is not None:
+                self.card_del[c["id"]] = did  # (its result now answers these words too)
+        self.log("move_in", delegation=did, how=how, cid=(c or {}).get("id"), words=words)
+        if c is not None:
+            self._tell("delegation", delegation=did, cid=c["id"], how=how, sid=self.sid, offset=d["offset"])
+        self._send({"type": "session.commentary.append", "event_id": f"movein_{did}", "delegation_id": did, "content": fact})
 
     def _take_back(self, did: str, d: dict, prev: dict | None, words: str) -> None:
         """The user took the request back: the call's last request is withdrawn if it has not started, stopped if it
         runs; the voice is told which (spoken: the user asked)."""
-        t, how, fact = self.target, "none", ""
+        t, how, fact, c = self.target, "none", "", None
+        w = _norm(words)
+        running = any(x in w for x in RUNNING_WORDS + STOP_VERBS)  # the words name the running one ("停止当前在跑的")
+        withdraw = any(x in w for x in WITHDRAW_VERBS)
         try:
             cards = t.cards()
-            c = next((x for x in cards if prev is not None and x["id"] == prev["cid"]), None)
+            mine = next((x for x in cards if prev is not None and x["id"] == prev["cid"]), None)
+            if running and not withdraw:  # the session's running request, whoever made it
+                c = next((x for x in cards if x["state"] in ACTIVE), None)
+            elif withdraw and not any(x in w for x in RUNNING_WORDS):  # a waiting one: the call's, else the latest
+                c = mine if mine is not None and mine["state"] == "queued" and not mine.get("hidden") else \
+                    next((x for x in reversed(cards) if x["state"] == "queued" and not x.get("hidden")), None)
+            if c is None:
+                c = mine
             if c is None or c["state"] in FINAL or c.get("hidden"):  # (none of this call's: the session's last waiting one)
                 c = next((x for x in reversed(cards) if x["state"] == "queued" and not x.get("hidden")), None) or \
                     next((x for x in reversed(cards) if x["state"] in ACTIVE), None)
@@ -752,9 +987,11 @@ class Call:
             self._tell("delegation", delegation=did, cid=c["id"], how=how, sid=self.sid, offset=d["offset"])
         self._send({"type": "session.commentary.append", "event_id": f"takeback_{did}", "delegation_id": did, "content": fact})
 
-    def _status(self, did: str, c: dict, how: str) -> None:
+    def _status(self, did: str, c: dict, how: str, cant_steer: bool = False) -> None:
         """What became of the request, as silent context: the voice knows the facts (sent, queued behind another,
-        joined to a waiting one) instead of guessing how Orbit handles it."""
+        joined to a waiting one) instead of guessing how Orbit handles it. Plain facts only: "nothing else runs
+        before it" was read back as "it is not queued", and an order to say "queued" made the voice narrate a wait of
+        a second; it is asked to say so only when the wait is real."""
         # A card is "queued" for a moment even in an idle session (until its agent takes it): it waits only when
         # another request runs, or waits ahead of it.
         try:
@@ -766,28 +1003,41 @@ class Call:
         now = next((x for x in cards if x["id"] == c["id"]), c)
         busy = (f'the agent is busy with request #{run["id"]}' if run else
                 f'request #{ahead[0]["id"]} waits before it' if ahead else "")
+        wait_ = " Don't state the answer until the result arrives."  # (a real call said "yes" before the result said "not yet")
+        speak = False
         if how == "edit":
             fact = (f"Orbit added these words to request #{c['id']}, which has not started" + (f": {busy}" if busy else "")
-                    + ". It is one request, not several. Its answer comes when the agent gets to it.")
+                    + ". It is one request, not several. Its answer comes when the agent gets to it." + wait_)
         elif how == "steer":
-            fact = f"Orbit added these words to request #{c['id']} while the agent works on it."
+            fact = f"Orbit added these words to request #{c['id']} while the agent works on it." + wait_
+        elif cant_steer:  # (asked to add to the running request; its agent cannot take that mid-request)
+            fact = (f"This agent can't take additions while a request runs, so Orbit queued these words as request "
+                    f"#{c['id']}" + (f"; it waits: {busy}" if busy else "") + ". Its answer comes when the agent gets to it." + wait_)
+            speak = True  # (the user asked for something else: they should hear it)
         elif now["state"] == "queued" and busy:
-            fact = (f"Orbit sent this as request #{c['id']}; it waits: {busy}. Tell the user in a few words that it "
-                    "is queued; its answer comes when the agent gets to it.")
+            speak = run is not None and time.time() - (run.get("started") or time.time()) > QUEUE_REAL_S
+            fact = (f"Orbit sent this as request #{c['id']}; it waits: {busy}."
+                    + (" Tell the user in a few words that it is queued; its" if speak else " Its")
+                    + " answer comes when the agent gets to it." + wait_)
         else:
-            fact = f"Orbit sent this as request #{c['id']}; the agent is working on it now (nothing else runs before it)."
+            fact = f"Orbit sent this as request #{c['id']}; the agent started on it." + wait_
         ev = {"type": "session.thinking.append", "event_id": f"status_{did}", "delegation_id": did, "content": fact}
+        out = (lambda: self._say([ev])) if speak else (lambda: self._send(ev))
         wait = ACK_DELAY_MS / 1000 + 0.3 - (time.time() - self.dels[did]["at"]) if self.cfg["live_ack"] else 0
         if wait > 0:  # (any append cancels the spoken acknowledgement the user asked for: after its moment)
-            tm = threading.Timer(wait, lambda: None if self.ended else self._send(ev))
+            tm = threading.Timer(wait, lambda: None if self.ended else out())
             tm.daemon = True
             tm.start()
         else:
-            self._send(ev)
+            out()
 
-    # ------------------------------------------------------------------ results → spoken
+    # ------------------------------------------------------------------ the session's state → silent context
     def _follow_cards(self) -> None:
+        """The desk's event stream (a remote session's cards come here too, as name~sid): every card of the bound
+        session updates the state the voice is told (whoever made it: typed, a plugin, a follow-up); this call's own
+        requests are also followed to their result."""
         q = self.q
+        self._seed()
         while not self.ended and q is not None:
             try:
                 data = q.get(timeout=0.5)
@@ -799,35 +1049,118 @@ class Call:
                 c = json.loads(data).get("card") or {}
             except ValueError:
                 continue
-            if c.get("sid") == self.sid and c.get("id") in self.card_del:
+            if c.get("sid") != self.sid or "id" not in c:
+                continue
+            with self.lock:
+                old = self.cache.get(c["id"])
+                if old is None or c.get("rev", 0) >= old.get("rev", 0):  # (an event older than the seed: kept out)
+                    self.cache[c["id"]] = c
+                # A burst of changes goes out as one snapshot, COALESCE_S after its first (also when a step-only
+                # change is waiting out STEP_EVERY_S: this one may be bigger).
+                self.snap_due = min(self.snap_due or float("inf"), time.time() + COALESCE_S)
+            if c["id"] in self.card_del:
                 self._on_card(c)
 
+    def _seed(self, baseline: bool = True) -> bool:
+        """The session's cards and name, read once (one request for another machine's session); after that the event
+        stream keeps them. The state as the call starts is in its startup input (baseline), so it is not sent again;
+        read late (it failed at first), whatever it shows is told."""
+        try:
+            cards, name = self.target.cards(), self.target.info()["name"]
+        except Exception as e:  # noqa: BLE001 - tried again on the next change
+            self.log("state_failed", error=f"{type(e).__name__}: {e}"[:300])
+            return False
+        with self.lock:
+            for c in cards:
+                old = self.cache.get(c["id"])
+                if old is None or c.get("rev", 0) > old.get("rev", 0):
+                    self.cache[c["id"]] = c
+            self.name, self.seeded = name or "", True
+            if baseline and self.snap_big is None:
+                _, self.snap_big, self.snap_step = state_snapshot(self.name, cards)
+                self.snap_at = time.time()
+        return True
+
+    def _snapshot(self) -> None:
+        """The state snapshot when one is due (polled by the clock): skipped when nothing but the clock changed; a
+        change of step only waits until STEP_EVERY_S after the last; never while a result waits to be said (it would
+        give the answer away before it is spoken)."""
+        now = time.time()
+        with self.lock:
+            if not self.snap_due or now < self.snap_due or self.held or self.ended:
+                return
+            self.snap_due = 0.0
+            seeded = self.seeded
+        if not seeded and not self._seed(baseline=False):
+            with self.lock:
+                self.snap_due = self.snap_due or now + 5
+            return
+        with self.lock:
+            text, big, step = state_snapshot(self.name, sorted(self.cache.values(), key=lambda c: c["id"]), now)
+            if (big, step) == (self.snap_big, self.snap_step):
+                return
+            if big == self.snap_big and now - self.snap_at < STEP_EVERY_S:
+                self.snap_due = self.snap_due or self.snap_at + STEP_EVERY_S
+                return
+            self.snap_big, self.snap_step, self.snap_at = big, step, now
+            self.snap_n += 1
+            n = self.snap_n
+        self._send({"type": "session.thinking.append", "event_id": f"state_{n}", "delegation_id": None, "content": text})
+
+    # ------------------------------------------------------------------ results → spoken
     def _on_card(self, c: dict) -> None:
+        """A card of this call's: its end becomes the result (said once, for the latest delegation on it). Its
+        progress is in the state snapshots, not lines of its own (a tool command read out is noise)."""
         with self.lock:
             did = self.card_del.get(c["id"])
             d = self.dels.get(did) if did else None
             if d is None or d.get("done") or self.ended:
                 return
             st = c.get("state")
-            retrying = st == "paused" and "retrying in" in (c.get("error") or "")
-            if st in FINAL and not retrying:
-                d["done"] = True
-                ev = {"type": "session.commentary.append", "event_id": f"result_{did}", "delegation_id": did,
-                      "content": result_text(c)}
-            elif st in ACTIVE and time.time() - d["last_append"] >= PROGRESS_EVERY_S:
-                line = progress_line(c)
-                if line == d.get("last_line"):
-                    return
-                d["last_append"], d["last_line"] = time.time(), line
-                d["progress"] = d.get("progress", 0) + 1
-                ev = {"type": "session.thinking.append", "event_id": f"progress_{did}_{d['progress']}",
-                      "delegation_id": did, "content": line}
-            else:
+            if st not in FINAL or (st == "paused" and "retrying in" in (c.get("error") or "")):
                 return
-        if ev["type"] == "session.commentary.append":
-            self.log("result", delegation=did, cid=c["id"], state=c.get("state"),
-                     ms_card_to_result=int((time.time() - (c.get("finished") or time.time())) * 1000))
-        self._send(ev)
+            d["done"] = True
+        length = self.cfg["live_detail"]
+        evs = []
+        more = result_detail(c, length)
+        if more:  # first, silently: the voice has it when the commentary asks it to speak
+            evs.append({"type": "session.thinking.append", "event_id": f"detail_{did}", "delegation_id": did, "content": more})
+        evs.append({"type": "session.commentary.append", "event_id": f"result_{did}", "delegation_id": did,
+                    "content": result_text(c, length)})
+        self._say(evs, {"delegation": did, "cid": c["id"], "state": st, "finished": c.get("finished")})
+
+    def _talking(self) -> bool:
+        return time.time() - self.last_user < USER_HOLD_S
+
+    def _say(self, evs: list[dict], result: dict | None = None) -> None:
+        """Appends that make the voice speak: held while the user is talking (a result read out over them collided in
+        three real calls), released by the clock when they pause, or after HOLD_MAX_S."""
+        with self.lock:
+            if self.held or self._talking():  # (behind anything held already: in order)
+                self.held.append({"at": time.time(), "evs": evs, "result": result})
+                held = True
+            else:
+                held = False
+        if held:
+            self.log("held", events=[e["event_id"] for e in evs])
+        else:
+            self._out(evs, result, 0)
+
+    def _out(self, evs: list[dict], result: dict | None, held_ms: int) -> None:
+        if result is not None:
+            fin = result.get("finished") or time.time()
+            self.log("result", **{k: v for k, v in result.items() if k != "finished"},
+                     ms_card_to_result=int((time.time() - fin) * 1000), **({"held_ms": held_ms} if held_ms else {}))
+        for ev in evs:
+            self._send(ev)
+
+    def _release(self) -> None:
+        with self.lock:
+            if not self.held or self.ended or (self._talking() and time.time() - self.held[0]["at"] < HOLD_MAX_S):
+                return
+            out, self.held = self.held, []
+        for h in out:
+            self._out(h["evs"], h["result"], int((time.time() - h["at"]) * 1000))
 
     # ------------------------------------------------------------------ the clock
     def _tick(self) -> None:
@@ -839,6 +1172,11 @@ class Call:
             if self.expires_at and time.time() > self.expires_at + 10 and not self.closing:
                 self._finish("expired")
                 return
+            try:
+                self._release()
+                self._snapshot()
+            except Exception as e:  # noqa: BLE001 - the clock goes on (it also ends an expired call)
+                self.log("tick_error", error=f"{type(e).__name__}: {e}"[:300])
             if n % 100 == 0:  # every 25 s a ping keeps the sideband honest
                 ws = self.ws
                 if ws is not None:

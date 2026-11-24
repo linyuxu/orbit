@@ -20,6 +20,15 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - Voice: "take it back" (撤回 · 撤掉 · 收回 · 取消 · 算了 · cancel · withdraw · stop …, when those words are all the
   user said about it) withdraws the call's request that has not started, or stops the one running, and the voice
   says which; "cancel the nightly job" stays a task for the agent.
+- Voice, more natural (from a study of Codex's voice and 27 real calls): the voice is told the session's state
+  silently whenever it changes (what runs and for how long, the agent's latest words, what is queued, the last
+  result; also for requests typed or made elsewhere, and another machine's session), so "is it done / how long?" is
+  answered at once instead of queued behind the work; no more "still running: Bash …" lines every 10 s; a result
+  waits while you are talking; results are short facts to say (named by the request, no Markdown, ~75 words brief,
+  the next part kept as silent context for follow-ups) instead of a quoted report; "don't state the answer until the
+  result arrives" at each request; in auto language, Chinese is Mandarin in Simplified characters. By voice you can
+  also stop the running request ("停止当前在跑的任务", whoever made it; the queue goes on), add to it while it runs
+  ("插一句 …", "tell it to …"), or move a waiting request into it ("插进去"); the voice knows it can.
 - One voice call at a time, everywhere: the server refuses a second (409, saying which call is on) instead of
   hanging up the first. Every page knows of a call another page or device holds (its state events, `GET /api/live`):
   the voice buttons wait (grey), the pill says "another device" (go to its session, hang it up), and ⌘⇧V hangs up

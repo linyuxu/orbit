@@ -1222,7 +1222,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     src = self.desk.find_session(str(b.get("from", ""))).id
                     return self._json(self.desk.mention(sid, src, b.get("text", ""), agent=bool(b.get("agent"))))
                 if action == "stop":
-                    self.desk.stop(sid)
+                    self.desk.stop(sid, keep_queue=bool(b.get("keep_queue")))
                     return self._json({"ok": True})
                 if action == "close":
                     self.desk.close(sid)

@@ -5,6 +5,7 @@ standby, hang-up, and the websocket client's frames. Never calls OpenAI.
 
 import json
 import os
+import re
 import socket
 import struct
 import threading
@@ -276,7 +277,9 @@ class LiveTest(test_skeleton.SkeletonTest):
         time.sleep(0.4)
         com = self.commentary("del_1")
         self.assertEqual(len(com), 1)
-        self.assertEqual(com[0]["content"], "Request #1 is done. The agent's answer: \u201canswer: please check the nightly build now\u201d")
+        # the facts to say, named by a gist of the request: no "The agent's answer: “…”" quote to read out (R4)
+        self.assertEqual(com[0]["content"], 'Request #1 ("please check the nightly build now") is done: answer: please '
+                                            'check the nightly build now.')
         self.assertEqual(len(self.cards(s["id"])), 1)
         st = self.live_state()
         self.assertEqual([d["cid"] for d in st["delegations"]], [1])
@@ -325,7 +328,109 @@ class LiveTest(test_skeleton.SkeletonTest):
         com = wait(lambda: [e for e in self.fake.got("session.commentary.append") if e["event_id"] == "takeback_del_k3"])
         self.assertIn("stopped request #1", com[0]["content"])
         self.wait_card(s["id"], 1, ("cancelled",))
-        self.assertIn("withdraw, cancel or stop a request", self.fake.bodies[-1]["session"]["instructions"])
+        ins = self.fake.bodies[-1]["session"]["instructions"]
+        self.assertIn("- The user wants to stop, add to, withdraw or cancel a request.", ins)
+        self.assertIn("to stop the running request, add something to it while it runs, or take back one that has not "
+                      "started, delegate the user's words: Orbit does it and tells you which.", ins)
+
+    def test_take_back_and_steer_phrases(self):
+        """What is a take-back, a move-in or a steer cue, and what stays a task for the agent."""
+        for w in ("撤回", "把那个 request 收回", "停下", "算了", "cancel", "停止当前在跑的任务", "现在正在运行的停掉",
+                  "stop the running task", "stop the current one now"):
+            self.assertTrue(live.takes_back(w), w)
+        for w in ("取消那个定时任务", "stop the server", "撤回上一个commit", "cancel the nightly job",
+                  "stop running the tests now", "停止运行测试服务器"):
+            self.assertFalse(live.takes_back(w), w)
+        for w in ("插进去", "把它插进去吧", "放到当前任务里", "steer it in", "add it to the running one"):
+            self.assertTrue(live.moves_in(w), w)
+        self.assertFalse(live.moves_in("插进去一个新功能"))
+        for w, add in (("插一句，只看错误日志", "只看错误日志"), ("tell it to skip the slow tests", "skip the slow tests"),
+                       ("Also tell it: use the staging config", "use the staging config"), ("顺便看看测试", "看看测试"),
+                       ("add this to the running task: and the docs", "and the docs"), ("补充", ""),
+                       ("steering wheel", ""), ("telling it apart", ""), ("check the logs", "")):
+            self.assertEqual(live.steer_words(w), add, w)
+
+    def test_stop_the_running_request_by_name(self):
+        """"停止当前在跑的任务" while the call's own request waits: the running one (typed, not the call's) stops; the
+        waiting one stays and runs next."""
+        s = self.new_session("StopRun")
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "slow job"})
+        self.wait_card(s["id"], 1, ("running",))
+        self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+        self.assertTrue(self.fake.wait_attached(1))
+        self.fake.emit(t_in("check the logs", 500, 1500, "sr1"), delegation("del_sr1", 1600, "dsr1"))
+        self.wait_card(s["id"], 2, ("queued",))
+        self.fake.emit(t_in("停止当前在跑的任务", 3000, 4000, "sr2"), delegation("del_sr2", 4100, "dsr2"))
+        com = wait(lambda: [e for e in self.fake.got("session.commentary.append") if e["event_id"] == "takeback_del_sr2"])
+        self.assertIn("stopped request #1", com[0]["content"])
+        self.wait_card(s["id"], 1, ("cancelled",))
+        c2 = self.wait_card(s["id"], 2, ("completed",))
+        self.assertFalse(c2.get("hidden"))
+
+    def test_steer_cue_into_a_request_the_call_did_not_make(self):
+        """"插一句 …" with a typed request running: the words (without the cue) join it; the voice is told so."""
+        s = self.new_session("SteerIn")
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "slow job"})
+        self.wait_card(s["id"], 1, ("running",))
+        self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+        self.assertTrue(self.fake.wait_attached(1))
+        self.fake.emit(t_in("插一句，只看错误日志", 500, 1500, "si1"), delegation("del_si", 1600, "dsi"))
+        c = wait(lambda: (lambda c: c if c.get("steers") else None)(self.cards(s["id"])[0]))
+        self.assertEqual(c["steers"][0]["text"], "只看错误日志")
+        self.assertEqual(len(self.cards(s["id"])), 1)
+        self.assertEqual([(d["cid"], d["how"]) for d in self.live_state()["delegations"]], [(1, "steer")])
+        st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_si"])
+        self.assertIn("added these words to request #1 while the agent works on it", st[0]["content"])
+        self.assertTrue(wait(lambda: self.commentary("del_si")))  # (its result now answers these words)
+        self.assertIn("steered: 只看错误日志", self.commentary("del_si")[0]["content"])
+
+    def test_steer_cue_with_nothing_running_is_a_request(self):
+        s, _ = self.start_call("SteerIdle")
+        self.fake.emit(t_in("tell it to check the docs", 500, 1500, "sn1"), delegation("del_sn", 1600, "dsn"))
+        c = self.wait_card(s["id"], 1, ("completed",))
+        self.assertEqual(c["text"], "check the docs")
+        self.assertEqual([d["how"] for d in self.live_state()["delegations"]], ["new"])
+
+    def test_steer_cue_when_the_agent_cannot_take_additions(self):
+        """A harness that cannot steer: the words are queued as a request, and the voice is told why."""
+        s = self.new_session("NoSteer")
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "slow job"})
+        self.wait_card(s["id"], 1, ("running",))
+        from orbit.desk.session import DRIVERS
+        cls = DRIVERS[self.desk.get(s["id"]).harness]
+        cls.steers = False  # (as a harness without mid-request messages; put back below)
+        try:
+            self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+            self.assertTrue(self.fake.wait_attached(1))
+            self.fake.emit(t_in("tell it to skip the docs", 500, 1500, "ns1"), delegation("del_ns", 1600, "dns"))
+            c2 = self.wait_card(s["id"], 2, ("queued",))
+            self.assertEqual(c2["text"], "skip the docs")
+            st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_ns"])
+            self.assertIn("This agent can't take additions while a request runs, so Orbit queued these words as "
+                          "request #2; it waits: the agent is busy with request #1", st[0]["content"])
+            self.assertEqual(self.cards(s["id"])[0].get("steers"), None)
+        finally:
+            cls.steers = True
+            self.req("POST", f"/api/sessions/{s['id']}/stop")
+
+    def test_move_a_waiting_request_into_the_running_one(self):
+        """"插进去": the call's waiting request is withdrawn and its words join the running one."""
+        s = self.new_session("MoveIn")
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "slow job"})
+        self.wait_card(s["id"], 1, ("running",))
+        self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+        self.assertTrue(self.fake.wait_attached(1))
+        self.fake.emit(t_in("check the logs", 500, 1500, "mi1"), delegation("del_mi1", 1600, "dmi1"))
+        self.wait_card(s["id"], 2, ("queued",))
+        self.fake.emit(t_in("插进去", 3000, 3600, "mi2"), delegation("del_mi2", 3700, "dmi2"))
+        com = wait(lambda: [e for e in self.fake.got("session.commentary.append") if e["event_id"] == "movein_del_mi2"])
+        self.assertIn("took back request #2 and added its words to request #1", com[0]["content"])
+        c2 = next(c for c in self.desk.cards(s["id"]) if c["id"] == 2)
+        self.assertEqual((c2["state"], c2.get("hidden")), ("cancelled", True))
+        c1 = wait(lambda: (lambda c: c if c.get("steers") else None)(self.cards(s["id"])[0]))
+        self.assertEqual(c1["steers"][0]["text"], "check the logs")
+        self.assertEqual([d["how"] for d in self.live_state()["delegations"]], ["new", "steer"])
+        self.req("POST", f"/api/sessions/{s['id']}/stop")
 
     def test_status_in_an_idle_session(self):
         """A request in an idle session is "queued" only for the moment before its agent takes it: the voice is told it
@@ -333,8 +438,8 @@ class LiveTest(test_skeleton.SkeletonTest):
         s, r = self.start_call("Idle")
         self.fake.emit(t_in("check the logs", 500, 1500, "i1"), delegation("del_i", 1600, "di"))
         st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_i"])
-        self.assertIn("the agent is working on it now", st[0]["content"])
-        self.assertNotIn("waits", st[0]["content"])
+        self.assertEqual(st[0]["content"], "Orbit sent this as request #1; the agent started on it. Don't state the "
+                                           "answer until the result arrives.")  # ("nothing else runs before it" was read back)
 
     def test_status_while_the_agent_is_busy(self):
         """A request that waits behind another: the voice is told (silently) that it is queued and why; more words
@@ -347,6 +452,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.fake.emit(t_in("check the logs", 500, 1500, "b1"), delegation("del_q", 1600, "dq"))
         st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_q"])
         self.assertIn("request #2; it waits: the agent is busy with request #1", st[0]["content"])
+        self.assertNotIn("Tell the user", st[0]["content"])  # (#1 has run for a moment only: no wait worth saying)
         self.fake.emit(t_in("and the build", 2000, 2800, "b2"), delegation("del_q2", 2900, "dq2"))
         st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_q2"])
         self.assertIn("added these words to request #2, which has not started", st[0]["content"])
@@ -367,18 +473,72 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual([w for w, _, _ in live.turns(frags)], ["user", "voice", "user"])
 
     def test_takeaway(self):
+        """An answer for speaking: code and tables left out, Markdown marks gone, whole paragraphs within the spoken
+        limit, the next part as silent detail."""
         ans = "The build is green.\n\n```py\nprint(1)\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nTwo tests were flaky."
-        self.assertEqual(live.takeaway(ans), ("The build is green.\n\nTwo tests were flaky.", True))
-        self.assertEqual(live.takeaway("Short and plain."), ("Short and plain.", False))
+        self.assertEqual(live.takeaway(ans), ("The build is green. Two tests were flaky.", "", True))
+        self.assertEqual(live.takeaway("Short and plain."), ("Short and plain.", "", False))
         long = "\n\n".join(f"Paragraph {i}. " + "word " * 120 for i in range(10))
-        body, more = live.takeaway(long)
+        say, detail, more = live.takeaway(long)
         self.assertTrue(more)
-        self.assertLessEqual(live.est_tokens(body), live.APPEND_TOKENS)
-        self.assertTrue(body.startswith("Paragraph 0."))
+        self.assertLessEqual(live.est_tokens(say), live.SPEAK_TOKENS["brief"])
+        self.assertLessEqual(live.est_tokens(detail), live.DETAIL_TOKENS)
+        self.assertTrue(say.startswith("Paragraph 0."))
+        self.assertTrue(detail)  # (the rest of paragraph 0, cut, goes on silently)
         cjk = "构建" * 2000
-        self.assertLessEqual(live.est_tokens(live.takeaway(cjk)[0]), live.APPEND_TOKENS)
+        self.assertLessEqual(live.est_tokens(live.takeaway(cjk)[0]), live.SPEAK_TOKENS["brief"])
         self.assertEqual(live.result_text({"id": 3, "state": "error", "error": "boom"}), "Request #3 failed: boom.")
         self.assertEqual(live.result_text({"id": 3, "state": "cancelled"}), "Request #3 was stopped.")
+
+    def test_result_text_is_facts_to_say(self):
+        """R4: the request named by a gist, Markdown stripped, no quote framing, the spoken part within ~100 tokens
+        (brief) or ~200 (detailed), a question it ends with named, the next ~300 tokens as silent detail."""
+        md = ("## Summary\n\nThe build is **green** and [CI](http://ci.example) passed.\n\n- three commits landed\n"
+              "- one test is *flaky*\n- `orbit/x.py` changed\n\n```py\nprint(1)\n```\n\n| a | b |\n|---|---|\n\n"
+              "Should I fix the flaky test?")
+        c = {"id": 7, "state": "completed", "text": "[orbit] voice\ncheck the nightly build please\n\n(Context: …)", "answer": md}
+        t = live.result_text(c)
+        self.assertEqual(t, 'Request #7 ("check the nightly build please") is done: The build is green and CI passed. '
+                            "three commits landed; one test is flaky; orbit/x.py changed. Should I fix the flaky test? "
+                            "The full answer is in Orbit.")
+        for bad in ("**", "##", "- ", "`", "](", "\u201c", "The agent's answer"):
+            self.assertNotIn(bad, t)
+        self.assertEqual(live.result_detail(c), "")  # (all of it was said)
+        paras = [f"Point {i}: " + "detail " * 40 + "end." for i in range(8)]
+        long = {"id": 8, "state": "completed", "text": "summarise the release " + "notes " * 40,
+                "answer": "\n\n".join(paras) + "\n\nShall I tag the release?"}
+        brief, detailed = live.result_text(long), live.result_text(long, "detailed")
+        self.assertTrue(brief.startswith('Request #8 ("summarise the release notes notes'), brief)
+        self.assertIn("…\")", brief)  # (the gist is cut)
+        self.assertLessEqual(live.est_tokens(brief), live.SPEAK_TOKENS["brief"] + 50)
+        self.assertGreater(len(detailed), len(brief))
+        self.assertLessEqual(live.est_tokens(detailed), live.SPEAK_TOKENS["detailed"] + 50)
+        self.assertIn("It ends by asking: Shall I tag the release?", brief)
+        more = live.result_detail(long)
+        self.assertTrue(more.startswith("More of request #8's answer, context for follow-up questions (do not read it out): Point "))
+        self.assertNotIn(paras[0], more)  # (what is said is not repeated)
+        self.assertLessEqual(live.est_tokens(more), live.DETAIL_TOKENS + 25)
+        self.assertEqual(live.result_detail({"id": 9, "state": "error", "error": "x"}), "")
+        zh = live.plain("## 结论\n\n- 构建通过\n- 两个测试不稳定\n\n要我修一下吗？")[0]
+        self.assertEqual(zh, ["构建通过；两个测试不稳定。", "要我修一下吗？"])
+
+    def test_instructions(self):
+        """Status questions are answered from the latest Session state, not delegated (R1); background facts come
+        silently (R3); results are authoritative, nothing invented (R4); auto language: Simplified Chinese (R8)."""
+        ins = live.instructions("x", "/tmp", "gpt-live-1.1")
+        self.assertIn("- The user asks about status, progress, what is running or queued, or how long something has "
+                      "taken: answer at once from the latest Session state. Give elapsed times; never invent an estimate.", ins)
+        self.assertIn("- The answer needs the session's files, tools or history.", ins)
+        self.assertNotIn("current state", ins)
+        self.assertIn("Use a previous result when it still answers the question", ins)
+        self.assertIn("Orbit sends you background facts (session state, progress) silently. Do not announce them", ins)
+        self.assertIn("Results and Orbit's facts are authoritative", ins)
+        self.assertIn("Never invent facts, names, numbers or details that are not in a result", ins)  # (a real call made up a README)
+        self.assertNotIn("say only what it says", ins)
+        self.assertIn("for Chinese, speak Mandarin and use Simplified characters", ins)
+        zh = live.instructions("x", "/tmp", "gpt-live-1.1", {**live.config.DEFAULTS, "live_language": "zh"})
+        self.assertIn("Always speak Mandarin Chinese (Simplified)", zh)
+        self.assertNotIn("for Chinese, speak Mandarin", zh)
 
     def test_correction_edits_the_queued_card(self):
         s, _ = self.start_call("Fix")
@@ -398,7 +558,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertTrue(wait(lambda: self.commentary("del_b")))
         time.sleep(0.3)
         self.assertEqual(self.commentary("del_a"), [])  # the result answers the latest delegation, once
-        self.assertEqual([e["content"] for e in self.commentary("del_b")], ["Request #2 was stopped."])
+        self.assertEqual([e["content"] for e in self.commentary("del_b")], ['Request #2 ("Check the staging build") was stopped.'])
 
     def test_correction_steers_the_running_card(self):
         s, _ = self.start_call("Steer")
@@ -411,29 +571,176 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual([d["how"] for d in self.live_state()["delegations"]], ["new", "steer"])
         self.req("POST", f"/api/sessions/{s['id']}/stop")
 
-    def test_progress_is_rate_limited_and_the_result_said_once(self):
-        old = live.PROGRESS_EVERY_S
-        live.PROGRESS_EVERY_S = 0.3
+    def test_no_progress_lines_and_the_result_said_once(self):
+        """A request with many steps: no per-step lines on its delegation (the old 10 s "still running: Bash …" feed
+        made the voice narrate); the session's state goes out as a few snapshots (start, end; a change of step only
+        every STEP_EVERY_S), never a tool command; the result once."""
+        old = live.COALESCE_S
+        live.COALESCE_S = 0.3
         try:
             s, _ = self.start_call("Flood")
-            t0 = time.time()
             self.fake.emit(t_in("flood the output", 1000, 2000, "h1"), delegation("del_f", 2100, "hd1"))
             self.wait_card(s["id"], 1, ("completed",), timeout=30)
-            took = time.time() - t0
             self.assertTrue(wait(lambda: self.commentary("del_f")))
-            time.sleep(0.5)
+            time.sleep(0.8)
         finally:
-            live.PROGRESS_EVERY_S = old
-        th = [e for e in self.fake.got("session.thinking.append") if e["delegation_id"] == "del_f"]
-        progress = [e for e in th[1:] if not e["event_id"].startswith("status_")]  # (the first is the empty one; then what became of the request)
-        self.assertEqual(th[0]["content"], "")
-        self.assertGreaterEqual(len(progress), 1)
-        self.assertLessEqual(len(progress), took / 0.3 + 1)
-        self.assertTrue(all(p["content"].startswith("Request #1 is still running") for p in progress))
+            live.COALESCE_S = old
+        th = self.fake.got("session.thinking.append")
+        mine = [e for e in th if e["delegation_id"] == "del_f"]
+        self.assertEqual([e["event_id"] for e in mine], ["quiet_del_f", "status_del_f"])
+        snaps = [e for e in th if e["delegation_id"] is None]
+        self.assertGreaterEqual(len(snaps), 1)
+        self.assertLessEqual(len(snaps), 3)  # (40 rounds of steps: not one each)
+        for e in snaps:
+            self.assertTrue(e["content"].startswith('Session state at '), e["content"])
+            self.assertNotIn("echo", e["content"])
+            self.assertNotIn("Nothing to say", e["content"])
+            self.assertLessEqual(live.est_tokens(e["content"]), live.SNAPSHOT_TOKENS)
+        self.assertIn('Last finished: request #1 ("flood the output")', snaps[-1]["content"])
         com = self.commentary("del_f")
         self.assertEqual(len(com), 1)
         self.assertLessEqual(live.est_tokens(com[0]["content"]), 500)
-        self.assertTrue(com[0]["content"].startswith("Request #1 is done."))
+        self.assertTrue(com[0]["content"].startswith('Request #1 ("flood the output") is done: flooded.'))
+
+    def test_state_snapshot_for_cards_the_call_did_not_make(self):
+        """R1: a request typed in the session (not by the call) reaches the voice as session state: what runs, for how
+        long, the agent's latest words (not its tool command); stopped, it is the last finished. Nothing is sent at
+        the start (the startup input has it)."""
+        old = live.COALESCE_S
+        live.COALESCE_S = 0.3
+        try:
+            s, _ = self.start_call("Typed")
+            time.sleep(0.6)
+            self.assertEqual(self.fake.got("session.thinking.append"), [])
+            self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "slow job"})
+            snap = wait(lambda: [e for e in self.fake.got("session.thinking.append")
+                                 if "its latest words" in e["content"]])
+            self.assertTrue(snap, self.fake.got("session.thinking.append"))
+            t = snap[-1]["content"]
+            self.assertEqual(snap[-1]["delegation_id"], None)
+            self.assertIn('"Typed" is working on request #1 ("slow job") for ', t)
+            self.assertIn(': "Working on it"', t)
+            self.assertNotIn("sleep", t)  # (its Bash command)
+            n = len(self.fake.got("session.thinking.append"))
+            self.req("POST", f"/api/sessions/{s['id']}/stop")
+            done = wait(lambda: [e for e in self.fake.got("session.thinking.append")[n:] if "Last finished" in e["content"]])
+            self.assertIn('is idle: nothing running or queued. Last finished: request #1 ("slow job")', done[-1]["content"])
+            self.assertIn(", stopped.", done[-1]["content"])
+            self.assertEqual(self.commentary(), [])  # (not this call's request: no result spoken)
+        finally:
+            live.COALESCE_S = old
+
+    def test_state_snapshot_is_coalesced_and_unchanged_skipped(self):
+        """A quick request's burst of card changes (queued, thinking, running, completed) is one snapshot; the same
+        state again (a card event with nothing new) sends none."""
+        s = self.new_session("Burst")
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "warm up"})  # (the agent started: the next is quick)
+        self.wait_card(s["id"], 1, ("completed",))
+        self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+        self.assertTrue(self.fake.wait_attached(1))
+        events = []
+        q = self.desk.subscribe()
+        try:
+            self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "hello there"})
+            self.wait_card(s["id"], 2, ("completed",))
+            snaps = wait(lambda: self.fake.got("session.thinking.append"), timeout=5)
+            time.sleep(live.COALESCE_S + 0.6)
+            while not q.empty():
+                events.append(q.get())
+        finally:
+            self.desk.unsubscribe(q)
+        snaps = self.fake.got("session.thinking.append")
+        self.assertGreaterEqual(sum('"t": "card"' in e for e in events), 3)
+        self.assertEqual(len(snaps), 1, [e["content"] for e in snaps])
+        self.assertIn('Last finished: request #2 ("hello there") at ', snaps[0]["content"])
+        self.assertIn(', done: "answer: hello there".', snaps[0]["content"])
+        c = next(c for c in self.desk.cards(s["id"]) if c["id"] == 2)
+        with self.desk.lock:
+            self.desk._card_changed(next(x for x in self.desk.get(s["id"]).cards if x["id"] == 2))  # (the same, again)
+        time.sleep(live.COALESCE_S + 0.6)
+        self.assertEqual(len(self.fake.got("session.thinking.append")), 1)
+        self.assertEqual(c["state"], "completed")
+
+    def test_state_snapshot_unit(self):
+        now = time.time()
+        cards = [{"id": 1, "state": "completed", "text": "hello", "answer": "**Done.** All good.\n\nmore", "finished": now - 300},
+                 {"id": 2, "state": "running", "text": "slow job", "started": now - 372,
+                  "steps": [{"kind": "note", "text": "Running the tests now."},
+                            {"kind": "tool", "name": "Bash", "summary": "sed -n 1,2p x", "t0": now - 100}]},
+                 {"id": 3, "state": "queued", "text": "next thing"}, {"id": 4, "state": "queued", "text": "x", "hidden": True},
+                 {"id": 4.001, "kind": "note", "state": "note", "text": "Voice call"}]
+        t, big, step = live.state_snapshot("IDE", cards, now)
+        self.assertIn('"IDE" is working on request #2 ("slow job") for 6 min 12 s, 1 step so far; its latest words '
+                      '(1 min 40 s ago): "Running the tests now". Queued after it: #3 ("next thing"). Last finished: '
+                      'request #1 ("hello") at ', t)
+        self.assertTrue(t.endswith(', done: "Done. All good".'), t)
+        self.assertNotIn("sed", t)
+        self.assertEqual((big, step), ((2, (3,), (1, "completed")), (2, 1, "Running the tests now")))
+        t2, big2, step2 = live.state_snapshot("IDE", cards, now + 50)
+        self.assertEqual((big2, step2), (big, step))  # (only the clock moved: unchanged)
+        self.assertTrue(live.state_snapshot("IDE", [], now)[0].endswith('"IDE" is idle: nothing running or queued.'))
+        failed = live.state_snapshot("IDE", [{"id": 5, "state": "error", "text": "build", "error": "boom", "finished": now}], now)[0]
+        self.assertIn('Last finished: request #5 ("build") at ', failed)
+        self.assertTrue(failed.endswith(", failed: boom."))
+
+    def test_result_waits_while_the_user_talks(self):
+        """R2: a result that comes while the user is speaking waits until they pause (then goes out), or HOLD_MAX_S."""
+        s, r = self.start_call("Hold")
+        talking, n = threading.Event(), [0]
+
+        def talk():
+            while talking.is_set():
+                n[0] += 1
+                self.fake.emit(t_in("and another thing ", 5000 + n[0] * 200, 5200 + n[0] * 200, f"talk{n[0]}"))
+                time.sleep(0.2)
+
+        talking.set()
+        threading.Thread(target=talk, daemon=True).start()
+        try:
+            self.fake.emit(t_in("check the build", 500, 1500, "w1"), delegation("del_w", 1600, "dw"))
+            self.wait_card(s["id"], 1, ("completed",))
+            time.sleep(1.0)
+            self.assertEqual(self.commentary("del_w"), [])  # (held: the user is talking)
+        finally:
+            talking.clear()
+        quiet = time.time()
+        self.assertTrue(wait(lambda: self.commentary("del_w"), timeout=4))
+        self.assertGreater(time.time() - quiet, 0.5)  # (after a pause of USER_HOLD_S)
+        log = [json.loads(x) for x in Path(self.state, "live", r["call"] + ".jsonl").read_text().splitlines()]
+        self.assertTrue(any(x["stage"] == "held" for x in log))
+        self.assertGreater(next(x for x in log if x["stage"] == "result")["held_ms"], 900)
+        # talking on and on: the result goes out after HOLD_MAX_S anyway
+        old = live.HOLD_MAX_S
+        live.HOLD_MAX_S = 1.0
+        talking.set()
+        threading.Thread(target=talk, daemon=True).start()
+        try:
+            time.sleep(0.5)
+            self.fake.emit(delegation("del_w2", 5000 + n[0] * 200, "dw2"))  # (its words: the talk so far)
+            self.wait_card(s["id"], 2, ("completed",))
+            self.assertTrue(wait(lambda: self.commentary("del_w2"), timeout=4))
+            self.assertTrue(talking.is_set())
+        finally:
+            talking.clear()
+            live.HOLD_MAX_S = old
+
+    def test_result_detail_goes_silently_with_it(self):
+        """R4: a long answer: the spoken part in the commentary, the next part as a silent thinking append on the same
+        delegation, sent just before it."""
+        s, _ = self.start_call("Detail")
+        words = " ".join(f"Sentence number {i} about the build." for i in range(60))
+        self.fake.emit(t_in(words, 500, 9000, "l1"), delegation("del_l", 9100, "dl"))
+        self.wait_card(s["id"], 1, ("completed",))
+        com = wait(lambda: self.commentary("del_l"))
+        self.assertLessEqual(live.est_tokens(com[0]["content"]), live.SPEAK_TOKENS["brief"] + 40)
+        self.assertIn("is done: answer: Sentence number 0 about the build.", com[0]["content"])
+        got = self.fake.got()
+        k = next(i for i, e in enumerate(got) if e.get("event_id") == "result_del_l")
+        det = got[k - 1]
+        self.assertEqual((det["type"], det["event_id"], det["delegation_id"]), ("session.thinking.append", "detail_del_l", "del_l"))
+        self.assertIn("(do not read it out)", det["content"])
+        last_said = re.findall(r"Sentence number (\d+)", com[0]["content"])[-1]
+        self.assertIn(f"Sentence number {int(last_said) + 1} about", det["content"])
 
     def test_empty_delegation_sends_nothing(self):
         s, _ = self.start_call("Empty")

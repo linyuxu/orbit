@@ -181,13 +181,15 @@ class Requests:
                 return {"card": snap, "final": False}
             time.sleep(0.2)
 
-    def stop(self, sid: str) -> None:
+    def stop(self, sid: str, keep_queue: bool = False) -> None:
+        """Stop: the running request, and the queued ones with it; keep_queue: the running one only (the voice's
+        "stop the running task": the requests waiting behind it go on)."""
         s = self.get(sid)
         with self.lock:
             if self.stopping_all:  # a Stop must not slip into a hand-off (the next server takes it)
                 raise Stopping("Orbit's server is stopping (a restart): stop it again in a moment")
             # Drop queued requests first so Stop never lets the next one start.
-            for c in s.cards:
+            for c in ([] if keep_queue else s.cards):
                 if c["state"] == "queued":
                     c["state"] = "cancelled"
                     self._card_changed(c)

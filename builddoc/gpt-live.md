@@ -62,34 +62,76 @@ The output streams continuously (silence too, and no "audio done" event), so spe
 
 ## 3. Instructions
 
-Short, in the style of Codex's shipped prompt (`backend_prompt.md`): it delegates every action, answers
-self-contained questions itself, and avoids narration. Plus what Codex's prompt lacks, the noise rule:
+Short, in the structure of OpenAI's live prompting template (§11) and the style of Codex's shipped prompt
+(`backend_prompt.md`): it delegates every action, answers self-contained and status questions itself, and avoids
+narration. Plus what Codex's prompt lacks, the noise rule. The delegation and grounding part (`instructions()`):
 
 ```
-You are the voice of Orbit, an IDE where the user works with coding agents. You talk with the user; an agent
-session named "{name}" (folder {cwd}) does the work. For any action or task, or anything that needs the session's
-files, tools, current state or history, delegate. Answer self-contained questions yourself, and questions about
-what was already said or reported in this call.
-Keep listening through coughs, throat-clears, sighs, a brief "mm-hm", music, other people talking, and thinking
-pauses: none of them is a request. Respond to a clear request, a question, or being addressed. After you answer,
-wait for the user; do not follow up on your own unless a result, a blocker or a missing detail arrives.
+Delegate to the backend when:
+- The user asks for any action or task.
+- The answer needs the session's files, tools or history.
+- A correction changes the work already requested.
+- The user wants to stop, add to, withdraw or cancel a request.
+What Orbit can do with requests (answer questions about it yourself): they run one at a time in this session; to stop
+the running request, add something to it while it runs, or take back one that has not started, delegate the user's
+words: Orbit does it and tells you which.
+Do not delegate when:
+- The question is self-contained, or about what was already said or reported in this call.
+- The user asks about status, progress, what is running or queued, or how long something has taken: answer at once
+from the latest Session state. Give elapsed times; never invent an estimate. If the state does not answer it, say what
+you know and offer to ask the agent.
+- You need a brief clarification to understand the request.
+Use a previous result when it still answers the question (more of an answer may have come with it as silent context);
+delegate again if it is missing, out of date, or the user asks to check again.
+Delegate to the backend before giving an answer that depends on backend work. Do not guess the result while waiting.
+Never describe how Orbit or the agent handles requests beyond what Orbit tells you in this call.
+Results and Orbit's facts are authoritative: do not add to them or contradict them. Say the key takeaway, status or
+next step in your own words. Never invent facts, names, numbers or details that are not in a result, in Orbit's facts
+or in this call; if the result does not answer what the user asked, say so plainly and offer to ask the agent again.
+
+Orbit sends you background facts (session state, progress) silently. Do not announce them, and do not say you are
+still working, unless the user asks or a meaningful change happened (a step that matters finished, a delay that
+matters, or the user must answer something).
 Avoid unnecessary narration: no repeated confirmations, filler, re-acknowledgements or play-by-play. When a result
 arrives, give the takeaway in one to three short sentences; code, tables and logs stay in Orbit.
-When a result arrives, say only what it says. Never add facts, names or details that are not in the result or in
-this call; if the result does not answer what the user asked, say so plainly and offer to ask the agent again.
 ```
 
+With `live_language: auto` the language line is "Speak the language the user speaks; for Chinese, speak Mandarin and
+use Simplified characters" (a real call drifted into Traditional characters mid-answer).
+
 The grounding rule came from the first real call: the agent's answer said nothing about the README, and the voice
-described a "TypeScript Node project using ESLint" that does not exist. The result is also framed as a quote
-(`Request #1 is done. The agent's answer: “…”`), so the voice relays it rather than completing it.
+described a "TypeScript Node project using ESLint" that does not exist. It used to be "say only what it says", with
+the result framed as a quote (`Request #1 is done. The agent's answer: “…”`); that made the voice read reports aloud
+(a 23 s Markdown monologue). It is now Codex's "authoritative" rule plus an explicit "never invent", and the result is
+facts to say (§6). Re-check the README scene in real calls (§9).
 
 The noise rule is steering, not a guarantee (GPT Live decides when to speak; there is no turn-detection setting).
 It is checked against real calls (§9), including the recorded throat-clear follow-up.
 
+### Naturalness (2026-11-23)
+
+A study of Codex's voice against 27 of Orbit's call logs found that Orbit itself caused much of the unnatural talk:
+- a 10 s "Request #N is still running: Bash sed -n … Nothing to say yet." feed: 9 of 13 such appends in one call were
+  followed within 4 s by "还在看，稍等一下" with no user speech before; Codex's TUI sends nothing mid-task;
+- "is it done / how long" was delegated (the prompt said to delegate "current state") and queued behind the work it
+  asked about; when the voice had the facts (startup context) it answered in about 2 s;
+- results were sent the moment the card finished, three times over the user's speech;
+- the voice said "能用" while waiting, and the result said "还不能";
+- results were read as quoted reports, Markdown and all.
+
+So: the session's state as silent snapshots, status answered from them (§6); no progress lines; plain-fact statuses
+("nothing else runs before it" was read back as "not queued"; "tell the user it is queued" only when the wait is
+real, > 30 s); "Don't state the answer until the result arrives" at each delegation; results held while the user
+talks; results as short facts to say, the rest as silent detail. A replay of the logs through the new code: 20
+progress appends gone; spoken result text 6 181 → 1 573 tokens (estimated) and 0 of 21 with Markdown (was 18); 2 results
+would have waited 2.2 s and 5.5 s for the user to finish. Next (not built): a warmer one-assistant persona and one
+next-step offer, results not yet told at the next call's start, the conversation sent to the agent with each request.
+
 ## 4. Startup context (`session.input`)
 
 Small and relevant, as text messages (developer role for facts, user/assistant for the last exchanges):
-- the session: name, harness, folder, mode, state (working / ready), a running request's first line;
+- the session: name, harness, folder, mode, and its state as the snapshot of §6 (what runs and for how long, the
+  agent's latest words, what is queued, the last finished request);
 - its last 3 requests and answers, each answer cut to its first 600 characters;
 - requests of this session still running or queued (card ids);
 - `observed_at` on each.
@@ -117,24 +159,51 @@ On `session.delegation.created` (`delegation.id`, `offset_ms`; it carries **no t
 Corrections: a delegation while the previous one's card is still queued edits that card instead (Orbit's `edit`);
 while it runs and the harness steers (Claude Code), it steers it; otherwise a new request.
 
-- **What became of it, told silently.** After each delegation the voice gets one `thinking.append` with the facts:
-  sent and running; queued behind request #N ("tell the user in a few words that it is queued"); words joined to
-  the waiting request #N ("one request, not several"); or added to the running one. Found in a real call: with the
-  session busy, three things the user said became one queued request, and the voice, told nothing, invented "I sent
-  several requests, handled one by one". The instructions also forbid describing Orbit's handling beyond what it is
-  told. With the spoken acknowledgement on, the status waits until after its moment (any append cancels it).
+- **What became of it, told silently.** After each delegation the voice gets one `thinking.append` with the facts,
+  each ending "Don't state the answer until the result arrives.": sent ("the agent started on it"); queued behind
+  request #N (and only when that one has run over 30 s: "tell the user in a few words that it is queued", held while
+  the user talks like a result); words joined to the waiting request #N ("one request, not several"); added to the
+  running one; or, asked to add to the running one with a harness that cannot, queued as #N and why. Found in a real
+  call: with the session busy, three things the user said became one queued request, and the voice, told nothing,
+  invented "I sent several requests, handled one by one". With the spoken acknowledgement on, the status waits until
+  after its moment (any append cancels it).
+- **Operating on requests.** Words that only take a request back ("撤回", "算了", "停止当前在跑的任务", "stop the
+  running task"; not "stop the server" or "取消那个定时任务") are done by Orbit, not sent: words naming the running one
+  (在跑 · 正在 · 当前 · 运行 · running · current, or a stop verb) stop the session's running request, whoever made it,
+  and leave the queue alone; a withdraw verb (撤回 · 收回 · withdraw) withdraws the call's waiting request, else the
+  session's latest; otherwise the call's last request is withdrawn or stopped. A steer cue ("插一句 / 补充 / 告诉它 /
+  顺便 / tell it to / add this to the running task …") sends the words after it into the session's running request
+  (how `steer`; nothing running: an ordinary request). "插进去 / steer it in" with nothing else withdraws the waiting
+  request and steers its words into the running one. The voice is told what was done (a commentary: the user asked).
 
-## 6. Results → spoken
+## 6. Session state and results
 
-Following the card (`/api/events`, by session and card id):
-- progress: at most one `session.thinking.append` per 10 s with a factual line (the step running), silent;
-- the end: one `session.commentary.append {delegation_id, content}`: the answer's takeaway, ≤ 500 tokens. A long
-  answer is cut to its first paragraphs plus "the rest is in Orbit"; code blocks and tables are left out;
+Following the desk's event stream (`/api/events`; another machine's session's cards arrive there too, as `name~sid`):
+- **The session's state** (`state_snapshot()`): every card of the bound session, whoever made it (typed, a plugin, a
+  follow-up), updates one short factual block sent as `session.thinking.append {delegation_id: null}` (the guide's
+  "background context update"), under ~150 tokens: `Session state at 18:33:10: "IDE Dev" is working on request #250
+  ("…") for 6 min 12 s, 14 steps so far; its latest words (1 min 40 s ago): "…". Queued after it: #251 ("…"). Last
+  finished: request #249 ("…") at 18:20, done: "<gist of its answer>".` The agent's latest words are the card's last
+  `kind: "note"` step (its interim text; never a tool command). Changes within 2 s go out as one; a snapshot that would
+  say the same (only the clock moved) is skipped; one that only moves the step on waits until 30 s after the last;
+  started, finished, failed or queued go out after the 2 s. None while a result waits to be said. The cards are read
+  once at the call's start (one request for another machine's session), then kept from the events. The state at
+  the start is in the startup input (§4), not sent again: an append at connect is one more chance for the voice to
+  speak, and the startup input is the documented place for it. The voice answers status from it (§3).
+- **No progress lines** on a request's delegation (the 10 s feed of tool commands is gone).
+- **The end:** one `session.commentary.append {delegation_id}`: facts to say, not a report to read. The request is
+  named by a gist of its words (`Request #252 ("research why …") is done: …`), then the answer's opening in plain
+  words (Markdown marks, headings, fenced code, tables and images removed; a list read as one sentence), whole
+  paragraphs within ~100 tokens (`brief`, ~75 words) or ~200 (`detailed`), a question the answer ends with ("It ends
+  by asking: …"), and "The full answer is in Orbit." when something stays only there. Just before it, the next ~300
+  tokens of the answer go as a silent `thinking.append` on the same delegation, so "what were the other commits?" is
+  answered without a new request.
+- **Never over the user:** a result waits while the user is talking (a fragment of theirs came within 1.2 s; they
+  arrive every ~200 ms while someone speaks), released by the clock when they pause, or after 8 s.
 - a failure, Stop or pause: one commentary saying so;
 - each result is sent once (kept by delegation id); `.appended` acks are logged (context delivered, not played).
 
-GPT Live paraphrases commentary; that is fine. A result arriving during standby still goes in (check the wake
-behaviour in §9).
+A result arriving during standby still goes in (check the wake behaviour in §9).
 
 ## 7. Interruption, hang-up, expiry
 
@@ -160,8 +229,9 @@ behaviour in §9).
 
 Automated (a fake GPT Live: an HTTP + websocket server speaking the documented events): session creation body,
 sideband attach and replay dedupe, transcript assembly around `offset_ms` with late and straddling fragments,
-`client_id` idempotent send, edit/steer on a correction, result → one commentary, standby events, hang-up note card,
-the restricted data channel.
+`client_id` idempotent send, edit/steer on a correction, result → one commentary (its shape, the silent detail, held
+while the user talks), session snapshots (a card the call did not make, coalesced, unchanged skipped, no progress
+lines), take-back / stop / steer / move-in, standby events, hang-up note card, the restricted data channel.
 
 Real calls (logged: each stage's time and ids):
 
@@ -211,7 +281,8 @@ Built: `orbit/services/live/` (`session.py` the call, `ws.py` the websocket clie
   `Do not generate <|SpawnThinking|>`. The model is the setting `live_model` (`POST /api/settings`; no UI yet).
 - **Appends.** `session.thinking.append` / `commentary.append` need `delegation_id` (nullable) and take a plain-string
   `content` of at most 500 tokens; a commentary is kept to about 450 by an estimate (a CJK character one token, else
-  four characters). Each carries an `event_id` (`quiet_<del>`, `progress_<del>_<n>`, `result_<del>`); the
+  four characters). Each carries an `event_id` (`quiet_<del>`, `status_<del>`, `detail_<del>`, `result_<del>`,
+  `state_<n>` for the session snapshots); the
   `….appended` acks (`client_event_id`) are logged. Any append cancels every pending automatic acknowledgement, so
   the empty one at delegation time does its job for all of them.
 - **The sideband.** Each attach replays the last 3 s: events are kept by `event_id` and a replayed one is dropped
@@ -228,10 +299,9 @@ Built: `orbit/services/live/` (`session.py` the call, `ws.py` the websocket clie
   agent that the request was spoken (it may be misheard) and that the start of its answer is read back. A correction
   edits the queued card (its text, a blank line, the new words) or steers the running one (Claude Code); the result is
   spoken once, for the latest delegation on that card. A delegation with no words makes no card: the voice is told.
-- **Results.** Followed on the desk's own event stream (the `/api/events` feed). Progress only when the card changes
-  (a long silent tool gets none); a paused card that retries waits; a result after the call ended is dropped (the next
-  call's startup context lists the card). The commentary leaves out fenced code, tables and images, keeps whole
-  paragraphs while they fit, and ends with "The rest is in Orbit." when it cut something.
+- **Results.** Followed on the desk's own event stream (the `/api/events` feed); progress is the session snapshot
+  (§6); a paused card that retries waits; a result after the call ended is dropped (the next call's startup context
+  lists the card). The log has `held` (a result waiting for the user) and `held_ms` on its `result` row.
 - **Hang-up.** The page mutes its microphone at once and calls `/api/live/stop`; the server sends `session.close`,
   waits up to 5 s for `session.closed` (reasons `close_requested`, `expired`, `content`, `remote_hangup`,
   `connection_lost`), closes the sideband, then the page closes its peer connection. A call that ends over there
