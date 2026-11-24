@@ -329,6 +329,8 @@ async function settingsVoice(pane, keys) {
               { value: "detailed", label: "Detailed", title: "A few sentences with the key details" }] }));
   toggleSwitch(setRow(pane, "Say when a task starts", "A short “on it” when it hands your request to the agent. Off: quiet until there is something to say."), {
     on: !!st().live_ack, label: "Say when a task starts", onChange: on => put("live_ack", on) });
+  toggleSwitch(setRow(pane, "Sounds", "A soft ding when the call is connected and listening (speak then), and a lower one when it ends."), {
+    on: st().live_chime !== false, label: "Sounds", onChange: on => put("live_chime", on) });
   setHeading(pane, "Listening and cost");
   keys.push(dropdown(setRow(pane, "Standby after", "With nothing said either way for this long, it rests: $0.02 a minute instead of $0.05. Speaking wakes it (the first reply after is a little slower)."), {
     value: String(st().live_idle_s ?? 30), onChange: v => put("live_idle_s", +v),

@@ -716,7 +716,7 @@ class Call:
         self.q = self.desk.subscribe()
         for fn in (self._sideband, self._follow_cards, self._tick):
             threading.Thread(target=fn, daemon=True, name=f"live-{fn.__name__}").start()
-        return {"call": self.id, "sdp": answer, "live": self.live_id}
+        return {"call": self.id, "sdp": answer, "live": self.live_id, "chime": bool(self.cfg["live_chime"])}
 
     def _fail(self, msg: str) -> None:
         with self.lock:

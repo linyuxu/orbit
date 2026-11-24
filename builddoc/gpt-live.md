@@ -53,6 +53,7 @@ What the user may change (desk settings `live_*`, `orbit/services/live/config.py
 | `live_language` | auto, zh, en, ja, ko, es, fr, de, pt | a line in the instructions (the API has no language field) |
 | `live_detail` | brief, detailed | the result line in the instructions |
 | `live_ack` | on/off (off) | off: the empty `thinking.append` at each delegation cancels the automatic acknowledgement |
+| `live_chime` | on/off (on) | the page's own sounds (`/api/live/start` answers `chime`): a rising two-note ding once the call is connected and listening (the WebRTC connection up and the phase past connecting), a falling one at the end |
 | `live_prompt` | up to 4 000 characters | after Orbit's instructions; they win over style, never over delegation and grounding |
 
 A voice's preview (`orbit/services/live/preview.py`): the WebSocket transport (`wss://…/v1/live/sessions`,

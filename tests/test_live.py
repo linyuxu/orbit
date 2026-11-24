@@ -137,7 +137,8 @@ class LiveTest(test_skeleton.SkeletonTest):
         """Settings → Voice: validated by the desk; read when a call starts (voice, language, results, standby, wake,
         context, model, the user's instructions, the spoken acknowledgement)."""
         for k, v in (("live_voice", "nobody"), ("live_idle_s", 3), ("live_idle_s", 61), ("live_wake", 0.4),
-                     ("live_language", "xx"), ("live_detail", "long"), ("live_prompt", "x" * 4001), ("live_ack", "yes")):
+                     ("live_language", "xx"), ("live_detail", "long"), ("live_prompt", "x" * 4001), ("live_ack", "yes"),
+                     ("live_chime", 1)):
             self.assertEqual(self.req("POST", "/api/settings", {k: v})[0], 400, (k, v))
         code, o = self.req("GET", "/api/live/options")
         self.assertEqual(code, 200)
@@ -146,10 +147,12 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "earlier work"})
         self.wait_card(s["id"], 1, ("completed",))
         set_ = {"live_voice": "cedar", "live_language": "zh", "live_detail": "detailed", "live_idle_s": 0, "live_wake": 1,
-                "live_context": False, "live_model": "gpt-live-1", "live_prompt": "Call me Sam.", "live_ack": True}
+                "live_context": False, "live_model": "gpt-live-1", "live_prompt": "Call me Sam.", "live_ack": True,
+                "live_chime": False}
         self.assertEqual(self.req("POST", "/api/settings", {**set_, "live_wake": 0.7})[0], 200)
         try:
-            self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+            r = self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})[1]
+            self.assertIs(r["chime"], False)  # (the page's sounds: off)
             self.assertTrue(self.fake.wait_attached(1))
             se = self.fake.bodies[0]["session"]
             self.assertEqual((se["model"], se["audio"], se["wake_policy"]["vad_threshold"]),

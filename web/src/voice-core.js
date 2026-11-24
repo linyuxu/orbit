@@ -23,7 +23,10 @@ voiceAudio.autoplay = true;
 voiceAudio.setAttribute("playsinline", "");  // (iOS: never its full-screen player)
 
 function setVoicePhase(p) {
+  const was = VOICE.phase;
   VOICE.phase = p;
+  if (p === "ended" && was !== "ended" && was !== "idle" && VOICE.chimed) chime("end");
+  chimeIfReady();
   clearTimeout(VOICE.endTm);
   if (p === "ended") VOICE.endTm = setTimeout(() => { if (VOICE.phase === "ended") { VOICE.call = null; VOICE.caps.clear(); setVoicePhase("idle"); } }, 2500);
   VOICE_UI.render();
@@ -218,6 +221,41 @@ function iceGathered(pc, ms = 10000) {
     pc.addEventListener("icegatheringstatechange", on);
   });
 }
+/* The call's sounds (Settings → Voice → Sounds; made here, no files): a soft rising ding once it is connected and
+   listening (the moment to speak), a falling one when it ends. The AudioContext is made in the click that starts
+   the call (Safari lets it play then) and kept for the next call. */
+const CHIME = { ctx: null };
+function chimeReady() {
+  try {
+    if (!CHIME.ctx) CHIME.ctx = new AudioContext();
+    if (CHIME.ctx.state === "suspended") CHIME.ctx.resume().catch(() => {});
+  } catch { CHIME.ctx = null; }
+}
+function chime(kind) {
+  const c = CHIME.ctx;
+  if (!c || VOICE.chime === false) return;
+  const notes = kind === "end" ? [[987.77, 0], [659.25, 0.11]] : [[659.25, 0], [987.77, 0.1]];  // (E5 → B5, or back)
+  const t0 = c.currentTime + 0.02, peak = kind === "end" ? 0.07 : 0.1;
+  for (const [f, at] of notes) {
+    const o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain();
+    o.type = "sine"; o.frequency.value = f;
+    o2.type = "sine"; o2.frequency.value = f * 2;  // (a quiet octave: a bell, not a beep)
+    const g2 = c.createGain(); g2.gain.value = 0.18;
+    o.connect(g); o2.connect(g2).connect(g); g.connect(c.destination);
+    const s = t0 + at;
+    g.gain.setValueAtTime(0, s);
+    g.gain.linearRampToValueAtTime(peak, s + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0005, s + 0.42);
+    o.start(s); o2.start(s); o.stop(s + 0.45); o2.stop(s + 0.45);
+  }
+}
+/* Connected: the phase is past connecting (the server attached) and the WebRTC connection is up — whichever is last. */
+function chimeIfReady() {
+  const p = VOICE.phase;
+  if (VOICE.chimed || !VOICE.pc || VOICE.pc.connectionState !== "connected" || !["listening", "speaking", "standby"].includes(p)) return;
+  VOICE.chimed = true;
+  chime("start");
+}
 /* Start a call with session sid. Call it from the tap or click itself: what must happen inside the user's gesture
    (Safari: the AudioContext, and the microphone's request) happens before the first await. */
 async function startCall(sid) {
@@ -225,6 +263,8 @@ async function startCall(sid) {
   if (voiceBusy()) { VOICE_UI.toast("A voice call is on already: one at a time (⌘⇧V hangs it up)"); return; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection) { VOICE_UI.failed({ name: "NoWebRTC" }); return; }
   VOICE.starting = true; VOICE.sid = sid; VOICE.call = null; VOICE.caps.clear(); VOICE.typing = false; VOICE.muted = false;
+  VOICE.chimed = false; VOICE.chime = undefined;
+  chimeReady();
   try { METER.ctx = new AudioContext(); if (METER.ctx.state === "suspended") METER.ctx.resume().catch(() => {}); } catch { METER.ctx = null; }  // (made in the click: Safari lets it play)
   voiceAudio.play().catch(() => {});  // (an empty play in the gesture: the element may play the voice later, iOS)
   setVoicePhase("connecting");
@@ -241,6 +281,7 @@ async function startCall(sid) {
     });
     pc.addEventListener("connectionstatechange", () => {
       if (VOICE.pc === pc && pc.connectionState === "failed") { VOICE_UI.toast("The voice connection failed"); hangUp(); }
+      if (VOICE.pc === pc) chimeIfReady();
     });
     for (const t of VOICE.mic.getAudioTracks()) pc.addTrack(t, VOICE.mic);
     const dc = VOICE.dc = pc.createDataChannel("oai-events");  // before the offer (it receives only what the call allows)
@@ -249,7 +290,7 @@ async function startCall(sid) {
     await iceGathered(pc);
     const r = await api("POST", "/api/live/start", { sid, sdp: pc.localDescription.sdp });
     if (VOICE.pc !== pc) { api("POST", "/api/live/stop", { call: r.call }).catch(() => {}); return; }  // hung up meanwhile
-    VOICE.call = r.call;
+    VOICE.call = r.call; VOICE.chime = r.chime;
     await pc.setRemoteDescription({ type: "answer", sdp: r.sdp });
     if (VOICE.phase === "connecting") VOICE_UI.render();
   } catch (e) {
