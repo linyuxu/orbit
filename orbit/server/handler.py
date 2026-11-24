@@ -629,9 +629,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             return self._json({"voices": [{"name": v, "about": a} for v, a in live_config.VOICES],
                                "languages": live_config.LANGUAGES, "models": live_config.MODELS,
                                "wake": live_config.WAKE, "prompt_max": live_config.PROMPT_MAX})
-        if p == "/api/live":  # the voice call: phase, bound session, transcript so far (this machine only)
-            if self.from_remote:
-                return self._json({"error": "only on the server's own machine"}, 403)
+        if p == "/api/live":  # the voice call: phase, bound session, transcript so far (any client with the token: the phone)
             return self._json(self.desk.live.state())
         if p == "/api/harnesses":
             return self._json({"harnesses": self.desk.harnesses()})
@@ -908,9 +906,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 if p == "/api/keys/check":
                     return self._json(keys.check(self.desk.state_dir, str(b.get("name", ""))))
                 return self._json({"keys": keys.set_key(self.desk.state_dir, str(b.get("name", "")), b.get("value"))})
-            if p in ("/api/live/start", "/api/live/stop"):  # a voice call (GPT Live): this machine only
-                if self.from_remote:
-                    return self._json({"error": "only on the server's own machine"}, 403)
+            if p in ("/api/live/start", "/api/live/stop"):  # a voice call (GPT Live): this machine, or a client with the
+                # token (the phone): the key stays here, the client gets only the call's SDP answer
                 from orbit.services.live import NoKey
                 if p == "/api/live/stop":
                     try:

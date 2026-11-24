@@ -208,10 +208,17 @@ class LiveTest(test_skeleton.SkeletonTest):
             keys.set_key(self.state, "openai", fake_live.KEY)
         from orbit.machines import remote
         net = {"Host": f"100.64.0.9:{self.port}", "Authorization": f"Bearer {remote.token(self.state)}"}
-        self.assertEqual(self.req("GET", "/api/live", headers=net)[0], 403)
-        self.assertEqual(self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0"}, headers=net)[0], 403)
-        self.assertEqual(self.req("POST", "/api/live/stop", {}, headers=net)[0], 403)
-        self.assertEqual(self.fake.bodies, [])
+        # the phone (another device with the token) may hold a call; the key never goes to it; without the token, no
+        self.assertEqual(self.req("GET", "/api/live", headers=net)[0], 200)
+        code, r = self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 phone"}, headers=net)
+        self.assertEqual(code, 200, r)
+        self.assertEqual(r["sdp"], fake_live.CANNED_SDP)
+        self.assertNotIn(fake_live.KEY, json.dumps(r))
+        self.assertEqual(self.req("POST", "/api/live/stop", {}, headers=net)[0], 200)
+        bare = {"Host": f"100.64.0.9:{self.port}"}
+        self.assertEqual(self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0"}, headers=bare)[0], 401)
+        self.assertEqual(self.req("GET", "/api/keys", headers=net)[0], 403)  # (the key itself: this machine only)
+        self.assertEqual(len(self.fake.bodies), 1)  # (the phone's call only)
 
     # ------------------------------------------------------------------ transcripts and delegations
     def test_delegation_makes_one_card_from_the_transcript(self):
