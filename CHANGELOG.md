@@ -20,6 +20,9 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - Voice: "take it back" (撤回 · 撤掉 · 收回 · 取消 · 算了 · cancel · withdraw · stop …, when those words are all the
   user said about it) withdraws the call's request that has not started, or stops the one running, and the voice
   says which; "cancel the nightly job" stays a task for the agent.
+- Voice: "do this first" (打断一下 · 先做这个 · 插队 · 紧急 · urgent · do this first …, before or after the words): the
+  running request stops, the new one goes ahead of the waiting ones and runs at once, and those keep their order after
+  it (`send` takes `first`). The voice's session state names a turn the agent took by itself as such, not as a request.
 - Voice, more natural (from a study of Codex's voice and 27 real calls): the voice is told the session's state
   silently whenever it changes (what runs and for how long, the agent's latest words, what is queued, the last
   result; also for requests typed or made elsewhere, and another machine's session), so "is it done / how long?" is

@@ -1212,7 +1212,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     return self._json({"ok": True})
                 if action == "send":
                     return self._json(self.desk.send(sid, b.get("text", ""), origin=self._origin(b.get("origin")),
-                                                     client_id=b.get("client_id")))
+                                                     client_id=b.get("client_id"), first=bool(b.get("first"))))
                 if action == "withdraw":
                     self.desk.withdraw(sid, int(b.get("cid", 0)))
                     return self._json({"ok": True})

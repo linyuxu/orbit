@@ -432,6 +432,26 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual([d["how"] for d in self.live_state()["delegations"]], ["new", "steer"])
         self.req("POST", f"/api/sessions/{s['id']}/stop")
 
+    def test_do_this_first(self):
+        """"打断一下，先…" by voice: the running request stops, the new one goes ahead of the waiting ones and runs at
+        once, and the waiting one keeps its turn after it; the voice is told."""
+        s = self.new_session("First")
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "slow job"})
+        self.wait_card(s["id"], 1, ("running",))
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "next thing"})
+        self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+        self.assertTrue(self.fake.wait_attached(1))
+        self.fake.emit(t_in("打断一下，先看一下日志", 500, 2000, "u1"), delegation("del_u", 2100, "du"))
+        st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_u"])
+        self.assertIn("Orbit stopped request #1 and put this first, as request #3", st[0]["content"])
+        self.wait_card(s["id"], 1, ("cancelled",))
+        c3 = self.wait_card(s["id"], 3, ("completed",))
+        self.assertEqual(c3["text"], "先看一下日志")
+        c2 = self.wait_card(s["id"], 2, ("completed",))
+        self.assertGreaterEqual(c2["started"], c3["finished"])  # (the waiting one after it, not dropped)
+        self.assertEqual([c["id"] for c in self.desk.cards(s["id"])][:3], [1, 3, 2])  # (the queue's order: the cards')
+        self.assertIn("a new request first", self.fake.bodies[-1]["session"]["instructions"])
+
     def test_status_in_an_idle_session(self):
         """A request in an idle session is "queued" only for the moment before its agent takes it: the voice is told it
         runs now, never that it waits (a real call said "it is queued behind another request" with nothing running)."""

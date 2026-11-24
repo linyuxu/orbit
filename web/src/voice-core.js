@@ -55,7 +55,8 @@ function voiceEvent(m) {
   if (m.kind === "caption") addCaption(m.caption);
   else if (m.kind === "delegation") {
     const how = m.how === "edit" ? `changes request #${m.cid}` : m.how === "steer" ? `steers request #${m.cid}`
-      : m.how === "withdraw" ? `withdrew request #${m.cid}` : m.how === "stop" ? `stopped request #${m.cid}` : `→ request #${m.cid}`;
+      : m.how === "withdraw" ? `withdrew request #${m.cid}` : m.how === "stop" ? `stopped request #${m.cid}`
+      : m.how === "urgent" ? `→ request #${m.cid}, first` : `→ request #${m.cid}`;
     VOICE.caps.set("d:" + m.delegation, { who: "sys", text: how, start: +m.offset || 0, seq: ++capSeq });
     VOICE_UI.render();
   } else if (m.kind === "error") VOICE_UI.toast("Voice: " + m.message);

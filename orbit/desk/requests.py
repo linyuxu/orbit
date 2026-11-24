@@ -18,11 +18,12 @@ class Requests:
             raise KeyError(f"{s.id}#{cid}")
         return c
 
-    def send(self, sid: str, text: str, origin: dict | None = None, client_id: str | None = None) -> dict:
+    def send(self, sid: str, text: str, origin: dict | None = None, client_id: str | None = None, first: bool = False) -> dict:
         """A request (queued behind any running one). origin: where it came from (a plugin: {"plugin", "label",
         "url"?, "data"?}), kept with the card and shown on it, so the plugin can take the answer back there.
         client_id: the sender's own id for this request: the same id again returns the card it made (with
-        "duplicate": true) instead of a second one, so a retried or repeated send runs once (kept across restarts)."""
+        "duplicate": true) instead of a second one, so a retried or repeated send runs once (kept across restarts).
+        first: ahead of the requests waiting (the next to run), not behind them (the voice's "do this first")."""
         if not text.strip():
             raise ValueError("empty request")
         if client_id is not None and (not isinstance(client_id, str) or not 1 <= len(client_id) <= 200):
@@ -42,7 +43,11 @@ class Requests:
             if client_id:
                 c["client_id"] = client_id
                 s.client_ids[client_id] = c["id"]
-            s.cards.append(c)
+            at = next((i for i, x in enumerate(s.cards) if x["state"] == "queued"), None) if first else None
+            if at is None:
+                s.cards.append(c)
+            else:
+                s.cards.insert(at, c)  # (the queue is the cards' order: it runs before those waiting)
             self._card_changed(c)
             snap = copy.deepcopy(c)
         self.save()

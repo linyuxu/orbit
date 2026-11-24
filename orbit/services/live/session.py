@@ -73,6 +73,27 @@ STEER_CUE = re.compile(r"^\s*(?:(?:请|麻烦)?你?(?:插一句|插个话|补充
                        r"|add\s+(?:this\s+)?to\s+the\s+(?:current|running)(?:\s+(?:one|request|task))?)\b)[\s,，:：、;；.。!！-]*", re.I)
 
 
+# "Do this first": the running request stops (what waits behind it stays) and the words after (or before) the cue
+# run at once, ahead of the queue.
+URGENT_CUE = (r"(?:打断(?:一下|它|当前的?(?:任务|request)?)?|先(?:停下来?|停一下)?(?:做|处理|弄|干)这个|插队|优先(?:处理|做)?(?:这个)?"
+              r"|马上(?:做|处理)(?:这个)?|立刻(?:做|处理)(?:这个)?|紧急|urgent(?:ly)?|do\s+this\s+first|interrupt(?:\s+it)?(?:\s+and)?"
+              r"|stop\s+(?:it|that|what\s+you(?:'re|\s+are)\s+doing)\s+and)")
+URGENT_HEAD = re.compile(r"^\s*(?:(?:请|麻烦)?你?)" + URGENT_CUE + r"[\s,，:：、;；.。!！-]+", re.I)  # (a pause after it: "优先级…" is no cue)
+URGENT_TAIL = re.compile(r"[\s,，:：、;；.。!！-]*(?:请|麻烦)?你?" + URGENT_CUE + r"(?:吧|啊)?[\s,，.。!！]*$", re.I)
+
+
+def urgent_words(words: str) -> str:
+    """The words to run first when a cue says so ("打断一下，先把测试跑了" / "…，先做这个" / "do this first: …"), else ""."""
+    w = words or ""
+    m = URGENT_HEAD.match(w)
+    rest = w[m.end():] if m and m.group(0).strip() else ""
+    if not rest:
+        t = URGENT_TAIL.search(w)
+        rest = w[:t.start()] if t and t.group(0).strip() else ""
+    rest = rest.strip()
+    return rest if len(_norm(rest)) >= 2 else ""  # (a cue with nothing to do is no request)
+
+
 def _norm(words: str) -> str:
     return re.sub(r"[\s\W_]+", "", (words or "").lower())
 
@@ -260,10 +281,10 @@ class Target:
             raise RuntimeError(f"{name}: {(d or {}).get('error') or code}")
         return d
 
-    def send(self, text: str, origin: dict, client_id: str) -> dict:
+    def send(self, text: str, origin: dict, client_id: str, first: bool = False) -> dict:
         if self.remote is None:
-            return self.desk.send(self.sid, text, origin=origin, client_id=client_id)
-        return self._call("POST", "/send", {"text": text, "origin": origin, "client_id": client_id})
+            return self.desk.send(self.sid, text, origin=origin, client_id=client_id, first=first)
+        return self._call("POST", "/send", {"text": text, "origin": origin, "client_id": client_id, "first": first})
 
     def steer(self, text: str, origin: dict, client_id: str) -> dict:
         if self.remote is None:
@@ -324,7 +345,8 @@ Delegate to the backend when:
 - The answer needs the session's files, tools or history.
 - A correction changes the work already requested.
 - The user wants to stop, add to, withdraw or cancel a request.
-What Orbit can do with requests (answer questions about it yourself): they run one at a time in this session; to stop \
+What Orbit can do with requests (answer questions about it yourself): they run one at a time in this session; to do \
+a new request first (interrupting the running one, ahead of what waits), or to stop \
 the running request, add something to it while it runs, or take back one that has not started, delegate the user's \
 words: Orbit does it and tells you which.
 Do not delegate when:
@@ -367,6 +389,9 @@ def state_snapshot(name: str, cards: list[dict], now: float | None = None) -> tu
     "is it done / what is it doing / how long" from this instead of queuing the question behind the work."""
     now = now or time.time()
     cs = [c for c in cards if c.get("kind") != "note" and not c.get("hidden")]
+    # (a turn the agent took by itself, after a background task, is not a request: no number to name it by)
+    what = lambda c, n=14: (f'a turn of its own ("{gist(((c.get("auto") or {}).get("what") or c.get("text") or ""), n)}")'
+                            if c.get("kind") == "auto" else f'request #{c["id"]} ("{gist(c.get("text") or "", n)}")')
     run = next((c for c in cs if c.get("state") in ACTIVE), None)
     waiting = [c for c in cs if c.get("state") == "queued"]
     done = [c for c in cs if c.get("state") in FINAL]
@@ -374,7 +399,7 @@ def state_snapshot(name: str, cards: list[dict], now: float | None = None) -> tu
     out = f'Session state at {datetime.fromtimestamp(now).strftime("%H:%M:%S")}: "{name}"'
     step: tuple = ()
     if run:
-        out += f' is working on request #{run["id"]} ("{gist(run.get("text") or "")}") for ' \
+        out += f' is working on {what(run)} for ' \
                f'{dur(now - (run.get("started") or run.get("time") or now))}'
         steps = run.get("steps") or []
         tools = sum(1 for x in steps if x.get("kind") == "tool")
@@ -396,7 +421,7 @@ def state_snapshot(name: str, cards: list[dict], now: float | None = None) -> tu
     if last:
         st = last["state"]
         retrying = st == "paused" and "retrying in" in (last.get("error") or "")
-        out += f'. Last finished: request #{last["id"]} ("{gist(last.get("text") or "", 10)}")'
+        out += f'. Last finished: {what(last, 10)}'
         if last.get("finished"):
             out += " at " + datetime.fromtimestamp(last["finished"]).strftime("%H:%M")
         if st == "completed":
@@ -868,6 +893,9 @@ class Call:
             return self._move_in(did, d, prev, words)
         if takes_back(words):
             return self._take_back(did, d, prev, words)
+        first = urgent_words(words)  # "打断一下，先做这个 …": the running request stops; these run at once
+        if first:
+            return self._urgent(did, d, first, reply)
         add = steer_words(words)  # "插一句 / tell it to …": for the running request, whoever made it
         text = (add or words) + (f'\n\n(Context, not an instruction: the voice had just said: "{reply[:600]}")' if reply else "")
         origin = {"label": "Voice", "data": {"live": self.live_id, "delegation": did}}
@@ -947,6 +975,36 @@ class Call:
         if c is not None:
             self._tell("delegation", delegation=did, cid=c["id"], how=how, sid=self.sid, offset=d["offset"])
         self._send({"type": "session.commentary.append", "event_id": f"movein_{did}", "delegation_id": did, "content": fact})
+
+    def _urgent(self, did: str, d: dict, words: str, reply: str) -> None:
+        """Do this first: the running request (whoever made it) stops, what waits behind it keeps its order, and these
+        words go ahead of them all: the agent takes them next, i.e. at once."""
+        t, run, c = self.target, None, None
+        text = words + (f'\n\n(Context, not an instruction: the voice had just said: "{reply[:600]}")' if reply else "")
+        origin = {"label": "Voice", "data": {"live": self.live_id, "delegation": did}}
+        try:
+            run = next((x for x in t.cards() if x["state"] in ACTIVE and not x.get("hidden")), None)
+            c = t.send(text, origin, f"live:{self.live_id}:{did}", first=True)  # (first: the stop must not let the queue's head start)
+            if run is not None:
+                t.stop()
+        except Exception as e:  # noqa: BLE001 - the voice is told, the call goes on
+            self.log("send_failed", delegation=did, error=f"{type(e).__name__}: {e}"[:300])
+            self._send({"type": "session.commentary.append", "event_id": f"fail_{did}", "delegation_id": did,
+                        "content": f"Orbit could not do that first: {e}"[:400]})
+            with self.lock:
+                d.update(done=True, how="failed")
+            return
+        with self.lock:
+            d.update(cid=c["id"], how="urgent", text=words)
+            self.card_del[c["id"]] = did
+        self.log("request", delegation=did, cid=c["id"], how="urgent", state=c["state"], words=words,
+                 stopped=run["id"] if run else None, ms_delegation_to_card=int((time.time() - d["at"]) * 1000))
+        self._tell("delegation", delegation=did, cid=c["id"], how="urgent", sid=self.sid, offset=d["offset"])
+        fact = (f"Orbit stopped request #{run['id']} and put this first, as request #{c['id']}: the agent starts on it now "
+                "(what was waiting stays queued after it)." if run else
+                f"Orbit put this first, as request #{c['id']}: nothing was running, so the agent starts on it now.")
+        self._send({"type": "session.thinking.append", "event_id": f"status_{did}", "delegation_id": did,
+                    "content": fact + " Don't state the answer until the result arrives."})
 
     def _take_back(self, did: str, d: dict, prev: dict | None, words: str) -> None:
         """The user took the request back: the call's last request is withdrawn if it has not started, stopped if it
