@@ -10,12 +10,12 @@
 .set-item { display:flex; align-items:center; gap:10px; height:34px; padding:0 10px; border:0; background:none;
   border-radius:8px; color:var(--ink-2); font:calc(13px * var(--ui-k)) var(--font); text-align:left; cursor:default; }
 .set-item:hover { background:var(--hover); color:var(--ink); }
-.set-item.on { background:var(--btn-hover); color:var(--ink); font-weight:600; }
+.set-item.on { background:var(--btn-hover); color:var(--ink); font-weight:calc(600 + var(--wd)); }
 .set-item:focus-visible, .set-close:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
 .set-main { display:flex; flex-direction:column; min-width:0; min-height:0; }
-.set-title { margin:0; padding:20px 28px 14px; font-size:calc(17px * var(--ui-k)); font-weight:600; color:var(--ink); border-bottom:1px solid var(--line); }
+.set-title { margin:0; padding:20px 28px 14px; font-size:calc(17px * var(--ui-k)); font-weight:calc(600 + var(--wd)); color:var(--ink); border-bottom:1px solid var(--line); }
 .set-pane { flex:1; overflow-y:auto; padding:4px 28px 20px; }
-.set-sub { font-size:calc(11px * var(--ui-k)); font-weight:600; letter-spacing:.02em; text-transform:uppercase; color:var(--ink-3); margin:18px 0 2px; }
+.set-sub { font-size:calc(11px * var(--ui-k)); font-weight:calc(600 + var(--wd)); letter-spacing:.02em; text-transform:uppercase; color:var(--ink-3); margin:18px 0 2px; }
 /* A row: label and what it does on the left, its control on the right; a hairline between rows. */
 .set-row { display:flex; align-items:center; gap:18px; padding:13px 0; border-bottom:1px solid var(--line); min-height:30px; }
 .set-row:last-child { border-bottom:0; }
@@ -97,5 +97,5 @@
 .set-ctl .vbudget { width:96px; }
 .set-ctl .vusd { color:var(--ink-3); margin-right:-4px; }
 .set-ctl .vmon { font-size:calc(12.5px * var(--ui-k)); color:var(--ink-2); white-space:nowrap; }
-.set-ctl .vmon b, .vleft b { color:var(--ink); font-weight:600; }
+.set-ctl .vmon b, .vleft b { color:var(--ink); font-weight:calc(600 + var(--wd)); }
 .vleft { margin-top:6px; }

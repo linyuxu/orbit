@@ -38,13 +38,19 @@ const fontStack = name => FONT_PRESETS[name] || MONO_PRESETS[name] || `${quoteFo
 const monoStack = name => MONO_PRESETS[name] || `${quoteFont(name)},"Orbit Mono",${CJK_STACK},monospace`;
 const clampSize = (v, lo = 8, hi = 40) => Math.round(Math.max(lo, Math.min(hi, +v || 0)) * 2) / 2;
 const UI_SIZE = [10, 15];  // the interface size's range: menus, rows and bars are laid out for about these
+/* Text weight: how far every weight moves (the fonts are variable) and whether strokes are the thinner antialiased
+   ones. "full" is Regular's earlier name. */
+const WEIGHTS = { thin: { d: -70, thin: true }, light: { d: 0, thin: true }, regular: { d: 0, thin: false },
+                  full: { d: 0, thin: false }, medium: { d: 50, thin: false }, bold: { d: 100, thin: false } };
 function readPrefs() {
   let p = LS.get("prefs", null);
   if (p && typeof p === "object" && p.v !== PREFS_V) { p = null; LS.set("prefs", { v: PREFS_V }); }  // (saved before the defaults changed)
   return { ...PREFS_DEFAULT, ...(p && typeof p === "object" ? p : {}), v: PREFS_V };
 }
 function applyPrefs(p = readPrefs(), tell = true) {
-  document.body.classList.toggle("light-text", p.weight === "light");
+  const w = WEIGHTS[p.weight] || WEIGHTS.regular;
+  document.body.classList.toggle("light-text", w.thin);
+  document.documentElement.style.setProperty("--wd", String(w.d));
   const r = document.documentElement.style;
   r.setProperty("--font", fontStack(p.uiFont));
   r.setProperty("--read-font", p.readFont ? fontStack(p.readFont) : "var(--font)");
@@ -374,8 +380,10 @@ function fontPicker(pane, keys, { label, desc, key, mono = false, inherit = "" }
 }
 function settingsAppearance(pane, keys) {
   const p = readPrefs();
-  segmented(setRow(pane, "Text weight", "The whole app: system smoothing, or thinner antialiased strokes."), {
-    options: [{ value: "full", label: "Full" }, { value: "light", label: "Light" }], value: p.weight, onChange: v => setPref("weight", v) });
+  segmented(setRow(pane, "Text weight", "The whole app, every weight together (bold stays as much bolder). Thin and Light draw thinner antialiased strokes; Regular is the system's smoothing."), {
+    options: [{ value: "thin", label: "Thin" }, { value: "light", label: "Light" }, { value: "regular", label: "Regular" },
+              { value: "medium", label: "Medium" }, { value: "bold", label: "Bold" }],
+    value: p.weight === "full" ? "regular" : p.weight, onChange: v => setPref("weight", v) });
   segmented(setRow(pane, "Reading width", "The conversation and its input: a centred column of a comfortable line length, or the whole pane."), {
     options: [{ value: "", label: "Comfortable" }, { value: "full", label: "Full" }], value: p.readWidth || "", onChange: v => setPref("readWidth", v) });
   setHeading(pane, "Fonts");

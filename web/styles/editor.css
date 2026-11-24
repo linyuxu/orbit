@@ -5,7 +5,7 @@
 .fhead .crumbs { display:flex; align-items:center; gap:4px; min-width:0; overflow:hidden; white-space:nowrap; font-family:var(--mono); font-size:calc(12px * var(--ui-k)); color:var(--ink-3); }
 .fhead .crumbs .seg { cursor:default; border-radius:4px; padding:1px 2px; }
 .fhead .crumbs .seg:hover { color:var(--ink); background:var(--hover); }
-.fhead .crumbs .leaf { color:var(--ink); font-weight:600; }
+.fhead .crumbs .leaf { color:var(--ink); font-weight:calc(600 + var(--wd)); }
 .fhead .meta2 { color:var(--ink-3); font-size:calc(12px * var(--ui-k)); white-space:nowrap; margin-left:6px; }
 .fhead { overflow:hidden; }
 .fhead .crumbs { flex:0 1 auto; }

@@ -8,7 +8,7 @@
 .xrow .dot { margin-top:6px; }
 .xrow .m { flex:1; min-width:0; }
 .xrow .l1 { display:flex; gap:8px; align-items:baseline; min-width:0; }
-.xrow .nm { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
+.xrow .nm { font-weight:calc(500 + var(--wd)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
 .xrow .r { color:var(--ink-3); font-size:calc(12px * var(--ui-k)); white-space:nowrap; flex:none; }
 .xrow .racts { display:none; gap:2px; margin:-4px -4px -4px 4px; flex:none; }  /* a row's actions, on hover or the keyboard row (U11) */
 .xrow:hover .racts, .xrow.kc .racts { display:flex; }
@@ -19,9 +19,9 @@
 .xrow.off .nm { color:var(--ink-3); }
 .xrow .tm { font:500 calc(12px * var(--ui-k)) var(--font); font-variant-numeric:tabular-nums; color:var(--ink-2); width:46px; flex:none; padding-top:1px; white-space:nowrap; }
 .xrow.past { opacity:.55; }
-.xrow.now .tm { color:var(--run); font-weight:600; }
+.xrow.now .tm { color:var(--run); font-weight:calc(600 + var(--wd)); }
 .xrow .cbar { width:3px; align-self:stretch; border-radius:2px; flex:none; }
-.xday { font-size:calc(12px * var(--ui-k)); font-weight:600; color:var(--ink-2); padding:12px 10px 4px; }
+.xday { font-size:calc(12px * var(--ui-k)); font-weight:calc(600 + var(--wd)); color:var(--ink-2); padding:12px 10px 4px; }
 .xday.today { color:var(--accent); }
 .xempty { color:var(--ink-3); padding:24px 14px; line-height:1.6; }
 .xempty h3 { color:var(--ink); margin:0 0 6px; font-size:calc(14px * var(--ui-k)); }
@@ -31,7 +31,7 @@
 /* ===================================================================== ± Review */
 #reviewview { flex:1; min-height:0; display:flex; flex-direction:column; }
 .rvhead { height:40px; flex:none; display:flex; align-items:center; gap:8px; padding:0 8px 0 14px; border-bottom:1px solid var(--line); background:var(--surface); overflow:hidden; }
-.rvhead .t { font-weight:600; white-space:nowrap; flex:none; }
+.rvhead .t { font-weight:calc(600 + var(--wd)); white-space:nowrap; flex:none; }
 .rvhead .s { color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1 1 0; }
 .rvhead .acts { margin-left:auto; display:flex; gap:4px; align-items:center; flex:none; }  /* the path gives way first */
 .rvhead .acts .btn { max-width:200px; overflow:hidden; text-overflow:ellipsis; }
@@ -55,7 +55,7 @@
 .dl .tx { white-space:pre; padding-right:16px; }
 .dl.add { background:var(--ok-soft); } .dl.add .sg { color:var(--add); }
 .dl.del { background:var(--err-soft); } .dl.del .sg { color:var(--del); }
-.dl.cmt .no { color:var(--ink); font-weight:600; }
+.dl.cmt .no { color:var(--ink); font-weight:calc(600 + var(--wd)); }
 .hlines { overflow-x:auto; }
 .cbox { margin:4px 10px 8px 60px; max-width:640px; border:1px solid var(--line); border-radius:var(--r-s); background:var(--surface); padding:8px; font-family:var(--font); }
 .cbox textarea { width:100%; min-height:54px; border:1px solid var(--line); border-radius:var(--r-s); background:var(--bg); color:var(--ink);
@@ -84,14 +84,14 @@
 .xhid { padding:10px 10px 0; color:var(--ink-3); font-size:calc(11px * var(--ui-k)); }
 
 /* ---------- the Calendar's meetings (calview.js): one 44px row each, opened in place */
-#xhead .t { font-weight:600; display:flex; align-items:center; gap:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+#xhead .t { font-weight:calc(600 + var(--wd)); display:flex; align-items:center; gap:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 #xhead .acts { margin-left:auto; display:flex; gap:6px; flex:none; }
 /* Calmer (content carries the colour; chrome is hairlines and tints): no boxes, a hairline between rows; the keyboard
    row is a 3px --focus bar on the left and a faint tint; times in the UI font; badges as coloured text; Join a quiet
    text button. Every rule is scoped to .xrow.mrow (the left panel has rows of its own). */
-.mday { display:flex; align-items:center; gap:10px; margin:18px 12px 4px; font-size:calc(11px * var(--ui-k)); font-weight:600; letter-spacing:.06em; color:var(--ink-3); }
+.mday { display:flex; align-items:center; gap:10px; margin:18px 12px 4px; font-size:calc(11px * var(--ui-k)); font-weight:calc(600 + var(--wd)); letter-spacing:.06em; color:var(--ink-3); }
 .mday:first-child { margin-top:8px; }
-.mblk { font-weight:400; letter-spacing:0; cursor:pointer; padding:1px 6px; border-radius:4px; }
+.mblk { font-weight:calc(400 + var(--wd)); letter-spacing:0; cursor:pointer; padding:1px 6px; border-radius:4px; }
 .mblk:hover { background:var(--hover); color:var(--ink-2); }
 .mnone { padding:8px 12px 8px 138px; color:var(--ink-3); font-size:calc(12px * var(--ui-k)); }
 .xrow.mrow { height:44px; align-items:center; gap:10px; padding:0 12px; border-radius:0; border-bottom:1px solid var(--hover); }
@@ -100,18 +100,18 @@
 .xrow.mrow.open { background:color-mix(in srgb, var(--hover) 45%, transparent); }
 .xrow.mrow .tm { width:84px; padding:0; flex:none; font:500 calc(12px * var(--ui-k)) var(--font); font-variant-numeric:tabular-nums; color:var(--ink-2); white-space:nowrap; }
 .mav { width:22px; height:22px; flex:none; border-radius:var(--r-s); background:var(--sel); color:var(--av-fg); display:grid; place-items:center;
-  font-size:calc(11px * var(--ui-k)); font-weight:600; overflow:hidden; }
+  font-size:calc(11px * var(--ui-k)); font-weight:calc(600 + var(--wd)); overflow:hidden; }
 .mav img { width:100%; height:100%; object-fit:cover; }
 .mav.sm { width:16px; height:16px; font-size:calc(9.5px * var(--ui-k)); border-radius:4px; }
-.xrow.mrow .nm { font-size:calc(13.5px * var(--ui-k)); font-weight:600; color:var(--ink); flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.mb { flex:none; font-size:calc(11px * var(--ui-k)); font-weight:600; }
+.xrow.mrow .nm { font-size:calc(13.5px * var(--ui-k)); font-weight:calc(600 + var(--wd)); color:var(--ink); flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mb { flex:none; font-size:calc(11px * var(--ui-k)); font-weight:calc(600 + var(--wd)); }
 .mb.now { color:var(--ok); }
 .mb.ov { color:var(--warn); }
 .xrow.mrow .mt { flex:none; margin-left:auto; font-size:calc(12px * var(--ui-k)); color:var(--ink-3); white-space:nowrap; max-width:34%; overflow:hidden; text-overflow:ellipsis; }
 .xrow.mrow .mjoin, .xrow.mrow .mjoin0 { flex:none; width:52px; }
-.xrow.mrow.next .tm { color:var(--accent); font-weight:600; }  /* the meeting now (or next): its time, nothing louder */
-.xrow.mrow.past .nm, .xrow.mrow.past .tm, .xrow.mrow.past .mt { color:var(--ink-3); font-weight:500; }
-.xrow.mrow.block .nm { font-weight:400; color:var(--ink-3); font-style:italic; }
+.xrow.mrow.next .tm { color:var(--accent); font-weight:calc(600 + var(--wd)); }  /* the meeting now (or next): its time, nothing louder */
+.xrow.mrow.past .nm, .xrow.mrow.past .tm, .xrow.mrow.past .mt { color:var(--ink-3); font-weight:calc(500 + var(--wd)); }
+.xrow.mrow.block .nm { font-weight:calc(400 + var(--wd)); color:var(--ink-3); font-style:italic; }
 .mopen { margin:0 0 4px; padding:8px 12px 10px 138px; display:flex; flex-direction:column; gap:8px; font-size:calc(12px * var(--ui-k));
   background:color-mix(in srgb, var(--hover) 45%, transparent); border-bottom:1px solid var(--hover); }  /* its body starts under the title */
 .mline { color:var(--ink-3); }
@@ -130,8 +130,8 @@
 #xnote { margin-left:138px; }
 /* the status bar's meeting: a countdown chip */
 .mchipc { margin-left:6px; font-size:calc(10.5px * var(--ui-k)); padding:0 5px; border-radius:8px; background:var(--hover); color:var(--ink-2); }
-.mchipc.soon { background:var(--run-soft); color:var(--warn); font-weight:600; }
-.mchipc.now { background:var(--ok-soft); color:var(--ok); font-weight:600; }
+.mchipc.soon { background:var(--run-soft); color:var(--warn); font-weight:calc(600 + var(--wd)); }
+.mchipc.now { background:var(--ok-soft); color:var(--ok); font-weight:calc(600 + var(--wd)); }
 /* the reminder, 10 minutes before */
 #remind { position:fixed; right:18px; bottom:42px; z-index:60; display:flex; align-items:center; gap:8px; padding:8px 8px 8px 12px;
   background:var(--surface); border:1px solid var(--line); border-radius:var(--r-m); box-shadow:var(--menu-shadow); font-size:calc(12.5px * var(--ui-k)); max-width:min(560px, 90vw); }
@@ -145,16 +145,16 @@
 #meetpop { position:fixed; z-index:60; width:min(520px, calc(100vw - 16px)); background:var(--surface); border-radius:var(--r-m); box-shadow:var(--menu-shadow);
   padding:4px; font-size:calc(12px * var(--ui-k)); display:flex; flex-direction:column; max-height:min(420px, 70vh); }
 #meetpop .mplist { overflow-y:auto; min-height:0; }
-#meetpop .mphead { margin:8px 10px 2px; font-size:calc(10.5px * var(--ui-k)); font-weight:600; letter-spacing:.06em; color:var(--ink-3); }
+#meetpop .mphead { margin:8px 10px 2px; font-size:calc(10.5px * var(--ui-k)); font-weight:calc(600 + var(--wd)); letter-spacing:.06em; color:var(--ink-3); }
 #meetpop .mphead:first-child { margin-top:4px; }
 #meetpop .mprow { height:34px; display:flex; align-items:center; gap:8px; padding:0 4px 0 10px; border-radius:var(--r-s); cursor:default; }
 #meetpop .mprow.sel { background:color-mix(in srgb, var(--focus) 10%, transparent); }
 #meetpop .mprow .tm { width:78px; flex:none; font:500 calc(12px * var(--ui-k)) var(--font); font-variant-numeric:tabular-nums; color:var(--ink-2); white-space:nowrap; }
-#meetpop .mprow .nm { font-size:calc(12.5px * var(--ui-k)); font-weight:600; color:var(--ink); min-width:0; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#meetpop .mprow .nm { font-size:calc(12.5px * var(--ui-k)); font-weight:calc(600 + var(--wd)); color:var(--ink); min-width:0; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #meetpop .mprow .mpin { flex:none; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); }
 #meetpop .mprow .mt { margin-left:auto; flex:0 1 auto; min-width:0; max-width:34%; font-size:calc(11.5px * var(--ui-k)); color:var(--ink-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-left:8px; }
 #meetpop .mprow .btn, #meetpop .mprow .mj0 { flex:none; width:48px; }
-#meetpop .mprow.past .nm, #meetpop .mprow.past .tm { color:var(--ink-3); font-weight:500; }
+#meetpop .mprow.past .nm, #meetpop .mprow.past .tm { color:var(--ink-3); font-weight:calc(500 + var(--wd)); }
 #meetpop .mav { width:20px; height:20px; }
 #meetpop .mpnone { padding:14px 12px; color:var(--ink-3); }
 #meetpop .mpfoot { display:flex; align-items:center; gap:8px; margin-top:4px; padding:4px 6px 2px 2px; border-top:1px solid var(--line); }
