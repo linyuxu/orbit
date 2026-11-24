@@ -610,6 +610,11 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json({"error": "only on the server's own machine"}, 403)
             from orbit.services import keys
             return self._json({"keys": keys.status(self.desk.state_dir)})
+        if p == "/api/live/options":  # Settings → Voice: what each setting may be
+            from orbit.services.live import config as live_config
+            return self._json({"voices": [{"name": v, "about": a} for v, a in live_config.VOICES],
+                               "languages": live_config.LANGUAGES, "models": live_config.MODELS,
+                               "wake": live_config.WAKE, "prompt_max": live_config.PROMPT_MAX})
         if p == "/api/live":  # the voice call: phase, bound session, transcript so far (this machine only)
             if self.from_remote:
                 return self._json({"error": "only on the server's own machine"}, 403)
@@ -930,7 +935,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     if not (sess.driver and sess.driver.terminal):
                         raise ValueError(f"{sess.name}'s agent has no terminal")
                     argv, title = list(sess.driver.terminal), sess.name
-                    return self._json(self.desk.shells.open("term:" + key, sess.cwd, title, {"ORBIT_SESSION": key}, argv).public())
+                    env = {"ORBIT_SESSION": key, **(getattr(sess.driver, "terminal_env", None) or {})}  # (a secret goes here, never in argv: ps shows argv)
+                    return self._json(self.desk.shells.open("term:" + key, sess.cwd, title, env, argv).public())
                 if key in self.desk.sessions:
                     sess = self.desk.get(key)
                     cwd = cwd or sess.cwd

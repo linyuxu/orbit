@@ -12,16 +12,20 @@ from orbit.drivers.agy import AgyDriver
 from orbit.drivers.base import Driver
 from orbit.drivers.claude import ClaudeDriver
 from orbit.drivers.codex import CodexDriver
+from orbit.drivers.opencode import OpenCodeDriver
+from orbit.services.live.config import DEFAULTS as LIVE_DEFAULTS
 
 
-DRIVERS: dict[str, type[Driver]] = {"claude": ClaudeDriver, "codex": CodexDriver, "agy": AgyDriver}
+DRIVERS: dict[str, type[Driver]] = {"claude": ClaudeDriver, "codex": CodexDriver, "agy": AgyDriver,
+                                     "opencode": OpenCodeDriver}
 ORBIT_PREFIX = "[orbit] "
 ORBIT_SKILLS = ROOT / "plugin" / "skills"  # Orbit's own skills (also offered by `/` in the input)
+
 SETTINGS: dict[str, Any] = {
     "calendar": False,     # D4: Calendar reads macOS Calendar only when turned on
     "open_in": "default",  # where ↗ / "Open in …" open a file: default | jetbrains | vscode | side
     "serve_remote": False,  # other machines may reach this server (its Tailscale / LAN address, with the token)
-    "live_model": "gpt-live-1.1",  # GPT Live voice: gpt-live-1.1 | gpt-live-1
+    **LIVE_DEFAULTS,  # GPT Live voice (Settings → Voice): live_model, live_voice, … (orbit/services/live/config.py)
 }
 OPEN_IN = ("default", "jetbrains", "vscode", "side")
 

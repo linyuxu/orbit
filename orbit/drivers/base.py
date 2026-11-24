@@ -1,8 +1,8 @@
 """The harness-neutral driver contract (builddoc/harness-protocol.md §6).
 
-A driver adapts one harness (Claude Code, Codex, agy, or any agent speaking the Orbit Harness Protocol through
-`ProtocolDriver`) to the Desk. The Desk never knows which harness it talks to: it calls the methods below and receives
-`DriverEvent`s through the `emit` callback given at construction. All of them run on one engine (process.py:
+A driver adapts one harness (Claude Code, Codex, agy, OpenCode, or any agent speaking the Orbit Harness Protocol
+through `ProtocolDriver`) to the Desk. The Desk never knows which harness it talks to: it calls the methods below and
+receives `DriverEvent`s through the `emit` callback given at construction. All of them run on one engine (process.py:
 ProcessDriver), which owns the process and the request's life; a harness module says only what differs.
 
 Events (`DriverEvent.kind`, data):

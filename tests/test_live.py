@@ -131,13 +131,48 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertIn("Generate <|SpawnThinking|>", live.instructions("x", "/tmp", "gpt-live-1"))
         self.assertNotIn("SpawnThinking", live.instructions("x", "/tmp", "gpt-live-1.1"))
 
+    def test_voice_settings(self):
+        """Settings → Voice: validated by the desk; read when a call starts (voice, language, results, standby, wake,
+        context, model, the user's instructions, the spoken acknowledgement)."""
+        for k, v in (("live_voice", "nobody"), ("live_idle_s", 3), ("live_idle_s", 61), ("live_wake", 0.4),
+                     ("live_language", "xx"), ("live_detail", "long"), ("live_prompt", "x" * 4001), ("live_ack", "yes")):
+            self.assertEqual(self.req("POST", "/api/settings", {k: v})[0], 400, (k, v))
+        code, o = self.req("GET", "/api/live/options")
+        self.assertEqual(code, 200)
+        self.assertIn({"name": "harema", "about": "Japanese, feminine"}, o["voices"])
+        s = self.new_session("Prev")
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "earlier work"})
+        self.wait_card(s["id"], 1, ("completed",))
+        set_ = {"live_voice": "cedar", "live_language": "zh", "live_detail": "detailed", "live_idle_s": 0, "live_wake": 1,
+                "live_context": False, "live_model": "gpt-live-1", "live_prompt": "Call me Sam.", "live_ack": True}
+        self.assertEqual(self.req("POST", "/api/settings", {**set_, "live_wake": 0.7})[0], 200)
+        try:
+            self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+            self.assertTrue(self.fake.wait_attached(1))
+            se = self.fake.bodies[0]["session"]
+            self.assertEqual((se["model"], se["audio"], se["wake_policy"]["vad_threshold"]),
+                             ("gpt-live-1", {"output": {"voice": "cedar"}}, 0.7))
+            self.assertNotIn("idle_timeout_s", se)  # never standby: active until hang-up
+            self.assertEqual(len(se["input"]), 1)  # the session's facts only, not its recent requests
+            ins = se["instructions"]
+            self.assertIn("Always speak Mandarin Chinese", ins)
+            self.assertIn("key details", ins)
+            self.assertTrue(ins.endswith("Call me Sam."))
+            self.fake.emit(t_in("check the build", 500, 1500, "a1"), delegation("del_a", 1600, "da"))
+            self.wait_card(s["id"], 2, ("completed",))
+            self.fake.wait_got("session.commentary.append")
+            self.assertEqual([e for e in self.fake.got("session.thinking.append") if e.get("content") == ""], [])  # it may say "on it"
+        finally:
+            self.req("POST", "/api/settings", {k: live.config.DEFAULTS[k] for k in set_})
+        self.assertEqual(self.req("POST", "/api/settings", {"live_wake": 1})[0], 400)  # (an int for a float: 1.0, not a choice)
+
     def test_no_key_and_another_machine(self):
         s = self.new_session("Nokey")
         keys.set_key(self.state, "openai", None)
         try:
             code, r = self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0"})
             self.assertEqual((code, r.get("need")), (400, "openai-key"))
-            self.assertIn("Settings → General", r["error"])
+            self.assertIn("Settings → Voice", r["error"])
         finally:
             keys.set_key(self.state, "openai", fake_live.KEY)
         from orbit.machines import remote

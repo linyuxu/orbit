@@ -46,7 +46,7 @@ function bindChips(w, onChange) {
 
 /* ===================================================================== New session: folder, agent, group, the first request */
 const MODE_SHORT = { default: "default", acceptEdits: "accept edits", auto: "auto", plan: "plan", bypassPermissions: "bypass" };
-/* The modes a harness maps (Claude Code has auto; Codex, agy do not). */
+/* The modes a harness maps (Claude Code has auto; Codex, agy, OpenCode do not). */
 const modesForM = id => { const h = (S.harnesses || []).find(x => x.id === id); return Object.keys(MODE_SHORT).filter(m => !h || !h.modes || h.modes.includes(m)); };
 const modeChipsHtml = (harness, mode) => chipsHtml("mode", modesForM(harness).map(value => ({ value, label: MODE_SHORT[value],
   icon: value === "bypassPermissions" ? `<span class="zap">${I("zap", 14)}</span>` : "" })), modesForM(harness).includes(mode) ? mode : "default");

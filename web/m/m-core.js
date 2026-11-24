@@ -31,7 +31,7 @@ const S = {
   online: false,
 };
 const groupName = gid => (S.groups.find(g => g.id === gid) || { name: "?" }).name;
-const harnessLabel = id => (S.harnesses.find(h => h.id === id) || { label: { claude: "Claude Code", codex: "Codex", agy: "agy" }[id] || id }).label;
+const harnessLabel = id => (S.harnesses.find(h => h.id === id) || { label: { claude: "Claude Code", codex: "Codex", agy: "agy", opencode: "OpenCode" }[id] || id }).label;
 const machineUp = name => !(S.machines || []).some(m => m.name === name && !m.ok);
 const mentionTag = name => "@@" + String(name).trim().replace(/\s+/g, "-");  // (markdown.js: @@Name links)
 

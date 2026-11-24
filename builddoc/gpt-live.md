@@ -13,7 +13,7 @@ live-prompting, voice-latency-cost, the live API reference) and Codex `rust-v0.1
 | Part | Does |
 |---|---|
 | **The page** (desktop app first) | microphone and speaker over WebRTC, straight to OpenAI; the call button and its state; transcripts shown live |
-| **The Orbit server** | holds the OpenAI key (Settings → General); creates the GPT Live session (`POST /v1/live/sessions` with the page's SDP offer, returns the answer); attaches the **sideband** websocket (`/v1/live/sessions/{id}/attach`) and does everything else there: transcripts, delegations, context, results |
+| **The Orbit server** | holds the OpenAI key (Settings → Voice); creates the GPT Live session (`POST /v1/live/sessions` with the page's SDP offer, returns the answer); attaches the **sideband** websocket (`/v1/live/sessions/{id}/attach`) and does everything else there: transcripts, delegations, context, results |
 | **The bound session** | an ordinary Orbit session: a delegation becomes a request in it (a card), its answer comes back to the call |
 
 One call is bound to one Orbit session (the one in front when the call starts; switching is phase 2). The page's
@@ -38,6 +38,22 @@ small stdlib one (RFC 6455 client, TLS through `ssl`) in `orbit/services/live/ws
 
 Cost: $0.05/min active (speaking, listening or silent alike), $0.02/min standby, per second; an hour open is $3.00
 active or $1.20 standby, backend separate. Creating a WebRTC session bills 15 s up front.
+
+### Settings → Voice
+
+What the user may change (desk settings `live_*`, `orbit/services/live/config.py`), read as a call starts:
+
+| Setting | Values | Goes to |
+|---|---|---|
+| `live_voice` | the 38 built-in voices (`marin`) | `audio.output.voice` |
+| `live_model` | `gpt-live-1.1`, `gpt-live-1` | `model` |
+| `live_idle_s` | 5–60, or 0 (never) (30) | `idle_timeout_s` (left out for 0: active until hang-up) |
+| `live_wake` | 0.3, 0.5, 0.7 (0.5) | `wake_policy.vad_threshold` |
+| `live_context` | on/off (on) | `input`: the session's facts, plus its last three requests when on |
+| `live_language` | auto, zh, en, ja, ko, es, fr, de, pt | a line in the instructions (the API has no language field) |
+| `live_detail` | brief, detailed | the result line in the instructions |
+| `live_ack` | on/off (off) | off: the empty `thinking.append` at each delegation cancels the automatic acknowledgement |
+| `live_prompt` | up to 4 000 characters | after Orbit's instructions; they win over style, never over delegation and grounding |
 
 ## 3. Instructions
 

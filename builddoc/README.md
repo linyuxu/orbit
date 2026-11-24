@@ -14,6 +14,7 @@ When this spec and the old code disagree, this spec wins. Every rule here has a 
 | `ui.md` | Visual system: tokens, type, sizes, components, principles, Settings (⌘,) | written |
 | `interaction.md` | Interaction contract: focus, Esc, toggles, lists, menus, dialogs, the full shortcut table | written |
 | `driver.md` | Agent driver contract: one interface for Claude Code, Codex, agy (reference: one long-lived `claude -p --input-format stream-json --output-format stream-json` process per session) | to write |
+| `opencode.md` | OpenCode as a built-in harness: why `opencode serve`, the HTTP and event mapping, permissions through its TUI (⌘T), hand-off, history and Resume from its store | written, built |
 | `editor.md` | The one live-preview editor (input, Markdown files, notes): what renders, keys, input completions | written, built |
 | `features/files.md` | The editors (Markdown live preview), notes links on rename, dropped and pasted files | written (editor part) |
 | `features/{sessions,cards,notes,search,calendar,schedule}.md` | One file per module: purpose, user stories, data, API, keys, edge cases | to write (files: `features/files.md`) |
@@ -35,7 +36,7 @@ exceptions.
 | Agent-facing CLI and Orbit-for-agents context | Plugin system, graph view, mobile, an in-app browser pane (links open in the system browser; `orbit-agent show` pages open as a side tab) |
 | Schedule (agents that wake up), Calendar (read-only, optional) | Email, calendar write / sync |
 
-Decided (2026-11-17): **no right panel**: no in-app browser pane; ± Review (⌘⇧I) is a side tab kind. **Harnesses are Claude Code, Codex and agy**, each behind one harness-neutral driver contract (`driver.md`); a new harness is a new driver, never a change to the Desk or the page.
+Decided (2026-11-17): **no right panel**: no in-app browser pane; ± Review (⌘⇧I) is a side tab kind. **Harnesses are Claude Code, Codex and agy**, each behind one harness-neutral driver contract (`driver.md`); a new harness is a new driver, never a change to the Desk or the page. (2026-11-23: OpenCode joins them, `opencode.md`.)
 
 Decisions still open (待裁):
 

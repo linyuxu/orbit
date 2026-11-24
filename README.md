@@ -17,14 +17,24 @@ Every command lives in `cli/` (thin launchers that run the repository's own Pyth
 | Command | For | Does |
 |---|---|---|
 | `cli/orbit serve` | people | the server, the backend (the app starts it when nothing listens on 8770; without the app, e.g. on Linux, run it yourself) |
-| `cli/orbit tools install` | people | makes Orbit's tools available to every harness in any terminal: `~/.local/bin/orbit-agent` and `~/.local/bin/orbit`, and the orbit-agents skill in `~/.claude/skills`, `~/.codex/skills`, `~/.gemini/skills` (agy). `uninstall` removes exactly those links; `status` shows them |
+| `cli/orbit tools install` | people | makes Orbit's tools available to every harness in any terminal: `~/.local/bin/orbit-agent` and `~/.local/bin/orbit`, and the orbit-agents skill in `~/.claude/skills` (also read by OpenCode), `~/.codex/skills`, `~/.gemini/skills` (agy). `uninstall` removes exactly those links; `status` shows them |
 | `cli/orbit stop [--agents]` | people | stops the server of the state dir (`--state-dir`): its agents run on for the next `serve`; `--agents` ends them too |
 | `cli/orbit serve --remote` · `url` · `token` · `remote add\|ls\|rm` | people | other machines: see below |
 | `cli/orbit-agent …` | agents | talk to the server's sessions: `sessions`, `send`, `steer`, `read`, `mention`, `wait`, … |
 
-After `orbit tools install`, a `claude`, `codex` or `agy` started in any terminal knows `orbit-agent` and can send to, steer
-and read the agents the server runs; it signs as "a terminal session in <folder>" (`$ORBIT_AGENT_NAME` overrides). It
+After `orbit tools install`, a `claude`, `codex`, `agy` or `opencode` started in any terminal knows `orbit-agent` and can
+send to, steer and read the agents the server runs; it signs as "a terminal session in <folder>" (`$ORBIT_AGENT_NAME` overrides). It
 cannot be written to (the server does not own its process): ⌘O → Terminal attaches it for two-way work.
+
+## Harnesses
+
+A session runs one coding agent, its **harness** (⌘N → Harness, `orbit-agent new --harness`): **Claude Code**
+(`claude`), **Codex** (`codex app-server`), **agy** and **OpenCode** (`opencode serve`: one per session, on 127.0.0.1
+with a password of its own; models are OpenCode's `provider/model`), or any agent a plugin adds through the
+[Orbit Harness Protocol](builddoc/harness-protocol.md). Each offers the permission modes it can map; each one's own
+conversations are offered by ⌘O → Other sessions (Resume). OpenCode asks the user only what its config says to ask:
+bypass answers those itself, accept edits the file edits, and anything else waits in OpenCode's own TUI, which ⌘T
+attaches to the session (the tab is marked until it is answered). Design: [builddoc/opencode.md](builddoc/opencode.md).
 
 ## The orbit server and other machines
 
@@ -96,8 +106,8 @@ Open **Orbit** from Spotlight, Launchpad or `~/Applications`. The app starts the
 window closes or the app quits (⌘Q)**, and the next launch reattaches to it. **Quit Orbit and Stop Agents** (⌥⌘Q)
 stops everything; View → Restart Server works on one an earlier launch left running (`~/.orbit/server.pid`).
 **Agents outlive a restart of the server**: they run in the Harness Server (`orbit/harness_server/`, a small daemon
-the server starts), so View → Restart Server or an update hands each session (Claude Code, Codex, agy, a plugin's
-agent) over to the next server, which reads on where the last one stopped: a request at work and its background
+the server starts), so View → Restart Server or an update hands each session (Claude Code, Codex, agy, OpenCode,
+a plugin's agent) over to the next server, which reads on where the last one stopped: a request at work and its background
 subagents go on (`builddoc/harness-server.md`). `orbit stop` stops the server of a state dir and leaves its agents
 running for the next `orbit serve`; `orbit stop --agents` ends them too. `orbit harness-server status | restart | stop`
 (restart, also ⋯ → Restart Harness Server… and View → Restart Harness Server…, after a confirmation: every agent
@@ -131,7 +141,11 @@ saves over a file that has content: auto-save skips it and ⌘S asks.
   it can itself and hands the rest to the session as requests (cards "via Voice"); their answers come back spoken, in
   short. The button says connecting · listening · speaking · standby (after 30 s of quiet, cheaper; speech wakes it),
   a red dot while the microphone is open; captions run in the conversation, and on hang-up the call's transcript stays
-  as a note card. Needs an OpenAI API key (Settings → General: it stays on this machine, the page never sees it).
+  as a note card. Needs an OpenAI API key (Settings → Voice: it stays on this machine, the page never sees it).
+  Settings → Voice also picks the voice (38, with their languages and accents), the language it speaks, brief or
+  detailed results, a spoken "on it" when a task starts, when it rests (standby after 10–60 s, or never) and how
+  clear speech must be to wake it, whether it starts with the session's recent work, the model, and your own
+  instructions; a change applies to the next call.
   Each call is logged in `~/.orbit/live/<call>.jsonl` (stages, times, ids; never the key). Design: `builddoc/gpt-live.md`.
 - **⌘K** quick ask: a one-off request to a Fleet helper (a background agent in the current folder; no tab, its
   answer shows in the side tab without taking the keyboard) or to any open session. Up to 3 helpers per folder.
@@ -317,8 +331,9 @@ uv run python -m orbit            # http://127.0.0.1:8770/ (state in ~/.orbit)
 uv run python -m orbit --port 8771 --state-dir /tmp/orbit-state
 ```
 
-`$ORBIT_CLAUDE_BIN`, `$ORBIT_CODEX_BIN` and `$ORBIT_AGY_BIN` override the `claude`, `codex` and `agy` commands
-(tests point them at `tests/fake_claude.py`, `tests/fake_codex.py` and `tests/fake_agy.py`).
+`$ORBIT_CLAUDE_BIN`, `$ORBIT_CODEX_BIN`, `$ORBIT_AGY_BIN` and `$ORBIT_OPENCODE_BIN` override the `claude`, `codex`, `agy`
+and `opencode` commands (tests point them at `tests/fake_claude.py`, `tests/fake_codex.py`, `tests/fake_agy.py` and
+`tests/fake_opencode.py`; `$ORBIT_OPENCODE_DB` at the fake's store instead of OpenCode's own).
 
 ## Test
 
@@ -335,7 +350,7 @@ CI (`.github/workflows/test.yml`) runs them on macOS and Linux for every push. T
 |---|---|
 | `orbit/server/` | The orbit server: `handler.py` (Host / Origin / token guards, the GET and POST routes), `streams.py` (SSE), `forward.py` (another machine's sessions, files, shells), `sharing.py` (listening for other machines), `support.py`, `run.py` (`make_server`, `main`) |
 | `orbit/desk/` | Sessions, request queues, cards (rebuilt from the harness's own transcript): `desk.py` (state, events, lifecycle), `session.py`, `driving.py`, `requests.py`, `groups.py`, `fleet.py`, `agents.py` |
-| `orbit/drivers/` | One adapter per harness, all on one engine: `base.py` (the contract; Orbit session → harness conversation ids), `process.py` (the engine: the process, the request's life, Stop, a process that dies), `claude.py` (one long-lived `claude -p --input-format stream-json` per session), `codex.py` (`codex exec --json [resume\|fork]` per request; history from rollouts), `agy.py` (stream-json; history from its SQLite store), `external.py` (conversations started in a terminal), `protocol.py` (any harness that speaks the Orbit Harness Protocol) |
+| `orbit/drivers/` | One adapter per harness, all on one engine: `base.py` (the contract; Orbit session → harness conversation ids), `process.py` (the engine: the process, the request's life, Stop, a process that dies), `claude.py` (one long-lived `claude -p --input-format stream-json` per session), `codex.py` (`codex exec --json [resume\|fork]` per request; history from rollouts), `agy.py` (stream-json; history from its SQLite store), `opencode.py` (one `opencode serve` per session: HTTP + its SSE event stream; history and Resume read-only from its SQLite store), `external.py` (conversations started in a terminal), `protocol.py` (any harness that speaks the Orbit Harness Protocol) |
 | `orbit/machines/` | `remote.py` (the token, the remotes registry), `federation.py` (other servers' sessions, files and shells as this one's: `NAME~ID`, `/@NAME/…`) |
 | `orbit/harness_server/` | The Harness Server: a daemon (stdlib only) that runs the agent processes and journals their output, so they outlive a restart of the server; `client.py` (the launcher the drivers spawn through) |
 | `orbit/workspace/` | `files.py` (tree, read / save, ± Review), `notes.py` (the vault, wiki links, week note), `skills.py` |

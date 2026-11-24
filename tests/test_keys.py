@@ -1,4 +1,4 @@
-"""Orbit's own API keys (services/keys.py, Settings → General): kept 0600, write-only, this machine only, checked
+"""Orbit's own API keys (services/keys.py, Settings → Voice): kept 0600, write-only, this machine only, checked
 against the provider."""
 
 import json

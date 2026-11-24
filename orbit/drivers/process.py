@@ -13,7 +13,7 @@
 - **close** ends the process (stdin closed, then terminate, then kill) and reports "stopped".
 
 A harness says only what differs: `program()`/`command()`, `request_line`, `steer_line`, `interrupt_line`,
-`handle(msg)` (its events → DriverEvents, through `said`, `tool_started`, `finish`), and `history()`.
+`handle(msg)` (its events → DriverEvents, through `said`, `tool_started`, `finish`), `plain_line`, and `history()`.
 Events are emitted outside the driver's lock (the Desk takes its own lock in `emit`).
 
 The process comes from a **launcher** (builddoc/harness-server.md §3): `DirectLauncher` (a child of this server,
@@ -96,6 +96,11 @@ class ProcessDriver(Driver):
     def keep_err(self, line: str) -> bool:
         """Whether a stderr line belongs in the error shown when something goes wrong."""
         return True
+
+    def plain_line(self, line: str) -> None:
+        """A stdout line that is not JSON: not an event, kept for the error message (a harness whose events come
+        another way reads its own start-up line here: OpenCode's address)."""
+        self.stderr_tail.append(line)
 
     def env(self) -> dict[str, str]:
         """The process's environment."""
@@ -387,7 +392,7 @@ class ProcessDriver(Driver):
             try:
                 msg = json.loads(line)
             except ValueError:
-                self.stderr_tail.append(line)  # not an event: kept for the error message, not shown
+                self.plain_line(line)
                 continue
             if not isinstance(msg, dict):
                 continue

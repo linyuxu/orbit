@@ -8,9 +8,15 @@ const MODE_SHORT = { default: "default", acceptEdits: "accept edits", auto: "aut
 const MODE_LABELS = { default: "default · the agent's own setting (Claude Code: your permissions.defaultMode)",
   acceptEdits: "accept edits · file edits approved, other tools refused", auto: "auto · Claude Code's classifier approves what is safe, refuses the rest",
   plan: "plan · read only, proposes a plan", bypassPermissions: "bypass · auto-approve every tool" };
-/* The modes a harness maps (/api/harnesses: Claude Code has auto, Codex and agy do not): the menus offer only those. */
+/* The modes a harness maps (/api/harnesses: Claude Code has auto, Codex, agy and OpenCode do not): the menus offer only those. */
 const modesFor = id => { const h = (S.harnesses || []).find(x => x.id === id); return Object.keys(MODE_LABELS).filter(m => !h || !h.modes || h.modes.includes(m)); };
-const modeOptions = id => modesFor(id).map(value => ({ value, label: MODE_LABELS[value] }));
+/* Where a harness's modes mean something else, its own words. */
+const MODE_LABELS_BY = { opencode: {
+  default: "default · OpenCode's own config; what it asks waits in its terminal (⌘T)",
+  acceptEdits: "accept edits · file edits approved; anything else OpenCode asks waits in ⌘T",
+  bypassPermissions: "bypass · every ask approved" } };
+const modeLabel = (harness, m) => (MODE_LABELS_BY[harness] || {})[m] || MODE_LABELS[m] || m;
+const modeOptions = id => modesFor(id).map(value => ({ value, label: modeLabel(id, value) }));
 async function newSession(gidArg) {
   try { const d = await api("GET", "/api/harnesses"); if (d.harnesses && d.harnesses.length) S.harnesses = d.harnesses; } catch {}  // what "Default" ran last
   const last = LS.get("lastNew", { cwd: "~/", model: "", mode: "acceptEdits", harness: "claude" });
@@ -109,7 +115,7 @@ function tabMenu(sid = S.current, where) {
   ].filter(Boolean), where || { anchor: document.querySelector(`.tab[data-sid="${sid}"]`) || $("#tabs") });
 }
 /* Copy resume command: a shell line that continues this conversation in a terminal, in the agent's own UI
-   (cd <folder> && claude --resume <id> · codex resume <thread> · agy --conversation <id>). */
+   (cd <folder> && claude --resume <id> · codex resume <thread> · agy --conversation <id> · opencode --session <id>). */
 async function copyResumeCommand(sid) {
   const s = S.sessions.get(sid); if (!s) return;
   // WebKit lets a page write the clipboard only within the click: the write starts now, with the text to come.
@@ -247,7 +253,7 @@ const SHORTCUTS = [
     ["↑↓ PgUp PgDn ⌃V ⌥V", "Scroll the focused conversation"],
     ["Home End ⌥⇧, ⌥⇧.", "Top / end of the conversation (End sticks to the end again)"],
     ["⌘L", "Scroll to the latest answer", "M:KeyL", scrollLatest],
-    ["⌘⇧V", "Voice call with the current session (GPT Live): talk, and it does the work; again: hang up (the OpenAI key: Settings → General)", "MS:KeyV", () => toggleCall()],
+    ["⌘⇧V", "Voice call with the current session (GPT Live): talk, and it does the work; again: hang up (its settings and the OpenAI key: Settings → Voice)", "MS:KeyV", () => toggleCall()],
   ]],
   ["Panels", [
     ["⌘`", "Left panel (three-state toggle)", "M:Backquote", toggleLeft],

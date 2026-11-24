@@ -1,4 +1,4 @@
-"""Orbit's own API keys (Settings → General): the OpenAI API key, for GPT Live voice.
+"""Orbit's own API keys (Settings → Voice): the OpenAI API key, for GPT Live voice.
 
 Kept like a plugin's secrets: <state>/secrets/_orbit.json, 0600 in a 0700 folder (a plugin's name cannot start with
 "_", so it never meets a plugin's file). Set and read on this machine only; the page learns whether one is set and

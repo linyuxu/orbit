@@ -49,7 +49,7 @@ function renderStatus() {
   const root = S.file && !isView(S.file) ? dirname(S.file) : s ? s.cwd : "";
   $("#sb-folder").innerHTML = root ? `${I("folder", 13)}<span>${esc(tilde(root))}</span>` : "";
   $("#modechip").innerHTML = s ? (s.mode === "bypassPermissions" ? `<span class="zap">${I("zap", 13)}</span>` : "") + esc(MODE_SHORT[s.mode] || s.mode) + I("caret", 10) : "";
-  $("#modechip").title = s ? `Permission mode: ${MODE_LABELS[s.mode] || s.mode}. Click or /mode to change it (the agent restarts on the same conversation)` : "";
+  $("#modechip").title = s ? `Permission mode: ${modeLabel(s.harness, s.mode)}. Click or /mode to change it (the agent restarts on the same conversation)` : "";
   $("#modechip").style.display = s ? "" : "none";
   const bits = [];
   if (s) {

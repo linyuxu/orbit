@@ -1,4 +1,4 @@
-"""The Codex and agy drivers behind the same Desk: send → card, stop, errors, paused, restart, clone — against fakes.
+"""The Codex, agy and OpenCode drivers behind the same Desk: send → card, stop, errors, paused, restart, clone — against fakes.
 
 Run: uv run python -m unittest discover -s tests -v
 """
@@ -31,6 +31,8 @@ class HarnessCases:
         os.environ["ORBIT_CODEX_SESSIONS"] = str(t / "codex" / "sessions")
         os.environ["CODEX_HOME"] = str(t / "codex")
         os.environ["ORBIT_AGY_CONVERSATIONS"] = str(t / "agy")
+        os.environ["ORBIT_OPENCODE_BIN"] = f"{py} {shlex.quote(str(HERE / 'fake_opencode.py'))}"
+        os.environ["ORBIT_OPENCODE_DB"] = str(t / "opencode" / "opencode.db")
         (t / "codex").mkdir()
         (t / "codex" / "models_cache.json").write_text(json.dumps({"models": [
             {"slug": "fake-5", "display_name": "Fake 5", "visibility": "list"},
@@ -38,7 +40,8 @@ class HarnessCases:
         (t / "work").mkdir()
         cls.work = str((t / "work").resolve())
         cls.state = t / "state"
-        cls.store = Path(os.environ["ORBIT_CODEX_SESSIONS"] if cls.HARNESS == "codex" else os.environ["ORBIT_AGY_CONVERSATIONS"])
+        cls.store = Path({"codex": os.environ["ORBIT_CODEX_SESSIONS"], "agy": os.environ["ORBIT_AGY_CONVERSATIONS"],
+                          "opencode": str(t / "opencode")}[cls.HARNESS])
         from orbit.workspace import notes
         os.environ.pop("ORBIT_VAULT", None)
         notes.configure(str(t / "data"))
@@ -106,10 +109,12 @@ class HarnessCases:
     def test_listed_with_models(self):
         _, d = self.req("GET", "/api/harnesses")
         h = {x["id"]: x for x in d["harnesses"]}
-        self.assertEqual(set(h), {"claude", "codex", "agy"})
+        self.assertEqual(set(h), {"claude", "codex", "agy", "opencode"})
         self.assertEqual(h["codex"]["label"], "Codex")
         self.assertEqual([m["value"] for m in h["codex"]["models"]], ["fake-5"])
         self.assertEqual([m["value"] for m in h["agy"]["models"]], ["fake-pro", "fake-flash"])
+        self.assertEqual([m["value"] for m in h["opencode"]["models"]], ["fake/one", "fake/two"])
+        self.assertEqual(h["opencode"]["modes"], ["default", "acceptEdits", "plan", "bypassPermissions"])
 
     def test_send_to_card(self):
         s = self.new_session()
@@ -517,6 +522,170 @@ class AgyTest(HarnessCases, unittest.TestCase):
         type(self)._serve()
         _, d = self.req("GET", f"/api/sessions/{f['id']}/cards")
         self.assertEqual([x["text"] for x in d["cards"]], ["remember the word kumquat", "what was the word?", "and again"])
+
+
+class OpenCodeTest(HarnessCases, unittest.TestCase):
+    """OpenCode on `opencode serve`: one HTTP server per session (its own port and password), events over SSE."""
+    HARNESS = "opencode"
+
+    def http(self):
+        f = self.store / "http.log"
+        return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
+
+    def drv(self, sid):
+        return self.desk.get(sid).driver
+
+    def oc(self, sid, method, path, body=None):
+        """A call to the session's OpenCode server, as its own TUI (⌘T) makes them."""
+        d = self.drv(sid)
+        r = urllib.request.Request(d.base + path, method=method, headers=d._headers(),
+                                   data=json.dumps(body).encode() if body is not None else None)
+        with urllib.request.urlopen(r, timeout=10) as resp:
+            return json.loads(resp.read() or b"null")
+
+    def session(self, sid):
+        return next(x for x in self.req("GET", "/api/sessions")[1]["sessions"] if x["id"] == sid)
+
+    def wait_for(self, check, timeout=10, what="it"):
+        end = time.time() + timeout
+        while time.time() < end:
+            v = check()
+            if v:
+                return v
+            time.sleep(0.05)
+        self.fail(f"{what} never happened")
+
+    def test_command_shape(self):
+        """One `opencode serve` per session, password-protected: both requests go to its one OpenCode session."""
+        s = self.new_session()
+        self.send(s["id"], "one")
+        self.wait_card(s["id"], 1, ("completed",))
+        self.send(s["id"], "two")
+        self.assertEqual(self.wait_card(s["id"], 2, ("completed",))["answer"], "answer: two")
+        conv = self.drv(s["id"]).linked()
+        self.assertTrue(conv.startswith("ses_"))
+        got = [x for x in self.inputs()[self.mark:] if x["conv"] == conv]
+        self.assertEqual(len({x["pid"] for x in got}), 1)  # one process, two requests
+        argv = [json.loads(l) for l in (self.store / "argv.log").read_text().splitlines()]
+        self.assertEqual(next(a["argv"] for a in argv if a["pid"] == got[0]["pid"]),
+                         ["serve", "--hostname", "127.0.0.1", "--port", "0"])
+        self.assertEqual([x["path"] for x in self.http() if x["pid"] == got[0]["pid"] and x["path"].endswith("prompt_async")],
+                         [f"/session/{conv}/prompt_async"] * 2)
+        self.assertTrue(self.drv(s["id"]).password)
+        d = self.drv(s["id"])
+        with self.assertRaises(urllib.error.HTTPError) as e:  # (no password, no entry)
+            urllib.request.urlopen(d.base + "/session/status", timeout=5)
+        self.assertEqual(e.exception.code, 401)
+
+    def test_mode_and_model_flags(self):
+        """The model (provider/model) and plan mode's agent go with each request; a model without a provider is refused."""
+        s = self.new_session(mode="plan", model="fake/two")
+        self.send(s["id"], "flags")
+        self.wait_card(s["id"], 1, ("completed",))
+        last = self.inputs()[-1]
+        self.assertEqual((last["model"], last["agent"]), ({"providerID": "fake", "modelID": "two"}, "plan"))
+        self.assertEqual(self.session(s["id"])["model_seen"], "fake/two")
+        b = self.new_session(model="two")
+        self.send(b["id"], "flags")
+        self.assertIn("provider/model", self.wait_card(b["id"], 1, ("error",))["error"])
+
+    def test_stop_aborts_the_session(self):
+        """Stop is POST /session/:id/abort; the server stays and takes the next request."""
+        s = self.new_session()
+        self.send(s["id"], "slow")
+        self.wait_card(s["id"], 1, ("running",))
+        self.req("POST", f"/api/sessions/{s['id']}/stop")
+        c = self.wait_card(s["id"], 1, ("cancelled",))
+        self.assertEqual([(x["name"], x["error"]) for x in c["steps"] if x.get("kind") == "tool"], [("Bash", True)])  # (cut short)
+        conv = self.drv(s["id"]).linked()
+        self.assertIn(f"/session/{conv}/abort", [x["path"] for x in self.http()])
+        self.send(s["id"], "after")
+        self.wait_card(s["id"], 2, ("completed",))
+        self.assertEqual(len({x["pid"] for x in self.inputs()[self.mark:] if x["conv"] == conv}), 1)
+
+    def test_permissions_by_mode(self):
+        """bypassPermissions answers every ask, acceptEdits the edit ones; any other waits for the user in the
+        terminal (⌘T: `opencode attach`), with the session's attention mark saying what it asks."""
+        for mode, text in (("bypassPermissions", "ask"), ("acceptEdits", "edit")):
+            s = self.new_session(f"perm {mode}", mode=mode)
+            self.send(s["id"], text)
+            self.assertEqual(self.wait_card(s["id"], 1, ("completed",))["answer"], "answer: allowed", mode)
+        s = self.new_session("perm ask", mode="acceptEdits")
+        self.send(s["id"], "ask")
+        att = self.wait_for(lambda: self.session(s["id"])["attention"], what="the attention mark")
+        self.assertEqual(att, "OpenCode asks permission: bash rm -rf build")
+        me = self.session(s["id"])
+        self.assertTrue(me["terminal"])
+        d = self.drv(s["id"])
+        self.assertEqual(d.terminal[-4:], ["attach", d.base, "--session", d.conv])
+        self.assertNotIn(d.password, " ".join(d.terminal))  # (ps shows argv: the password is in ⌘T's environment)
+        self.assertEqual(d.terminal_env, {"OPENCODE_SERVER_PASSWORD": d.password})
+        ask = self.oc(s["id"], "GET", "/permission")[0]
+        self.oc(s["id"], "POST", f"/permission/{ask['id']}/reply", {"reply": "reject"})  # (answered in its TUI)
+        self.assertEqual(self.wait_card(s["id"], 1, ("completed",))["answer"], "answer: refused")
+        self.assertEqual(self.session(s["id"])["attention"], "")
+
+    def test_question_waits_in_the_terminal(self):
+        s = self.new_session("question", mode="bypassPermissions")
+        self.send(s["id"], "question")
+        self.assertEqual(self.wait_for(lambda: self.session(s["id"])["attention"], what="the attention mark"),
+                         "OpenCode asks: Which color?")
+        qid = list(self.drv(s["id"])._asks)[0]  # (the question's id, as its TUI shows it)
+        self.oc(s["id"], "POST", f"/question/{qid}/reply", {"answers": [["blue"]]})
+        self.assertEqual(self.wait_card(s["id"], 1, ("completed",))["answer"], "answer: blue")
+        self.assertEqual(self.session(s["id"])["attention"], "")
+
+    def test_subagent_under_its_step(self):
+        """A task is an Agent step; its child session's steps and words go under it, its report is the result.
+        Rebuilt from OpenCode's store, the same."""
+        s = self.new_session("task")
+        self.send(s["id"], "task")
+        c = self.wait_card(s["id"], 1, ("completed",))
+        self.assertEqual(c["answer"], "answer: task")
+        ag = next(st for st in c["steps"] if st.get("agent"))
+        self.assertEqual((ag["agent"], ag["name"], ag["summary"], ag["result"], ag["done"], ag["error"]),
+                         ("checker", "Task", "check things", "checker: all good", True, False))
+        self.assertEqual([(x["kind"], x.get("name") or x.get("text")) for x in ag["sub"]],
+                         [("tool", "Bash"), ("note", "checker: all good")])
+        h = self.drv(s["id"]).history()[-1]
+        hg = next(st for st in h.steps if st.get("agent"))
+        self.assertEqual((hg["result"], [x["summary"] for x in hg["sub"]]), ("checker: all good", ["make test", "checker: all good"]))
+
+    def test_commands_and_compact(self):
+        """A request naming one of OpenCode's commands runs it (POST /session/:id/command); /compact summarizes."""
+        s = self.new_session("cmds")
+        self.send(s["id"], "hello")
+        self.wait_card(s["id"], 1, ("completed",))
+        self.assertIn("review", self.session(s["id"])["commands"])
+        self.send(s["id"], "/review src/app.py")
+        self.assertEqual(self.wait_card(s["id"], 2, ("completed",))["answer"], "ran review: src/app.py")
+        self.send(s["id"], "/compact")
+        self.wait_card(s["id"], 3, ("completed",))
+        self.assertEqual(self.session(s["id"])["compactions"], 1)
+        conv = self.drv(s["id"]).linked()
+        self.assertEqual([x["path"] for x in self.http() if x["path"].startswith(f"/session/{conv}/") and
+                          x["method"] == "POST"][-2:], [f"/session/{conv}/command", f"/session/{conv}/summarize"])
+
+    def test_resume_an_opencode_session(self):
+        """OpenCode's own sessions are offered to resume (read-only from its store); attached, the history shows
+        and the next request continues that session."""
+        from orbit.drivers.opencode import conversations
+        s = self.new_session("elsewhere")
+        self.send(s["id"], "started elsewhere")
+        self.wait_card(s["id"], 1, ("completed",))
+        conv = self.drv(s["id"]).linked()
+        row = next(x for x in conversations(50) if x["id"] == conv)
+        self.assertEqual((row["harness"], row["first"], row["cwd"]), ("opencode", "started elsewhere", self.work))
+        self.desk.external(50)  # (OpenCode's list is asked for in the background)
+        self.wait_for(lambda: "opencode" in self.desk.external_index.rows, what="OpenCode's list")
+        self.assertNotIn(conv, [x["id"] for x in self.desk.external(50)])  # (Orbit's own: linked)
+        self.req("POST", f"/api/sessions/{s['id']}/close")
+        a = self.desk.attach("opencode", conv, self.work, name="resumed")
+        _, d = self.req("GET", f"/api/sessions/{a['id']}/cards")
+        self.assertEqual([(x["text"], x["answer"]) for x in d["cards"]], [("started elsewhere", "answer: started elsewhere")])
+        c = self.send(a["id"], "and on")
+        self.wait_card(a["id"], c["id"], ("completed",))
+        self.assertEqual(self.inputs()[-1]["conv"], conv)
 
 
 if __name__ == "__main__":

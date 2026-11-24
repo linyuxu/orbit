@@ -24,12 +24,10 @@ from pathlib import Path
 from typing import Any
 
 from orbit.services import keys
+from orbit.services.live import config
 from orbit.services.live import ws as wsock
 
-MODELS = ("gpt-live-1.1", "gpt-live-1")
-VOICE = "marin"
 ACK_DELAY_MS = 800  # time to cancel the automatic spoken acknowledgement with an empty thinking append (§5)
-IDLE_TIMEOUT_S = 30  # no transcript either way for this long: standby (§2)
 GRACE_S = 0.4  # after a delegation, late transcript fragments still join its request
 PROGRESS_EVERY_S = 10.0  # at most one progress line per delegation this often
 SPEAKING_HOLD_S = 1.2  # "speaking" this long after the last fragment of the voice's speech
@@ -48,7 +46,7 @@ CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]")
 
 
 class NoKey(ValueError):
-    """No OpenAI API key is set (Settings → General)."""
+    """No OpenAI API key is set (Settings → Voice)."""
 
 
 def now_iso() -> str:
@@ -91,12 +89,18 @@ def ws_base() -> str:
 
 
 # ---------------------------------------------------------------------------------------------- the session's setup
-def instructions(name: str, cwd: str, model: str) -> str:
+def instructions(name: str, cwd: str, model: str, cfg: dict | None = None) -> str:
     """§3, in the structure of OpenAI's live prompting template (its Backchannel / Interruption / Delegation policy
-    headings), with Orbit's noise rule. For gpt-live-1 the guide's handoff words are its token."""
+    headings), with Orbit's noise rule; then Settings → Voice (its language, how much of a result to say, the user's own
+    instructions). For gpt-live-1 the guide's handoff words are its token."""
+    cfg = cfg or config.current(None)
+    lang = f" Always speak {config.LANGUAGES[cfg['live_language']]}, whatever language the user or a result uses." \
+        if cfg["live_language"] != "auto" else " Speak the language the user speaks."
+    detail = "give the takeaway in one to three short sentences" if cfg["live_detail"] == "brief" else \
+        "give the result in a few sentences with its key details (names, numbers, what changed, what is left)"
     text = f"""You are the voice of Orbit, an IDE where the user works with coding agents. You talk with the user; an agent \
 session named "{name}" (folder {cwd}) does the work: it is your backend.
-Speak naturally and briefly. Be clear and direct.
+Speak naturally and briefly. Be clear and direct.{lang}
 
 Backchannel policy: Listen mostly in silence. An occasional quiet "mm-hm" at a natural pause is fine.
 
@@ -121,7 +125,10 @@ When a result arrives, say only what it says. Never add facts, names or details 
 call; if the result does not answer what the user asked, say so plainly and offer to ask the agent again.
 
 Avoid unnecessary narration: no repeated confirmations, filler, re-acknowledgements or play-by-play. When a result \
-arrives, give the takeaway in one to three short sentences; code, tables and logs stay in Orbit."""
+arrives, {detail}; code, tables and logs stay in Orbit."""
+    if cfg["live_prompt"].strip():
+        text += ("\n\nThe user's own instructions for this voice (they win over the style rules above, never over the "
+                 "delegation and grounding rules):\n" + cfg["live_prompt"].strip())
     if model == "gpt-live-1":
         text = text.replace("Delegate to the backend", "Generate <|SpawnThinking|>").replace(
             "Do not delegate", "Do not generate <|SpawnThinking|>")
@@ -133,7 +140,7 @@ def _msg(role: str, text: str) -> dict:
             "content": [{"type": "output_text" if role == "assistant" else "input_text", "text": text}]}
 
 
-def startup_input(desk, s) -> list[dict]:
+def startup_input(desk, s, history: bool = True) -> list[dict]:
     """§4: the session, its last 3 requests and answers (each answer cut to 600 characters), what still runs or
     waits; observed_at on each. About 2 000 tokens at most."""
     from orbit.desk.session import DRIVERS, clip
@@ -151,7 +158,7 @@ def startup_input(desk, s) -> list[dict]:
              f'{"working" if running else pub.get("state", "ready")}'
              + (f' on request #{running[0]["id"]}: {line(running[0])}' if running else "") + f". (observed_at {at})")
     items = [_msg("developer", facts)]
-    done = [c for c in cards if c["state"] in FINAL][-3:]
+    done = [c for c in cards if c["state"] in FINAL][-3:] if history else []
     if done:
         items.append(_msg("developer", f"Its last {len(done)} requests and the agent's answers follow: user is the "
                                        f"request as sent to the agent, assistant the agent's answer, cut. (observed_at {at})"))
@@ -167,17 +174,18 @@ def startup_input(desk, s) -> list[dict]:
     return items
 
 
-def session_body(desk, s, sdp: str, model: str) -> dict:
-    """The POST /v1/live/sessions body (§2): fixed for the call's life."""
+def session_body(desk, s, sdp: str, model: str, cfg: dict | None = None) -> dict:
+    """The POST /v1/live/sessions body (§2): fixed for the call's life (Settings → Voice as the call starts)."""
+    cfg = cfg or config.current(desk.settings)
     return {
         "session": {
             "model": model,
-            "instructions": instructions(s.name, s.cwd, model),
-            "input": startup_input(desk, s),
-            "audio": {"output": {"voice": VOICE}},
+            "instructions": instructions(s.name, s.cwd, model, cfg),
+            "input": startup_input(desk, s, history=cfg["live_context"]),
+            "audio": {"output": {"voice": cfg["live_voice"]}},
             "delegation": {"type": "client", "acknowledgement_delay_ms": ACK_DELAY_MS},
-            "wake_policy": {"type": "speech", "vad_threshold": 0.5},
-            "idle_timeout_s": IDLE_TIMEOUT_S,
+            "wake_policy": {"type": "speech", "vad_threshold": cfg["live_wake"]},
+            **({"idle_timeout_s": cfg["live_idle_s"]} if cfg["live_idle_s"] else {}),  # (left out: active until hang-up)
             "store": False,
             "client": {"data_channel": {"allowed_client_events": [],
                                         "allowed_server_events": [{"type": t} for t in PAGE_EVENTS]}},
@@ -278,6 +286,7 @@ def progress_line(c: dict) -> str:
 class Call:
     def __init__(self, live: "Live", sid: str, model: str):
         self.live, self.desk, self.sid, self.model = live, live.desk, sid, model
+        self.cfg = config.current(live.desk.settings)  # (again as the call is created)
         self.id = "call-" + uuid.uuid4().hex[:10]
         self.t0 = time.time()
         self.lock = threading.RLock()
@@ -351,9 +360,10 @@ class Call:
     def create(self, sdp: str) -> dict:
         key = keys.get(self.desk.state_dir, "openai")
         if not key:
-            raise NoKey("No OpenAI API key: set one in Settings → General")
+            raise NoKey("No OpenAI API key: set one in Settings → Voice")
         s = self.desk.get(self.sid)
-        body = session_body(self.desk, s, sdp, self.model)
+        self.cfg = config.current(self.desk.settings)
+        body = session_body(self.desk, s, sdp, self.model, self.cfg)
         self.log("create", sid=self.sid, model=self.model, input=len(body["session"]["input"]),
                  instructions_tokens=est_tokens(body["session"]["instructions"]), offer_bytes=len(sdp))
         req = urllib.request.Request(f"{http_base()}/v1/live/sessions", data=json.dumps(body).encode(), method="POST",
@@ -542,8 +552,10 @@ class Call:
             self.dels[did] = {"offset": int(ev.get("offset_ms") or 0), "at": time.time(), "last_append": time.time()}
             self.order.append(did)
         self.log("delegation", event_id=ev.get("event_id"), delegation=did, offset_ms=self.dels[did]["offset"])
-        # At once: an empty thinking append cancels the automatic spoken acknowledgement (§5.1).
-        self._send({"type": "session.thinking.append", "event_id": f"quiet_{did}", "delegation_id": did, "content": ""})
+        # At once: an empty thinking append cancels the automatic spoken acknowledgement (§5.1), unless the user
+        # wants it (Settings → Voice: "Say when a task starts").
+        if not self.cfg["live_ack"]:
+            self._send({"type": "session.thinking.append", "event_id": f"quiet_{did}", "delegation_id": did, "content": ""})
         tm = threading.Timer(GRACE_S, self._dispatch, args=(did,))
         tm.daemon = True
         tm.start()
@@ -730,15 +742,14 @@ class Live:
         self.lock = threading.Lock()
 
     def model(self) -> str:
-        m = (self.desk.settings or {}).get("live_model") or MODELS[0]
-        return m if m in MODELS else MODELS[0]
+        return config.current(self.desk.settings)["live_model"]
 
     def start(self, sid: str, sdp: str) -> dict:
         if not isinstance(sdp, str) or not sdp.strip():
             raise ValueError("an SDP offer is needed")
         self.desk.get(sid)  # (KeyError: no such session)
         if not keys.get(self.desk.state_dir, "openai"):
-            raise NoKey("No OpenAI API key: set one in Settings → General")
+            raise NoKey("No OpenAI API key: set one in Settings → Voice")
         with self.lock:
             old, self.call = self.call, Call(self, sid, self.model())
             new = self.call

@@ -337,6 +337,14 @@ is plain JSON (sets → sorted lists, int keys → strings and back, no object r
   protocol change and no opt-in.
 - Safe: the base rule. Checkpoint: `seq`, `req_id`, `conversation`, `terminal`. (`describe()` is cached per class.)
 
+### 10.3a OpenCode (`opencode serve`)
+
+- Its events come over HTTP (SSE), not stdout: the journal carries only its start-up line. The checkpoint carries
+  the server's address and password, its session and what the request has shown (parts said, steps started and
+  ended, subagent sessions, open asks, posted / went busy); the next server subscribes again and catches up from
+  `GET /session/:id/message`, `GET /permission` and `GET /session/status` ([opencode.md §7](opencode.md)).
+- Safe: the base rule, the session open, no request waiting for it.
+
 ### 10.4 Phase 1's leftovers
 
 - **Status bar.** The ⋯ menu (or wherever the status bar says how the server is: find the existing place) gets

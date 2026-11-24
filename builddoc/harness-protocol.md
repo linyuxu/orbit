@@ -1,11 +1,12 @@
 # Orbit Harness Protocol (v1.3)
 
-How a coding agent joins Orbit as a **harness**, next to Claude Code, Codex and agy. Two ways:
+How a coding agent joins Orbit as a **harness**, next to Claude Code, Codex, agy and OpenCode. Two ways:
 
 - **Speak this protocol** (JSON lines on stdin / stdout). Orbit's generic `ProtocolDriver` runs it; the harness is a
   few lines in a plugin's `plugin.toml`, no Python. Any language; a wrapper around another CLI is the usual shape.
 - **Write a driver** (Python) for a CLI that has its own format: subclass `orbit.drivers.base.Driver` (the contract
-  in §6). Claude Code, Codex and agy are drivers, because their CLIs are not ours to change.
+  in §6). Claude Code, Codex, agy and OpenCode are drivers, because their CLIs are not ours to change (OpenCode's,
+  an HTTP server with an event stream rather than JSON lines: [opencode.md](opencode.md)).
 
 The protocol is versioned (`protocol: 1`); fields and message types may be added in a minor version (an agent and
 Orbit ignore what they do not know); anything else changes the number.

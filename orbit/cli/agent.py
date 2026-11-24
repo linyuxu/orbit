@@ -607,7 +607,7 @@ def main(argv: list[str] | None = None) -> None:
     nw.add_argument("--model", default="")
     nw.add_argument("--mode", default="default", choices=["default", "acceptEdits", "plan", "bypassPermissions"])
     nw.add_argument("--group", default="", help="group name or id")
-    nw.add_argument("--harness", default="claude", help="claude, codex or agy")
+    nw.add_argument("--harness", default="claude", help="claude, codex, agy or opencode")
     nw.add_argument("--on", default="", metavar="REMOTE", help="start it on another machine (orbit remote ls); FOLDER is there")
     nw.set_defaults(func=cmd_new)
     fk = sub.add_parser("fork", help="fork a session (default: this one): a new session in its group, continuing its conversation with all its settings")

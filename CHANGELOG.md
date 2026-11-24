@@ -8,6 +8,24 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- **Settings → Voice** (GPT Live): the OpenAI API key (moved from General), the voice (38 built-in voices, each with
+  the language and accent OpenAI lists), the language it speaks (or the user's), results brief or detailed, a spoken
+  "on it" when a task starts (off: the automatic acknowledgement is cancelled, as before), standby after 10–60 s or
+  never, how clear speech must be to wake it (vad_threshold 0.3 / 0.5 / 0.7), the session's recent work at the start,
+  the model, and the user's own instructions (after Orbit's; up to 4 000 characters). Settings `live_*`, checked by
+  the desk (`orbit/services/live/config.py`), read as a call starts; `GET /api/live/options` lists the choices.
+- The voice button: five bars in a circle where Send is while the input is empty; in a call they follow the sound.
+- **OpenCode** is a built-in harness (⌘N → Harness, `orbit-agent new --harness opencode`), beside Claude Code, Codex
+  and agy ([builddoc/opencode.md](builddoc/opencode.md)). One `opencode serve` per session on 127.0.0.1 with a random
+  password; its event stream gives the answer as it is written, thinking, tool steps, subagents (a `task` and its
+  child session's work under one Agent step), context use and compactions. Stop aborts the request; models are
+  OpenCode's `provider/model` (its `opencode models`); plan mode is OpenCode's plan agent. OpenCode's own commands and
+  skills run by name (`/review …`, `/compact`). What OpenCode asks the user waits in its own TUI: ⌘T attaches it to
+  the session, and the tab is marked until the ask is answered; bypass answers every ask, accept edits the edit ones.
+  Its sessions are offered by ⌘O → Other sessions, its history is read from its store (read-only), forks are
+  OpenCode's, and a restart of the server hands its process to the next one, which catches up on what it missed.
+  `$ORBIT_OPENCODE_BIN` overrides the command. The engine's `plain_line` hook reads a stdout line that is not JSON.
+
 - **Plugin API 2.0** (changed): a plugin's views are drawn by Orbit from the data it gives, never in an iframe ([builddoc/plugin-views.md](builddoc/plugin-views.md)).
   - **Removed**: `path` pages on `[[ui.tab]]`, `[[ui.sidebar]]` and `[[ui.panel]]`, the page bridge (`/src/plugin-bridge.js`, its postMessage messages, key forwarding) and the serving of a plugin's `ui/` folder (only a harness's declared `icon` is still served). An entry with `path` is ignored with an error ("iframe pages are gone in plugin API 2.0: use view = …"); the plugin still loads. A plugin whose `requires_api` fits 1.3 (e.g. `">=1,<2"`) still loads under 2.0. What the bridge did is over HTTP: `open-tab`, `badge`, `notify`, `status`, a thread's `unread` and `title`.
   - `view = "thread"` on a `[[ui.tab]]`: a chat thread drawn like a conversation (the same type, Markdown, code blocks, KaTeX, image viewer, ⌘F, the quote menu, Latest ↓), Orbit's editor to reply (pasted images go as files), a context menu per message (Copy, Copy as Markdown, Open at the source, Quote in a session…, Send to a session…, the plugin's `[[ui.message.menu]]`). Pushed (`PUT` / `PATCH /api/plugins/NAME/threads/KIND/KEY`, its token) or asked of its service (`GET /orbit/thread`, older pages with `before=`) or `[cli] thread KIND KEY` in the background; replies to `POST /orbit/send` (or `[cli] send`) with a pending message ("Sending…", "Not sent" with Retry and Edit) kept by the server. Kept in `<state>/plugin-threads/`: 2 000 messages a thread, 300 threads a plugin.

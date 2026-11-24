@@ -3,7 +3,7 @@
     cli/        the command lines: `orbit` (people) and `orbit-agent` (agents)
     server/     the orbit server: HTTP + SSE for the app, a browser, agents and other servers
     desk/       sessions, their request queues and cards, groups, the Fleet, agent mail
-    drivers/    one adapter per harness (Claude Code, Codex, agy, the Orbit Harness Protocol); conversations started elsewhere
+    drivers/    one adapter per harness (Claude Code, Codex, agy, OpenCode, the Orbit Harness Protocol); conversations started elsewhere
     plugins.py  plugins: folders that add agents, services, commands and secrets without changing Orbit
     machines/   other machines: the token, the remotes registry, their sessions shown as this server's
     workspace/  the user's files and notes: tree, read / save, ± Review, the vault, skills

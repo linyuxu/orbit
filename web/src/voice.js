@@ -184,7 +184,7 @@ async function startCall() {
     VOICE.call = null;
     if (call) api("POST", "/api/live/stop", { call }).catch(() => {});
     setVoicePhase("idle");
-    if (e && e.data && e.data.need === "openai-key") toast("A voice call needs an OpenAI API key: Settings → General (click)", () => settingsDialog("general"));
+    if (e && e.data && e.data.need === "openai-key") toast("A voice call needs an OpenAI API key: Settings → Voice (click)", () => settingsDialog("voice"));
     else if (e && (e.name === "NotAllowedError" || e.name === "SecurityError")) toast("Orbit may not use the microphone: allow it in System Settings → Privacy & Security → Microphone");
     else if (e && e.name === "NotFoundError") toast("No microphone found");
     else toast("Voice call failed: " + (e && e.message || e));

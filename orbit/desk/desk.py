@@ -26,6 +26,7 @@ from orbit.desk.requests import Requests
 from orbit.desk.session import ACTIVE, DEFAULT_GROUPS, DRIVERS, FLEET_GROUP, MODES, OPEN_IN, SETTINGS, Session
 from orbit.drivers.process import ProcessDriver
 from orbit.services.calendar import Calendar
+from orbit.services.live import config as live_config
 from orbit.services.shell import Shells
 
 
@@ -323,12 +324,14 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
         for k, v in b.items():
             if k not in SETTINGS:
                 raise ValueError(f"no such setting: {k}")
+            if type(v) is int and type(SETTINGS[k]) is float:
+                b[k] = v = float(v)  # (JSON writes 1.0 as 1)
             if type(v) is not type(SETTINGS[k]):
                 raise ValueError(f"{k} takes a {type(SETTINGS[k]).__name__}")
             if k == "open_in" and v not in OPEN_IN:
                 raise ValueError(f"open_in is one of {', '.join(OPEN_IN)}")
-            if k == "live_model" and v not in ("gpt-live-1.1", "gpt-live-1"):
-                raise ValueError("live_model is gpt-live-1.1 or gpt-live-1")
+            if k.startswith("live_"):
+                live_config.check(k, v)
         with self.lock:
             self.settings.update(b)
             snap = dict(self.settings)
@@ -352,7 +355,7 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
         s = self.get(sid)
         argv = self._make_driver(s, resume=True).terminal_command()
         if not argv:
-            raise ValueError(f"{s.name}: nothing to resume in a terminal yet" if s.harness in ("claude", "codex", "agy")
+            raise ValueError(f"{s.name}: nothing to resume in a terminal yet" if s.harness in ("claude", "codex", "agy", "opencode")
                              else f"{s.name}: its agent has no terminal resume")
         drv = s.driver
         alive = s.catching_up or (isinstance(drv, ProcessDriver) and drv.running())

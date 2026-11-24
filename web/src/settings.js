@@ -133,6 +133,7 @@ function setHeading(pane, text) {
 const SETTINGS_SECTIONS = [
   { id: "general", label: "General", icon: "gear", render: settingsGeneral },
   { id: "appearance", label: "Appearance", icon: "type", render: settingsAppearance },
+  { id: "voice", label: "Voice", icon: "mic", render: settingsVoice },
   { id: "machines", label: "Machines", icon: "server", render: (pane, keys) => machinesPane(pane, keys) },
   { id: "plugins", label: "Plugins", icon: "plug", render: settingsPlugins },
   { id: "about", label: "About", icon: "info", render: settingsAbout },
@@ -146,7 +147,8 @@ const OPEN_IN_OPTIONS = [
 /* One of Orbit's own API keys (GET/POST /api/keys): write-only, like a plugin's secrets. Shows whether it is set and
    its last four characters; Save, Check (asks the provider whether it works) and Remove. This machine only. */
 async function apiKeyRow(pane, name, desc) {
-  const ctl = setRow(pane, "OpenAI API key", desc);
+  const ctl = setRow(pane, "OpenAI API key", desc, { stack: true });  // (its status, field and three buttons: a line of their own)
+  ctl.classList.add("keyrow");
   const draw = async () => {
     let k;
     try { k = (await api("GET", "/api/keys")).keys[name]; }
@@ -186,12 +188,66 @@ function settingsGeneral(pane, keys) {
     value: (S.settings && S.settings.open_in) || "default", options: OPEN_IN_OPTIONS,
     onChange: v => api("POST", "/api/settings", { open_in: v }).then(st => { S.settings = st; renderFileHead(); }).catch(e => toast(e.message)) });
   keys.push(dd);
-  apiKeyRow(pane, "openai", "For GPT Live voice. Kept on this machine (a 0600 file in Orbit's state folder), never shown again, sent only to OpenAI.");
   toggleSwitch(setRow(pane, "Calendar", "Read macOS Calendar (read-only): today's meetings in Misc and the status bar, ⌘⇧C to join."), {
     on: !!(S.settings && S.settings.calendar), label: "Calendar", onChange: on => setCalendar(on) });
   const kb = setRow(pane, "Keyboard shortcuts", "Every key Orbit uses, searchable (⌘/).");
   kb.innerHTML = `<button type="button" class="btn sm" data-act="keys">Show all</button>`;
   kb.querySelector("button").addEventListener("click", () => { closeModal(); deskKey("M:Slash"); });
+}
+/* Voice (GPT Live): the key, then how the voice sounds and behaves. Each is a desk setting (live_*), read when a call
+   starts: a change applies to the next call. */
+const VOICE_LANG_LABEL = { auto: "The language I speak", zh: "中文 (Mandarin)", en: "English", ja: "日本語", ko: "한국어",
+  es: "Español", fr: "Français", de: "Deutsch", pt: "Português" };
+async function settingsVoice(pane, keys) {
+  const note = document.createElement("div"); note.className = "set-desc set-lead";
+  note.textContent = "Talk with a session (⌘⇧V or the round button by Send): what you ask becomes a request, and the answer is spoken back. A change here applies to the next call.";
+  pane.appendChild(note);
+  apiKeyRow(pane, "openai", "Kept on this machine (a 0600 file in Orbit's state folder), never shown again, sent only to OpenAI.");
+  let o;
+  try { o = await api("GET", "/api/live/options"); }
+  catch (e) { const d = document.createElement("div"); d.className = "set-desc"; d.textContent = e.message; pane.appendChild(d); return; }
+  if (!pane.isConnected) return;
+  const st = () => S.settings || {};
+  const put = (k, v) => api("POST", "/api/settings", { [k]: v }).then(x => { S.settings = x; }).catch(e => toast(e.message));
+  const cap = w => w[0].toUpperCase() + w.slice(1);
+  setHeading(pane, "Voice");
+  keys.push(dropdown(setRow(pane, "Voice", "How it sounds. The first ten speak many languages; the others have the language and accent shown."), {
+    value: st().live_voice || "marin", onChange: v => put("live_voice", v),
+    options: o.voices.map(v => ({ value: v.name, label: cap(v.name) + (v.about ? ` · ${v.about}` : "") })) }));
+  keys.push(dropdown(setRow(pane, "Language", "What it speaks. “The language I speak” follows you."), {
+    value: st().live_language || "auto", onChange: v => put("live_language", v),
+    options: Object.keys(o.languages).map(k => ({ value: k, label: VOICE_LANG_LABEL[k] || o.languages[k] })) }));
+  keys.push(segmented(setRow(pane, "Results", "How much of an agent's answer it says. The full answer is always in the card."), {
+    value: st().live_detail || "brief", onChange: v => put("live_detail", v),
+    options: [{ value: "brief", label: "Brief", title: "The takeaway in one to three sentences" },
+              { value: "detailed", label: "Detailed", title: "A few sentences with the key details" }] }));
+  toggleSwitch(setRow(pane, "Say when a task starts", "A short “on it” when it hands your request to the agent. Off: quiet until there is something to say."), {
+    on: !!st().live_ack, label: "Say when a task starts", onChange: on => put("live_ack", on) });
+  setHeading(pane, "Listening and cost");
+  keys.push(dropdown(setRow(pane, "Standby after", "With nothing said either way for this long, it rests: $0.02 a minute instead of $0.05. Speaking wakes it (the first reply after is a little slower)."), {
+    value: String(st().live_idle_s ?? 30), onChange: v => put("live_idle_s", +v),
+    options: [10, 20, 30, 45, 60].map(n => ({ value: String(n), label: `${n} seconds${n === 30 ? " (default)" : ""}` }))
+      .concat([{ value: "0", label: "Never (always active)" }]) }));
+  keys.push(segmented(setRow(pane, "Wake on", "How clear speech must be to wake it from standby. “Clear speech” ignores more background noise."), {
+    value: String(st().live_wake ?? 0.5), onChange: v => put("live_wake", +v),
+    options: [{ value: "0.3", label: "Quiet speech" }, { value: "0.5", label: "Normal" }, { value: "0.7", label: "Clear speech" }] }));
+  setHeading(pane, "Context and model");
+  toggleSwitch(setRow(pane, "Start with the session's recent work", "Its last three requests and answers, so you can ask about them right away."), {
+    on: st().live_context !== false, label: "Start with the session's recent work", onChange: on => put("live_context", on) });
+  keys.push(segmented(setRow(pane, "Model", ""), {
+    value: st().live_model || o.models[0], onChange: v => put("live_model", v),
+    options: o.models.map(m => ({ value: m, label: m })) }));
+  const ctl = setRow(pane, "Your instructions", "Added after Orbit's own: a manner, words to use or avoid, what to call you. They cannot turn off handing work to the agent.", { stack: true });
+  ctl.innerHTML = `<textarea class="fin vprompt" rows="4" spellcheck="false" maxlength="${o.prompt_max}" placeholder="e.g. Keep it casual. Spell out file names. Call me by my first name."></textarea><div class="vcount set-desc"></div>`;
+  const ta = ctl.querySelector("textarea"), cnt = ctl.querySelector(".vcount");
+  ta.value = st().live_prompt || "";
+  let saved = ta.value, tm = 0;
+  const count = () => { cnt.textContent = `${ta.value.length} / ${o.prompt_max}${ta.value !== saved ? " · saving…" : ""}`; };
+  const save = () => { clearTimeout(tm); if (ta.value === saved) return; const v = ta.value; put("live_prompt", v).then(() => { saved = v; count(); }); };
+  ta.addEventListener("input", () => { count(); clearTimeout(tm); tm = setTimeout(save, 800); });
+  ta.addEventListener("blur", save);
+  ta.addEventListener("keydown", e => { if (e.key !== "Escape" && e.key !== "Tab") e.stopPropagation(); });  // (typing here is not a Settings shortcut)
+  count();
 }
 /* A font row: the font in use (shown in itself); a click opens the list under the row: presets, then every installed
    family, each shown in itself; typing filters, ↑↓ (^N ^P) pick, ⏎ or Esc closes. One list open at a time. */

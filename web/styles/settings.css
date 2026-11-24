@@ -20,11 +20,12 @@
 .set-row { display:flex; align-items:center; gap:18px; padding:13px 0; border-bottom:1px solid var(--line); min-height:30px; }
 .set-row:last-child { border-bottom:0; }
 .set-row.stack { display:block; }
-.set-row.stack .set-ctl { margin-top:10px; display:block; }
-.set-text { flex:1; min-width:0; }
+.set-row.stack .set-ctl { margin-top:10px; display:block; max-width:none; }
+.set-row.stack .set-ctl.keyrow { display:flex; justify-content:flex-start; flex-wrap:nowrap; }
+.set-text { flex:1; min-width:200px; }  /* never squeezed to a letter a line by a wide control */
 .set-label { font-size:calc(13px * var(--ui-k)); color:var(--ink); display:flex; align-items:center; gap:7px; }
 .set-desc { font-size:calc(12px * var(--ui-k)); color:var(--ink-3); margin-top:3px; line-height:1.45; overflow-wrap:anywhere; }
-.set-ctl { flex:none; display:flex; align-items:center; gap:8px; }
+.set-ctl { flex:none; display:flex; align-items:center; gap:8px; max-width:60%; flex-wrap:wrap; justify-content:flex-end; }
 .set-ctl .dd { min-width:150px; }
 .set-block { padding:4px 0 8px; border-bottom:1px solid var(--line); }
 .set-block:last-child { border-bottom:0; }
@@ -85,4 +86,9 @@
 .set-ctl .keyst { font-family:var(--mono); font-size:calc(12px * var(--ui-k)); color:var(--ink-3); margin-right:8px; white-space:nowrap; }
 .set-ctl .keyst.on { color:var(--ink-2); }
 .set-ctl .keyin { width:200px; margin-right:6px; }
+.set-ctl.keyrow .keyin { flex:1; min-width:120px; width:auto; }
 .set-ctl .btn + .btn { margin-left:4px; }
+/* Voice */
+.set-lead { margin:0 0 6px; }
+.set-pane .vprompt { width:100%; box-sizing:border-box; resize:vertical; min-height:72px; line-height:1.5; font-family:var(--font); }
+.vcount { text-align:right; margin-top:4px; font-variant-numeric:tabular-nums; }

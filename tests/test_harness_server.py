@@ -857,6 +857,7 @@ class OrbitServeTest(Base):
 PY = shlex.quote(sys.executable)
 FAKE_CODEX = f"{PY} {shlex.quote(str(HERE / 'fake_codex.py'))}"
 FAKE_AGY = f"{PY} {shlex.quote(str(HERE / 'fake_agy.py'))}"
+FAKE_OPENCODE = f"{PY} {shlex.quote(str(HERE / 'fake_opencode.py'))}"
 PROTO_TOML = f"""[plugin]
 name = "handco"
 version = "0.1.0"
@@ -875,10 +876,12 @@ def logged(path: Path) -> list[dict]:
 
 
 class PhaseTwoDeskTest(HostedDeskTest):
-    """§10: Codex (app-server), agy and a protocol agent handed off; two Desks on one state dir play a restart."""
+    """§10: Codex (app-server), agy, OpenCode and a protocol agent handed off; two Desks on one state dir play a
+    restart."""
 
     KEYS = ("ORBIT_CODEX_BIN", "ORBIT_CODEX_SESSIONS", "CODEX_HOME", "ORBIT_CODEX_EXEC", "ORBIT_AGY_BIN",
-            "ORBIT_AGY_CONVERSATIONS", "FAKE_PROTOCOL_DIR", "FAKE_SUB_PAUSE", "FAKE_THREAD_DELAY")
+            "ORBIT_AGY_CONVERSATIONS", "ORBIT_OPENCODE_BIN", "ORBIT_OPENCODE_DB", "FAKE_PROTOCOL_DIR", "FAKE_SUB_PAUSE",
+            "FAKE_THREAD_DELAY")
 
     def setUp(self):
         super().setUp()
@@ -886,8 +889,10 @@ class PhaseTwoDeskTest(HostedDeskTest):
         for k in self.KEYS:
             os.environ.pop(k, None)
         self.codex, self.agy, self.proto = self.tmp / "codex" / "sessions", self.tmp / "agy", self.tmp / "proto"
+        self.opencode = self.tmp / "opencode"
         os.environ.update(ORBIT_CODEX_BIN=FAKE_CODEX, ORBIT_CODEX_SESSIONS=str(self.codex), CODEX_HOME=str(self.tmp / "codex"),
-                          ORBIT_AGY_BIN=FAKE_AGY, ORBIT_AGY_CONVERSATIONS=str(self.agy), FAKE_PROTOCOL_DIR=str(self.proto))
+                          ORBIT_AGY_BIN=FAKE_AGY, ORBIT_AGY_CONVERSATIONS=str(self.agy), FAKE_PROTOCOL_DIR=str(self.proto),
+                          ORBIT_OPENCODE_BIN=FAKE_OPENCODE, ORBIT_OPENCODE_DB=str(self.opencode / "opencode.db"))
         from orbit.drivers.codex import CodexDriver
         CodexDriver._no_app.discard(FAKE_CODEX)
         self.plugged = False
@@ -896,7 +901,8 @@ class PhaseTwoDeskTest(HostedDeskTest):
         try:
             super().tearDown()
         finally:
-            for f in (self.codex / "stdin.log", self.agy / "stdin.log", self.proto / "stdin.log", self.proto / "token.log"):
+            for f in (self.codex / "stdin.log", self.agy / "stdin.log", self.proto / "stdin.log", self.proto / "token.log",
+                      self.opencode / "argv.log"):
                 self.pids += [x["pid"] for x in logged(f) if alive(x["pid"])]
             if self.plugged:
                 from orbit import plugins
@@ -1050,6 +1056,39 @@ class PhaseTwoDeskTest(HostedDeskTest):
         self.assertFalse(any("restarted" in x["text"] for x in got))
         self.assertEqual(len([x for x in logged(self.agy / "stdin.log") if x["pid"] == pid]), 2)  # (the requests only)
 
+    # ------------------------------------------------------------------ OpenCode
+    def test_opencode_restart_mid_request(self):
+        """The same `opencode serve` reads on: the next server subscribes again (the address and password carried),
+        the card completes there, and the next request goes to the same process and session."""
+        a = self.desk()
+        sid, pid = self.running(a, "opencode", "slow 3")
+        h = self.handed(a, sid)
+        self.assertEqual(h["harness"], "opencode")
+        self.assertTrue(h["driver"]["base"].startswith("http://127.0.0.1:") and h["driver"]["password"])
+        b = self.desk()
+        self.assertEqual(b.sessions[sid].driver.proc.pid, pid)
+        b.send(sid, "next")
+        c1 = self.card(b, sid, 1, ("completed",))
+        self.assertEqual(c1["answer"], "slept")
+        self.assertEqual([st["summary"] for st in c1["steps"] if st["kind"] == "tool"], ["sleep 3"])  # (once)
+        self.assertEqual(self.card(b, sid, 2, ("completed",))["answer"], "answer: next")
+        got = logged(self.opencode / "inputs.log")
+        self.assertEqual([x["pid"] for x in got], [pid, pid])
+        self.assertEqual(len({x["conv"] for x in got}), 1)
+        self.assertFalse(any("restarted" in x["text"] for x in got))
+
+    def test_opencode_request_ended_in_the_gap(self):
+        """A request that ended while no server listened ends when the next one catches up (its parts, then
+        `/session/status`)."""
+        a = self.desk()
+        sid, pid = self.running(a, "opencode", "slow 1")
+        self.handed(a, sid)
+        time.sleep(2.5)  # (it ends meanwhile)
+        b = self.desk()
+        c = self.card(b, sid, 1, ("completed",))
+        self.assertEqual(c["answer"], "slept")
+        self.assertEqual(b.sessions[sid].driver.proc.pid, pid)
+
     def test_agy_an_answer_streamed_across_a_restart(self):
         """The deltas before the restart and after it make one answer (`parts` carried over)."""
         a = self.desk()
@@ -1199,6 +1238,14 @@ class CheckpointTest(unittest.TestCase):
         d.conversation, d.parts, d.started_steps = "conv", {3: ["a", "b"]}, {2, 1}
         fresh = self.round_trip(d)
         self.assertEqual((fresh.parts, fresh.started_steps), ({3: ["a", "b"]}, {1, 2}))
+
+    def test_opencode(self):
+        from orbit.drivers.opencode import OpenCodeDriver
+        d = self.make(OpenCodeDriver)
+        d.base, d.conv, d.commands, d._sent, d._said, d._subs = "http://127.0.0.1:4096", "ses_1", ["review"], True, {"p2", "p1"}, {"ses_2": "p3"}
+        d._task_steps, d._asks, d.turn_text, d.busy = {"p3"}, {"per_1": "OpenCode asks permission: bash"}, ["so far"], True
+        fresh = self.round_trip(d)
+        self.assertEqual((fresh._said, fresh._subs, fresh.password, fresh._open), ({"p1", "p2"}, {"ses_2": "p3"}, d.password, True))
 
     def test_protocol(self):
         from orbit.drivers.protocol import protocol_driver

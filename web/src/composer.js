@@ -191,11 +191,11 @@ const MODE_ALIAS = { bypass: "bypassPermissions", bypasspermissions: "bypassPerm
 async function setMode(s, name) {
   const mode = MODE_ALIAS[String(name || "").toLowerCase()];
   if (!mode || !modesFor(s.harness).includes(mode)) { toast(`Modes for ${harnessLabel(s.harness)}: ${modesFor(s.harness).map(m => MODE_SHORT[m]).join(" · ")}`); return false; }
-  try { const r = await api("POST", `/api/sessions/${s.id}/mode`, { mode }); S.sessions.set(s.id, { ...s, ...r }); renderStatus(); toast(`Mode: ${MODE_LABELS[mode]}`); return true; }
+  try { const r = await api("POST", `/api/sessions/${s.id}/mode`, { mode }); S.sessions.set(s.id, { ...s, ...r }); renderStatus(); toast(`Mode: ${modeLabel(s.harness, mode)}`); return true; }
   catch (e) { toast(e.message); return false; }
 }
 function modeMenu(s) {
-  menu(modesFor(s.harness).map(m => ({ label: MODE_LABELS[m], key: s.mode === m ? "current" : "", run: () => setMode(s, m) })), { anchor: $("#modechip") });
+  menu(modesFor(s.harness).map(m => ({ label: modeLabel(s.harness, m), key: s.mode === m ? "current" : "", run: () => setMode(s, m) })), { anchor: $("#modechip") });
 }
 /* Steering: a message for the request that is running joins that turn (Claude Code; others queue it). */
 const canSteer = sid => { const s = S.sessions.get(sid); return !!(s && s.steers && s.state === "working"); };
@@ -247,7 +247,7 @@ function statusDialog(s) {
     ["Harness", harnessLabel(s.harness)],
     ["Model", `${s.model ? s.model : "default"}${s.model_seen ? ` → ${modelName(s.model_seen)} (${s.model_seen})` : ""}`],
     ["Effort", s.effort || "default"],
-    ["Mode", MODE_LABELS[s.mode] || s.mode],
+    ["Mode", modeLabel(s.harness, s.mode)],
     ["Folder", tilde(s.cwd)],
     ["Context", s.context ? `${kfmt(s.context)} tokens (the last model call)` : "—"],
     ["Compactions", String(s.compactions || 0)],

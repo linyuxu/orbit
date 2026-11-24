@@ -3,8 +3,9 @@
 Claude Code: `claude -p /usage` prints the plan's windows ("Current week (all models): 94% used · resets Nov 22 at
 2am (…)"); it is a local command (no model call, no cost). Codex: every turn's token_count event carries
 `rate_limits` (primary / secondary windows: used_percent, window_minutes, resets_at, plan_type) in its rollout files;
-the newest one is read. agy reports nothing. A plugin's agent answers `--usage` (Harness Protocol §3): its limits,
-and (plugin API 1.3) maybe a `quota` line ("8 USD left") the status bar shows after its meter.
+the newest one is read. agy reports nothing, nor does OpenCode (no plan of its own: each provider bills). A plugin's
+agent answers `--usage` (Harness Protocol §3): its limits, and (plugin API 1.3) maybe a `quota` line ("8 USD left")
+the status bar shows after its meter.
 
 Results are cached; a background thread refreshes them every REFRESH seconds once the page has asked.
 """
