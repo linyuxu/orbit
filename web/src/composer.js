@@ -34,7 +34,7 @@ if (inputEd) {
   };
 }
 function autosize() {}  // the editor grows by itself (up to 260px, then it scrolls)
-function updateSend() { $("#send").disabled = !input.value.trim() || !cur(); }
+function updateSend() { $("#send").disabled = !input.value.trim() || !cur(); if (typeof renderCallBtn === "function") renderCallBtn(); }
 function saveDraft() {
   if (!S.current || S.file) return;
   if (input.value) S.drafts[S.current] = input.value; else delete S.drafts[S.current];

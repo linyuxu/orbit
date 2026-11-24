@@ -243,17 +243,31 @@ kbd { font-family:var(--font); font-size:calc(11px * var(--ui-k)); padding:1px 5
 .pconv:focus-visible, .pdocbox:focus-visible, .plistbox:focus-visible { outline:none; }
 /* ===================================================================== a voice call (voice.js) */
 /* The microphone beside Send, like the attach button; in a call it is lit, a red dot while the microphone is open. */
-#callbtn { position:relative; }
+/* The voice button: five bars. Small beside Send while there is text; a circle in Send's place when the input is empty
+   and during a call (the bars follow the sound there, voice.js; a hover shows the stop). */
+#callbtn { position:relative; flex:none; }
 #callbtn:disabled { opacity:.4; }
 #callbtn:disabled:hover { background:none; color:var(--ink-3); }
-#callbtn[class*="call-"] { color:var(--accent); background:var(--accent-soft); }
-#callbtn[class*="call-"]:hover { color:var(--accent); background:color-mix(in srgb, var(--accent) 22%, transparent); }
-#callbtn.call-connecting svg { animation:pulse 1.2s infinite; }
-#callbtn.call-standby { color:var(--ink-2); background:var(--btn-hover); }
-#callbtn.call-ended { color:var(--ink-3); background:none; }
-#callbtn.mic-open::after { content:""; position:absolute; top:3px; right:3px; width:6px; height:6px; border-radius:50%;
-  background:var(--err); box-shadow:0 0 0 1.5px var(--surface); }
-#callbtn.call-speaking.mic-open::after { animation:pulse 1.2s infinite; }
+#callbtn .hang { display:none; }
+#callbtn .wb { transform-box:fill-box; transform-origin:center; transition:transform .06s linear; }
+#callbtn.big { width:30px; height:30px; border-radius:50%; background:var(--accent); color:var(--on-accent); }
+#callbtn.big:hover { background:var(--accent); color:var(--on-accent); filter:brightness(1.25); }
+#callbtn.big:disabled:hover { filter:none; }
+/* The right-hand group (state, voice, Send) keeps together at the right, whatever is shown. */
+.crow > #callst:not([hidden]), .crow > #callst[hidden] + #callbtn { margin-left:auto; }
+.crow > #callbtn + #send { margin-left:0; }
+#callbtn.call-connecting .wb { animation:wavepulse 1s ease-in-out infinite; animation-delay:calc(var(--i) * .12s); }
+#callbtn.call-standby { background:var(--btn-hover); color:var(--ink-2); }
+#callbtn.call-standby:hover { background:var(--btn-hover); color:var(--ink); filter:none; }
+#callbtn.call-standby .wb { transform:scaleY(.18) !important; }  /* resting: dots, until speech wakes it */
+#callbtn.call-ended { background:var(--btn-hover); color:var(--ink-3); }
+#callbtn.call-ended .wb { transform:scaleY(.18) !important; }
+#callbtn[class*="call-"]:not(.call-ended):hover .wave { display:none; }
+#callbtn[class*="call-"]:not(.call-ended):hover .hang { display:block; }
+#callbtn.mic-open::after { content:""; position:absolute; top:-1px; right:-1px; width:7px; height:7px; border-radius:50%;
+  background:var(--err); box-shadow:0 0 0 2px var(--surface); }
+@keyframes wavepulse { 0%,100% { transform:scaleY(.35); opacity:.6 } 50% { transform:scaleY(1); opacity:1 } }
+#send[hidden] { display:none; }
 .callst { font-size:calc(11px * var(--ui-k)); color:var(--ink-3); white-space:nowrap; font-variant-numeric:tabular-nums; margin-right:-4px; }
 .callst.call-listening, .callst.call-speaking { color:var(--accent); }
 body.embed #callbtn, body.embed .callst { display:none; }
