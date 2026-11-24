@@ -1,7 +1,11 @@
 "use strict";
 /* ===================================================================== side tabs (embedded pages, per main tab) */
-/* Each main tab keeps its own list of side tabs (S.sides[tab key] = {list, i}); the pane shows the current tab's chosen
-   one. Frames stay alive while recently shown (a small pool), so switching back keeps an editor's undo and scroll. */
+/* Each main tab has its own list of side tabs (S.sides[tab key] = {list, i, hidden}); the pane shows the current tab's
+   chosen one. A session's side tabs are the server's, like its conversation (orbit/desk/sides.py): every screen shows
+   the same; a change here goes there first-hand (shown at once, then as the server has it), and each change anywhere
+   comes back as a side event. Only `hidden` (the panel put away on this screen) and the width are this screen's. A
+   file tab's side tabs are this page's own. Frames stay alive while recently shown (a small pool), so switching back
+   keeps an editor's undo and scroll. */
 const FRAMES = new Map();  // side tab id → iframe
 const FRAME_POOL = 10;
 const sideKey = () => tabKey() || "_";
@@ -24,8 +28,53 @@ const sideFocused = () => !EMBED && !!S.side && !!document.activeElement && docu
 const sameSide = (a, b) => a.kind === b.kind && (a.kind === "web" ? a.url === b.url
   : (a.sid || "") === (b.sid || "") && (a.path || "") === (b.path || "") && (a.root || "") === (b.root || ""));
 function sideSrc(spec) {
-  const { id, ...rest } = spec;  // the id names the frame; the embedded page does not need it
+  const { id, t, ...rest } = spec;  // the id names the frame; the embedded page does not need it (nor when it came)
   return spec.kind === "web" ? spec.url : "/?embedtab=" + encodeURIComponent(JSON.stringify(rest));
+}
+/* ---------- a session's side tabs: the server's (orbit/desk/sides.py) */
+const sideSid = key => !EMBED && key && key.startsWith("s:") ? key.slice(2) : "";
+const SIDE_SRV = { loaded: new Set(), loading: new Set(), rev: {} };
+/* The server's state of a session's side tabs, shown: frames of tabs that went are dropped; a tab that came shows the
+   panel again (an agent put it there: it should be seen); this screen's `hidden` stays otherwise. */
+function applySideState(sid, st) {
+  if (!st || !Array.isArray(st.items)) return;
+  if (SIDE_SRV.rev[sid] != null && (st.rev || 0) < SIDE_SRV.rev[sid]) return;
+  SIDE_SRV.rev[sid] = st.rev || 0; SIDE_SRV.loaded.add(sid);
+  const key = "s:" + sid, old = S.sides[key], had = new Map(((old && old.list) || []).map(x => [x.id, x]));
+  const ids = new Set(st.items.map(x => x.id));
+  for (const id of had.keys()) if (!ids.has(id)) dropFrame(id);
+  if (!st.items.length) delete S.sides[key];
+  else {
+    const came = st.items.some(x => !had.has(x.id));
+    S.sides[key] = { list: st.items.map(x => ({ ...x })), i: Math.max(0, Math.min(st.i | 0, st.items.length - 1)),
+                     hidden: old && !came ? !!old.hidden : false };
+  }
+  if (key === sideKey()) { renderSide(); renderReviewBadge(); }
+  saveUi();
+}
+async function loadSideState(sid) {
+  if (SIDE_SRV.loading.has(sid)) return;
+  SIDE_SRV.loading.add(sid);
+  try {
+    const st = await api("GET", `/api/sessions/${encodeURIComponent(sid)}/side`);
+    // Side tabs this page had for it before the server kept them: they go there once
+    const mine = S.sides["s:" + sid], moved = LS.get("sidesMoved", []);
+    if (!st.items.length && mine && mine.list && mine.list.length && !moved.includes(sid)) {
+      LS.set("sidesMoved", [...moved, sid].slice(-500));
+      let last = st;
+      for (const sp of mine.list) last = await api("POST", `/api/sessions/${encodeURIComponent(sid)}/side`, { op: "open", spec: sp });
+      const keep = mine.list[mine.i] && last.items.find(x => x.id === mine.list[mine.i].id);
+      if (keep) last = await api("POST", `/api/sessions/${encodeURIComponent(sid)}/side`, { op: "select", id: keep.id });
+      applySideState(sid, last);
+    } else applySideState(sid, st);
+  } catch {}
+  finally { SIDE_SRV.loading.delete(sid); }
+}
+/* A change to a session's side tabs: to the server (shown here already); what it answers is what is shown. */
+function sideOp(key, body) {
+  const sid = sideSid(key); if (!sid) return;
+  api("POST", `/api/sessions/${encodeURIComponent(sid)}/side`, body).then(st => applySideState(sid, st))
+    .catch(e => { toast("Side tab: " + e.message); SIDE_SRV.loaded.delete(sid); loadSideState(sid); });
 }
 function sideTitle(spec) {
   if (!spec) return "";
@@ -50,7 +99,13 @@ function ensureFrame(spec) {
     fr.setAttribute("src", src);
     $("#sideframes").appendChild(fr);
     FRAMES.set(spec.id, fr);
-  } else if (fr.getAttribute("src") !== src) fr.setAttribute("src", src);
+  } else if (fr.getAttribute("src") !== src) {
+    const base = s => s.replace(/%2C%22line%22%3A\d+|%22line%22%3A\d+%2C?/g, "");  // (the same file at another line)
+    if (spec.kind === "file" && base(fr.getAttribute("src")) === base(src)) {
+      try { fr.contentWindow.postMessage({ orbit: "reveal", path: spec.path, line: spec.line }, location.origin); } catch {}
+      fr.setAttribute("data-line", String(spec.line || ""));
+    } else fr.setAttribute("src", src);
+  }
   fr.dataset.seen = Date.now();
   if (FRAMES.size > FRAME_POOL) {  // the least recently shown frames go; they load again when shown
     const old = [...FRAMES.entries()].filter(([id]) => id !== spec.id).sort((a, b) => a[1].dataset.seen - b[1].dataset.seen);
@@ -63,6 +118,8 @@ const eachFrame = fn => { for (const fr of FRAMES.values()) { try { fn(fr.conten
 function applySideWidth() { document.documentElement.style.setProperty("--sidew", Math.round(S.sideW * 100) + "%"); }
 function renderSide() {
   if (EMBED) return;
+  const ssid = sideSid(sideKey());
+  if (ssid && !SIDE_SRV.loaded.has(ssid)) loadSideState(ssid);  // (a session's: from the server, once, then by events)
   const e = sideEntry(), sp = S.side;
   $("#side").hidden = !sp; $("#ssplit").hidden = !sp;
   if (sp) ensureFrame(sp);
@@ -110,6 +167,7 @@ function openSide(spec, { focus = true, key = sideKey() } = {}) {
     e.list.splice(e.i, 0, { ...spec, id: spec.id || sideId() });
   }
   renderSide(); renderReviewBadge(); saveUi();
+  sideOp(key, { op: "open", spec: { ...e.list[e.i], ...(spec.line ? { line: spec.line } : {}) } });
   if (focus) focusSide();
 }
 function showSideAt(k, { focus } = {}) {
@@ -117,6 +175,7 @@ function showSideAt(k, { focus } = {}) {
   const wasFocused = sideFocused();
   e.i = k; e.hidden = false;
   renderSide(); renderReviewBadge(); saveUi();
+  if (e.list[k]) sideOp(sideKey(), { op: "select", id: e.list[k].id });
   if (focus ?? wasFocused) focusSide();
 }
 /* Close one side tab of the current main tab (default: the shown one); its neighbour shows. */
@@ -124,20 +183,29 @@ function closeSide(k) {
   const e = sideEntry(); if (!e) return;
   if (typeof k !== "number") k = e.i;
   const wasFocused = sideFocused();
-  const [gone] = e.list.splice(k, 1);
-  if (gone) dropFrame(gone.id);
-  if (!e.list.length) delete S.sides[sideKey()];
+  const key = sideKey(), [gone] = e.list.splice(k, 1);
+  if (gone) { dropFrame(gone.id); sideOp(key, { op: "close", id: gone.id }); }
+  if (!e.list.length) delete S.sides[key];
   else if (k < e.i) e.i--;
   else e.i = Math.min(e.i, e.list.length - 1);
   renderSide(); renderReviewBadge(); saveUi();
   if (wasFocused) { if (S.side) focusSide(); else focusMain(); }
   else if (document.activeElement === document.body) focusMain();
 }
-/* Close every side tab of a main tab (⌃X 1 for the current one; closing a main tab). */
+/* Close every side tab of a main tab (⌃X 1 for the current one; closing a main tab). A session's are the server's (on
+   every screen): here its panel is only put away. */
 function closeAllSides(key = sideKey()) {
   const e = S.sides[key];
   delete S.tabFocus[key];
   if (!e) return;
+  if (sideSid(key)) {
+    const here = key === sideKey(), wasFocused = here && sideFocused();
+    e.hidden = true;
+    if (here) { renderSide(); renderReviewBadge(); }
+    saveUi();
+    if (wasFocused) focusMain();
+    return;
+  }
   const here = key === sideKey(), wasFocused = here && sideFocused();
   for (const sp of e.list || []) dropFrame(sp.id);
   delete S.sides[key];

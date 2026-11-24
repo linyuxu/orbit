@@ -1,24 +1,33 @@
 "use strict";
 /* ===================================================================== the Side view (a session's side panel)
-   The title bar's toggle switches the conversation for what the session's agent put beside it: the pages it showed
-   (orbit-agent show, sandboxed as on the Mac) and the files it opened beside (orbit-agent open --side), newest first,
-   kept by the server (GET /api/sessions/<id>/side; the Mac's own side tabs live in its browser). Chips pick one;
-   × takes it off the list. Another machine's session: not here yet. */
-const SIDE = { mode: new Map(), items: new Map(), sel: new Map(), shown: "" };
+   The title bar's toggle switches the conversation for the session's side panel: the same tabs every screen shows,
+   kept by the server like the conversation (orbit/desk/sides.py; GET/POST /api/sessions/<id>/side, "side" events).
+   Chips pick the one shown (on every screen), × closes one. Drawn here: an agent's page (sandboxed, live), a file
+   (Markdown drawn, code, an image); ± Review, another session, a plugin's view and the like say what they are, the
+   session one opens it. Another machine's session's panel comes through this server (its pages too). Which of the
+   two this screen shows, conversation or Side, is this screen's own. */
+const SIDE = { mode: new Map(), st: new Map(), shown: "" };
 const sideMode = (sid = S.current) => SIDE.mode.get(sid) || "chat";
-const remoteSid = sid => String(sid || "").includes("~");
+const sideUrl = sid => `/api/sessions/${encodeURIComponent(sid)}/side`;
 
-async function loadSide(sid = S.current) {
-  if (!sid) return;
-  if (remoteSid(sid)) SIDE.items.set(sid, null);
-  else {
-    try { SIDE.items.set(sid, (await api("GET", `/api/sessions/${encodeURIComponent(sid)}/side`)).items || []); }
-    catch (e) { if (e instanceof NotPaired) return; if (!SIDE.items.has(sid)) SIDE.items.set(sid, []); }
-  }
+function applySide(sid, st) {
+  if (!st || !Array.isArray(st.items)) return;
+  const had = SIDE.st.get(sid);
+  if (had && (st.rev || 0) < (had.rev || 0)) return;
+  SIDE.st.set(sid, st);
   if (sid === S.current) { renderSideToggle(); if (sideMode() === "side") renderSide(); }
 }
+async function loadSide(sid = S.current) {
+  if (!sid) return;
+  try { applySide(sid, await api("GET", sideUrl(sid))); }
+  catch (e) { if (!(e instanceof NotPaired) && !SIDE.st.has(sid)) applySide(sid, { items: [], i: 0, rev: 0 }); }
+}
+function sideOp(body) {
+  const sid = S.current; if (!sid) return;
+  api("POST", sideUrl(sid), body).then(st => applySide(sid, st)).catch(err => { if (!(err instanceof NotPaired)) toast(err.message); });
+}
 function renderSideToggle() {
-  const items = SIDE.items.get(S.current), n = items ? items.length : 0, side = sideMode() === "side";
+  const st = SIDE.st.get(S.current), n = st ? st.items.length : 0, side = sideMode() === "side";
   for (const b of $$("#cseg button")) { const on = (b.dataset.v === "side") === side; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
   $("#cseg .n").textContent = n ? String(n) : "";
   $("#vconv").classList.toggle("sidemode", side);
@@ -30,7 +39,7 @@ function setSideMode(v) {
   if (v === "side") { renderSide(); loadSide(); }
   else if (typeof stick === "function") stick();
 }
-/* Opened a session: the view it was left in, its list fetched again. */
+/* Opened a session: the view it was left in, its panel fetched again. */
 function sideOpened(sid) {
   SIDE.shown = "";
   renderSideToggle();
@@ -38,25 +47,37 @@ function sideOpened(sid) {
   loadSide(sid);
 }
 
+const SIDE_WHAT = { review: "± Review", session: "Session", schedules: "Schedules", calendar: "Calendar", pview: "View" };
+function sideLabel(x) {
+  if (x.kind === "web") return x.title || "Page";
+  if (x.kind === "file") return basename(x.path || "") || "File";
+  if (x.kind === "session") { const s = S.sessions.get(x.sid); return s ? sessionTitle(s) : "Session"; }
+  if (x.kind === "review") return "± Review · " + basename(x.root || "");
+  return x.title || SIDE_WHAT[x.kind] || "Side tab";
+}
 function renderSide() {
-  const box = $("#sideview"), items = SIDE.items.get(S.current);
+  const box = $("#sideview"), st = SIDE.st.get(S.current);
   const chips = box.querySelector(".schips"), body = box.querySelector(".sbody");
   const blank = html => { chips.innerHTML = ""; body.innerHTML = html; SIDE.shown = ""; };
-  if (items === null) return blank(emptyBox("On another machine", "The pages and files that machine's agent shows open there, in Orbit on the Mac."));
-  if (!items) return blank(loadingHtml());
-  if (!items.length) return blank(emptyBox("Nothing beside this session", "The pages its agent shows (orbit-agent show) and the files it opens beside the conversation come here."));
-  let sel = SIDE.sel.get(S.current);
-  if (!items.some(x => x.id === sel)) sel = items[0].id;
-  SIDE.sel.set(S.current, sel);
-  chips.innerHTML = items.map(x => `<button class="schip${x.id === sel ? " on" : ""}" data-item="${esc(x.id)}">` +
-    `${I(x.kind === "web" ? "external" : "file", 13)}<span class="t">${esc(x.title || "Page")}</span>` +
-    `<span class="x" data-drop="${esc(x.id)}" aria-label="Take it off the list">${I("x", 11)}</span></button>`).join("");
+  if (!st) return blank(loadingHtml());
+  if (!st.items.length) return blank(emptyBox("Nothing beside this session", "What is open beside it on any screen comes here: the pages its agent shows, the files it opens beside the conversation, ± Review."));
+  const i = Math.max(0, Math.min(st.i | 0, st.items.length - 1)), it = st.items[i];
+  chips.innerHTML = st.items.map((x, k) => `<button class="schip${k === i ? " on" : ""}" data-item="${esc(x.id)}">` +
+    `${I(x.kind === "web" ? "external" : x.kind === "file" ? "file" : x.kind === "session" ? "chat" : "folder", 13)}<span class="t">${esc(sideLabel(x))}</span>` +
+    `<span class="x" data-drop="${esc(x.id)}" aria-label="Close it, on every screen">${I("x", 11)}</span></button>`).join("");
   const on = chips.querySelector(".schip.on"); if (on) on.scrollIntoView({ block: "nearest", inline: "nearest" });
-  const it = items.find(x => x.id === sel), key = S.current + ":" + sel + ":" + (it.time || 0);
+  const key = `${S.current}:${it.id}:${it.url || ""}:${it.path || ""}:${it.line || ""}`;
   if (SIDE.shown === key) return;  // (the same page: its frame stays, with its state)
   SIDE.shown = key;
   if (it.kind === "web") {
     body.innerHTML = `<iframe class="sframe" title="${esc(it.title || "Page")}" sandbox="allow-scripts allow-popups allow-forms" src="${esc(withToken(it.url))}"></iframe>`;
+    return;
+  }
+  if (it.kind !== "file") {
+    const s = it.kind === "session" && S.sessions.get(it.sid);
+    body.innerHTML = emptyBox(sideLabel(it), (it.kind === "review" ? esc(tilde(it.root || "")) + "<br>Its changes show on the Mac." :
+      it.kind === "session" ? (s ? `<div class="eacts"><button class="pill" data-open-sid="${esc(it.sid)}">Open the session</button></div>` : "That session is closed.")
+      : "It shows on the Mac."));
     return;
   }
   body.innerHTML = loadingHtml();
@@ -74,27 +95,25 @@ function renderSide() {
   }).catch(e => { if (SIDE.shown === key && !(e instanceof NotPaired)) body.innerHTML = emptyBox(`Cannot open ${basename(it.path)}`, esc(e.message)); });
 }
 
-/* The live stream: a page shown or a file opened beside a session (show / open with side), or its list changed. */
+/* The live stream: a session's side panel changed (side); an agent put something beside (show / open with side): a
+   toast while the conversation is shown. */
 function sideEvent(m) {
-  const sid = m.sid; if (!sid) return;
+  if (m.t === "side") { if (m.sid && (m.sid === S.current || SIDE.st.has(m.sid))) applySide(m.sid, m.side); return; }
   if (m.t === "open" && !m.side) return;
-  if (m.t === "show" || m.t === "open") {
-    SIDE.sel.set(sid, m.t === "show" ? m.id : null);  // (the new one is the one shown)
-    if (sid === S.current && sideMode() !== "side") toast(`${m.by || "The agent"} put “${m.t === "show" ? m.title : basename(m.path)}” beside: tap ◫ above`);
-  }
-  if (sid === S.current || SIDE.items.has(sid)) loadSide(sid);
+  if (m.sid && m.sid === S.current && sideMode() !== "side")
+    toast(`${m.by || "The agent"} put “${m.t === "show" ? m.title : basename(m.path)}” beside: tap ◫ above`);
 }
 
 $("#cseg").addEventListener("click", e => { const b = e.target.closest("button[data-v]"); if (b) setSideMode(b.dataset.v); });
 $("#sideview").addEventListener("click", e => {
   const x = e.target.closest("[data-drop]");
-  if (x) {
-    e.stopPropagation();
-    api("POST", `/api/sessions/${encodeURIComponent(S.current)}/side/remove`, { id: x.dataset.drop })
-      .then(d => { SIDE.items.set(S.current, d.items || []); SIDE.shown = ""; renderSideToggle(); renderSide(); })
-      .catch(err => { if (!(err instanceof NotPaired)) toast(err.message); });
+  if (x) { e.stopPropagation(); sideOp({ op: "close", id: x.dataset.drop }); return; }
+  const c = e.target.closest("[data-item]");
+  if (c) {
+    const st = SIDE.st.get(S.current), k = st ? st.items.findIndex(y => y.id === c.dataset.item) : -1;
+    if (k >= 0 && k !== st.i) { applySide(S.current, { ...st, i: k }); sideOp({ op: "select", id: c.dataset.item }); }
     return;
   }
-  const c = e.target.closest("[data-item]");
-  if (c) { SIDE.sel.set(S.current, c.dataset.item); renderSide(); }
+  const o = e.target.closest("[data-open-sid]");
+  if (o) { SIDE.mode.set(o.dataset.openSid, "chat"); openSession(o.dataset.openSid); }
 });

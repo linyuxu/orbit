@@ -8,11 +8,14 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
-- The phone: a toggle in a session's title bar switches the conversation for its Side view: what its agent put beside it
-  (the pages `orbit-agent show` made, sandboxed and live; the files `orbit-agent open --side` opened, drawn), newest
-  first, chips to pick one, × to take one off; a new one while in the conversation counts up on the toggle with a toast.
-  The server keeps them per session (`<state>/show/side.json`, 20 each; `GET /api/sessions/<id>/side`, `POST …/side/remove`;
-  the Mac's own side tabs stay in its browser). Another machine's session: not yet.
+- A session's side panel is the server's, like its conversation (`orbit/desk/sides.py`): every screen shows the same
+  tabs and the same one shown (the page, the phone, a page on another machine), and a change on one (open, pick, close,
+  an agent's `orbit-agent show` or `open --side`) goes to all as a `side` event (`GET/POST /api/sessions/<id>/side`,
+  `{"op": open|close|select|clear}`; `<state>/side.json`). Another machine's session's panel comes through this server
+  (its paths as `/@name/…`, its agents' pages at `/api/remote-show/<name>/<id>`, sandboxed). Only the panel put away
+  (⌘\, ⌃X 1 now puts it away) and its width are a screen's own; a file tab's side tabs stay the page's. The side tabs a
+  page had for a session move to the server the first time it loads. The phone: a toggle in a session's title bar
+  between the conversation and that panel (pages live, files drawn; picking or closing a tab there does it everywhere).
 - Voice and agents speak of their own work in the first person. The voice: its backend's work is its own ("I'll look
   at the logs", "I'm still on request #3"), never "the agent" or the session's name unless asked; another agent is named
   only when a result says the work went there; Orbit is the platform that routes requests and reports their status.

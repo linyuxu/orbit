@@ -8,6 +8,7 @@ function connect() {
     if (m.t === "live") { if (!EMBED) voiceEvent(m); return; }
     if (m.t === "hello") {
       const had = S.current;
+      if (typeof SIDE_SRV !== "undefined") { SIDE_SRV.loaded.clear(); SIDE_SRV.rev = {}; }  // (what changed meanwhile: fetched again)
       S.machines = m.machines || [];
       setSessions(m.sessions, m.groups);
       for (const sid of [...S.cards.keys()]) if (!S.sessions.has(sid)) S.cards.delete(sid);
@@ -43,6 +44,8 @@ function connect() {
       else renderAll();
     } else if (m.t === "card") {
       upsertCard(m.card);
+    } else if (m.t === "side") {  // a session's side tabs changed (here or on another screen): as the server has them
+      if (!EMBED && m.sid) applySideState(m.sid, m.side);
     } else if (m.t === "cardp") {
       const list = S.cards.get(m.sid);
       onCardPatch(m, list && list.find(x => x.id === m.id), upsertCard);
@@ -89,7 +92,7 @@ function agentOpened(m) {
     // beside the session that asked (its tab's side tabs), not whatever is in front; elsewhere: a toast to go there
     const s = m.sid && S.sessions.get(m.sid), key = s ? "s:" + s.id : sideKey(), here = key === sideKey();
     const spec = m.t === "show" ? { kind: "web", url: m.url, title: m.title } : { kind: "file", path: m.path, line: m.line || undefined };
-    openSide(spec, { focus: false, key });
+    if (!s) openSide(spec, { focus: false, key });  // (a session's: the server put it there; its side event shows it)
     const what = m.t === "show" ? `shows “${m.title}”` : `opened ${basename(m.path)}`;
     if (here) toast(`${who}${what} in the side tab`);
     else toast(`${who}${what} in its side tab — click to go there`, () => switchTo(s.id));

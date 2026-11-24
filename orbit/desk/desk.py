@@ -24,6 +24,7 @@ from orbit.desk.groups import Groups
 from orbit.desk.handoff import Handoff
 from orbit.desk.meetings import Meetings
 from orbit.desk.requests import Requests
+from orbit.desk.sides import Sides
 from orbit.desk.session import ACTIVE, DEFAULT_GROUPS, DRIVERS, FLEET_GROUP, MODES, OPEN_IN, SETTINGS, Session
 from orbit.drivers.process import ProcessDriver
 from orbit.services.calendar import Calendar
@@ -31,7 +32,7 @@ from orbit.services.live import config as live_config
 from orbit.services.shell import Shells
 
 
-class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
+class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Meetings, Handoff):
     def __init__(self, state_dir: Path):
         self.state_dir = state_dir
         self.state_dir.mkdir(parents=True, exist_ok=True)

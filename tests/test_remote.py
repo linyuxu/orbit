@@ -265,6 +265,57 @@ class RemoteTest(test_skeleton.SkeletonTest):
         finally:
             self.req("POST", "/api/remotes/pbox/delete", {})
 
+    def test_federation_side_panel_of_another_machines_session(self):
+        """Another machine's session's side panel, here: its tabs as written here (/@name paths, its pages through this
+        server, sandboxed), changed from here over there, and its changes over there coming here as side events."""
+        from orbit.machines.federation import wait_for
+        url = f"http://127.0.0.1:{self.rport}/?token={self.token}"
+        self.assertEqual(self.req("POST", "/api/remotes", {"name": "sbox", "url": url})[0], 200)
+        try:
+            self.assertTrue(wait_for(lambda: any(m["name"] == "sbox" and m["ok"] for m in self.req("GET", "/api/sessions")[1]["machines"])))
+            code, s = self.req("POST", "/api/sessions", {"cwd": self.rwork, "name": "sider", "machine": "sbox", "group": "main"})
+            self.assertEqual(code, 200, s)
+            rid = s["id"].split("~", 1)[1]
+            events = self.desk.subscribe()
+            try:
+                ev = self.rdesk.show("<h1>far</h1>", "Far page", rid)  # (an agent over there shows a page)
+                self.rdesk.open_for_user(self.rwork, side=True, by=rid)
+
+                seen = []
+
+                def told():
+                    while True:
+                        try:
+                            x = json.loads(events.get(timeout=0.2))
+                        except Exception:
+                            return False
+                        if x.get("t") == "side" and x["sid"] == s["id"] and len(x["side"]["items"]) == 2:
+                            seen.append(x)
+                            return True
+                self.assertTrue(wait_for(told, 10))
+                e = seen[-1]
+            finally:
+                self.desk.unsubscribe(events)
+            st = self.req("GET", f"/api/sessions/{s['id']}/side")[1]
+            self.assertEqual(st, e["side"])
+            page, folder = st["items"]
+            self.assertEqual(page["url"], f"/api/remote-show/sbox/{ev['id']}")
+            self.assertEqual(folder["path"], f"/@sbox{os.path.realpath(self.rwork)}")
+            with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{page['url']}", timeout=10) as r:
+                self.assertEqual((r.status, r.read()), (200, b"<h1>far</h1>"))
+                self.assertIn("sandbox", r.headers["Content-Security-Policy"])
+            # changed from here, over there
+            code, st2 = self.req("POST", f"/api/sessions/{s['id']}/side", {"op": "select", "id": page["id"]})
+            self.assertEqual((code, st2["i"]), (200, 0))
+            self.assertEqual(self.rdesk.side_state(rid)["i"], 0)
+            code, st3 = self.req("POST", f"/api/sessions/{s['id']}/side", {"op": "open", "spec": {"kind": "review", "root": f"/@sbox{self.rwork}", "sid": s["id"]}})
+            self.assertEqual(code, 200, st3)
+            there = self.rdesk.side_state(rid)["items"][1]
+            self.assertEqual((there["root"], there["sid"]), (self.rwork, rid))  # (as that machine writes them)
+            self.assertEqual((st3["items"][1]["root"], st3["items"][1]["sid"]), (f"/@sbox{self.rwork}", s["id"]))
+        finally:
+            self.req("POST", "/api/remotes/sbox/delete", {})
+
     def test_federation_other_machines_conversations_to_resume(self):
         """⌘O → Other sessions lists every machine's conversations; one of box's is resumed on box."""
         import uuid

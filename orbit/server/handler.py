@@ -717,12 +717,28 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             fed = federation.split(m.group(1))
             return self._json(*reversed(self.desk.federation.call(fed[0], "GET", f"/api/sessions/{fed[1]}/{m.group(2)}"
                                                                   + (f"?{u.query}" if u.query else ""))))
-        m = re.fullmatch(r"/api/sessions/([\w-]+)/side", p)
-        if m:  # what its agent put beside the conversation (the phone's Side view)
+        m = re.fullmatch(r"/api/sessions/([\w-]+(?:~[\w-]+)?)/side", p)
+        if m:  # its side panel (desk/sides.py); another machine's: from there
+            fed = federation.split(m.group(1))
+            if fed:
+                return self._json(*reversed(self.desk.federation.side(fed[0], fed[1])))
             try:
-                return self._json({"items": self.desk.side_items(m.group(1))})
+                return self._json(self.desk.side_state(m.group(1)))
             except KeyError:
                 return self._json({"error": "no such session"}, 404)
+        m = re.fullmatch(r"/api/remote-show/([\w-]+)/(\w+)", p)
+        if m:  # an agent's page on another machine (its side tab here): fetched from there, as sandboxed
+            st, data = self.desk.federation.raw(m.group(1), f"/show/{m.group(2)}")
+            if st != 200:
+                return self._json({"error": "not found"}, st if st in (404, 502) else 502)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Security-Policy", "sandbox allow-scripts allow-popups allow-forms")
+            self.end_headers()
+            self.wfile.write(data)
+            return
         m = re.fullmatch(r"/api/sessions/([\w-]+)/resume-command", p)
         if m:  # Copy resume command: the session's conversation, continued in a terminal
             try:
@@ -905,10 +921,13 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 line = b.get("line")
                 return self._json(self.desk.open_for_user(str(b.get("path", "")), int(line) if line else None,
                                                           bool(b.get("side")), str(b.get("by", ""))))
-            m = re.fullmatch(r"/api/sessions/([\w-]+)/side/remove", p)
-            if m:  # {"id"}: one of its side items, gone from the list (the phone's ×)
+            m = re.fullmatch(r"/api/sessions/([\w-]+(?:~[\w-]+)?)/side", p)
+            if m:  # {"op": open|close|select|clear, "spec"?, "id"?}: its side panel, on every screen (desk/sides.py)
+                fed = federation.split(m.group(1))
+                if fed:
+                    return self._json(*reversed(self.desk.federation.side(fed[0], fed[1], b)))
                 try:
-                    return self._json({"items": self.desk.side_remove(m.group(1), str(b.get("id", "")))})
+                    return self._json(self.desk.side_op(m.group(1), str(b.get("op", "")), b.get("spec"), str(b.get("id") or "")))
                 except KeyError:
                     return self._json({"error": "no such session"}, 404)
             if p == "/api/show":

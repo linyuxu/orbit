@@ -210,6 +210,11 @@ class Federation:
                 self.desk.broadcast({"t": "card", "card": self.card(name, c)})
             elif have is None or (have.get("rev") or 0) < (ev.get("rev") or 0):
                 threading.Thread(target=self._fetch_card, args=(name, sid, ev.get("id")), daemon=True).start()
+        elif t == "side":  # a side panel changed over there: on every screen here too
+            sid = str(ev.get("sid", ""))
+            if SEP in sid or not sid:
+                return
+            self.desk.broadcast({"t": "side", "sid": join(name, sid), "side": self.side_ours(name, ev.get("side"))})
         elif t == "closed":
             sid = str(ev.get("id", ""))
             if SEP in sid:
@@ -217,6 +222,54 @@ class Federation:
             with self.lock:
                 self.sessions.get(name, {}).pop(sid, None)
             self.desk.broadcast({"t": "closed", "id": join(name, sid), "session": self.session(name, ev.get("session") or {"id": sid})})
+
+    # ------------------------------------------------------------------ another machine's session's side panel
+    def side_ours(self, name: str, st: Any) -> Any:
+        """Its side panel as written here: paths /@name/…, sessions name~id, its agents' pages through this server."""
+        if not isinstance(st, dict) or not isinstance(st.get("items"), list):
+            return st
+        items = []
+        for x in st["items"]:
+            y = our_paths(name, dict(x))
+            if isinstance(y.get("sid"), str) and y["sid"] and SEP not in y["sid"]:
+                y["sid"] = join(name, y["sid"])
+            if isinstance(y.get("url"), str) and y["url"].startswith("/show/"):
+                y["url"] = f"/api/remote-show/{name}/{y['url'][6:]}"
+            items.append(y)
+        return {**st, "items": items}
+
+    def side_theirs(self, name: str, spec: Any) -> Any:
+        """A side tab named here, as that machine writes it."""
+        if not isinstance(spec, dict):
+            return spec
+        y = local_paths(name, dict(spec))
+        if isinstance(y.get("sid"), str) and y["sid"].startswith(name + SEP):
+            y["sid"] = y["sid"][len(name) + 1:]
+        pre = f"/api/remote-show/{name}/"
+        if isinstance(y.get("url"), str) and y["url"].startswith(pre):
+            y["url"] = "/show/" + y["url"][len(pre):]
+        return y
+
+    def side(self, name: str, rid: str, body: dict | None = None) -> tuple[int, Any]:
+        """GET (body None) or change (POST body) that session's side panel over there."""
+        if body is not None:
+            body = {**body, **({"spec": self.side_theirs(name, body["spec"])} if "spec" in body else {})}
+        st, r = self.call(name, "POST" if body is not None else "GET", f"/api/sessions/{rid}/side", body, rewrite=False)
+        return st, (self.side_ours(name, r) if st == 200 else r)
+
+    def raw(self, name: str, path: str, timeout: float = 15) -> tuple[int, bytes]:
+        """A file of that server as it is (an agent's page), (status, bytes)."""
+        info = self._info(name)
+        if not info:
+            return 404, b""
+        req = urllib.request.Request(info["url"] + path, headers={"Authorization": f"Bearer {info['token']}"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.status, r.read(8_000_000)
+        except urllib.error.HTTPError as e:
+            return e.code, b""
+        except OSError:
+            return 502, b""
 
     CARDS_KEPT = 300
 

@@ -113,33 +113,43 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         th.join(5)
         self.assertTrue(got[0]["side"])
 
-    def test_side_items_of_a_session(self):
-        """What a session's agent shows or opens beside it is kept for it (the phone's Side view), newest first; the same
-        file again moves up; a page or file that is gone is left out; × takes one off; another session's are its own."""
+    def test_a_sessions_side_panel_is_the_servers(self):
+        """A session's side panel is kept by the server for every screen: an agent's page and a file it opens beside go
+        in it (shown); a screen opens, selects and closes tabs there; each change goes to all as a side event; the same
+        tab again is selected, not added; another session's panel is its own."""
         s, other = self.new_session("sider"), self.new_session("other")
-        self.assertEqual(self.req("GET", f"/api/sessions/{s['id']}/side")[1], {"items": []})
-        r = self.agent("show", "-", "--title", "Bells", inp="<h1>b</h1>", session=s["id"])
-        self.assertEqual(r.returncode, 0, r.stderr)
+        side = lambda sid=s["id"]: self.req("GET", f"/api/sessions/{sid}/side")[1]
+        self.assertEqual(side(), {"items": [], "i": 0, "rev": 0})
+        got, th = self.listen({"side"}, n=2)
+        self.agent("show", "-", "--title", "Bells", inp="<h1>b</h1>", session=s["id"])
         f = Path(self.work) / "notes.py"
         f.write_text("x = 1\n")
         self.agent("open", f"{f}:1", "--side", session=s["id"])
+        th.join(5)
+        self.assertEqual([e["sid"] for e in got], [s["id"], s["id"]])
+        st = side()
+        self.assertEqual([(x["kind"], x.get("title") or x.get("path")) for x in st["items"]], [("web", "Bells"), ("file", os.path.realpath(f))])
+        self.assertEqual((st["i"], st["items"][1]["line"]), (1, 1))  # (the newest shown)
+        self.assertEqual(got[-1]["side"], st)
         self.agent("show", "-", "--title", "Elsewhere", inp="<h1>o</h1>", session=other["id"])
-        self.agent("show", "-", "--title", "Nobody's", inp="<h1>n</h1>")  # (from a terminal: no session)
-        items = self.req("GET", f"/api/sessions/{s['id']}/side")[1]["items"]
-        self.assertEqual([(x["kind"], x["title"]) for x in items], [("file", "notes.py"), ("web", "Bells")])
-        self.assertEqual((items[0]["path"], items[0]["line"]), (os.path.realpath(f), 1))
-        self.assertTrue(items[1]["url"].startswith("/show/"))
-        self.assertEqual([x["title"] for x in self.req("GET", f"/api/sessions/{other['id']}/side")[1]["items"]], ["Elsewhere"])
-        self.agent("show", "-", "--title", "Bells 2", inp="<h1>c</h1>", session=s["id"])
-        self.agent("open", str(f), "--side", session=s["id"])  # (the same file again: it moves up, once)
-        self.assertEqual([x["title"] for x in self.req("GET", f"/api/sessions/{s['id']}/side")[1]["items"]],
-                         ["notes.py", "Bells 2", "Bells"])
-        f.unlink()  # (gone: left out)
-        self.assertEqual([x["title"] for x in self.req("GET", f"/api/sessions/{s['id']}/side")[1]["items"]], ["Bells 2", "Bells"])
-        bells = items[1]["id"]
-        code, r = self.req("POST", f"/api/sessions/{s['id']}/side/remove", {"id": bells})
-        self.assertEqual((code, [x["title"] for x in r["items"]]), (200, ["Bells 2"]))
+        self.assertEqual([x["title"] for x in side(other["id"])["items"]], ["Elsewhere"])
+        # a screen: select, open (after the one shown), the same again (selected, not added), close
+        bells = st["items"][0]["id"]
+        post = lambda body: self.req("POST", f"/api/sessions/{s['id']}/side", body)
+        self.assertEqual(post({"op": "select", "id": bells})[1]["i"], 0)
+        code, st = post({"op": "open", "spec": {"kind": "review", "root": self.work, "sid": s["id"], "id": "rv1"}})
+        self.assertEqual((code, [x["kind"] for x in st["items"]], st["i"]), (200, ["web", "review", "file"], 1))
+        st = post({"op": "open", "spec": {"kind": "file", "path": os.path.realpath(f), "line": 7}})[1]
+        self.assertEqual((len(st["items"]), st["i"], st["items"][2]["line"]), (3, 2, 7))
+        st = post({"op": "close", "id": "rv1"})[1]
+        self.assertEqual(([x["kind"] for x in st["items"]], st["i"]), (["web", "file"], 1))
+        self.assertEqual(post({"op": "open", "spec": {"kind": "nope"}})[0], 400)
+        self.assertEqual(post({"op": "close", "id": "gone"})[0], 400)
         self.assertEqual(self.req("GET", "/api/sessions/nope/side")[0], 404)
+        # kept across a restart of the desk's reading (a file), and a page that is gone is left out
+        (self.desk.show_dir / f"{bells}.html").unlink()
+        st = side()
+        self.assertEqual(([x["kind"] for x in st["items"]], st["i"]), (["file"], 0))
 
     # ------------------------------------------------------------------ sessions / send
     def test_sessions_and_send(self):
