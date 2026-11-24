@@ -17,6 +17,10 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - The voice button: five bars in a circle where Send is while the input is empty; in a call they follow the sound.
 - Voice: after each request the voice is told what became of it (running, queued behind another, joined to the
   waiting one), so it says "queued" instead of guessing; "via Voice" on a card explains what the agent got.
+- Settings → Voice → Usage: what Orbit's calls cost this month (from GPT Live's own active and standby seconds, by the
+  second: $0.05 and $0.02 a minute), and, once the user gives what is left on their OpenAI account (an API key cannot
+  read it: the billing endpoints answer 403), the talking time it buys, counting down by the calls since.
+  `GET /api/live/usage`; settings `live_budget`, `live_budget_at`.
 - In a call, a gyroscope takes the input's place: a cloud core that swells with the sound (yours and the voice's) and
   two rings tumbling around it in 3D (each ring's near half in front of the core, its far half behind), faster while
   the voice speaks, nearly still and grey in standby; ⌨ types instead (the call goes on; the state by

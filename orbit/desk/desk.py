@@ -332,6 +332,8 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
                 raise ValueError(f"open_in is one of {', '.join(OPEN_IN)}")
             if k.startswith("live_"):
                 live_config.check(k, v)
+        if "live_budget" in b:
+            b["live_budget_at"] = time.time()  # (the balance as of now: calls from here on count down from it)
         with self.lock:
             self.settings.update(b)
             snap = dict(self.settings)

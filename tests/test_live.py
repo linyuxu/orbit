@@ -197,6 +197,39 @@ class LiveTest(test_skeleton.SkeletonTest):
         net = {"Host": f"100.64.0.9:{self.port}", "Authorization": f"Bearer {remote.token(self.state)}"}
         self.assertEqual(self.req("GET", "/api/live/preview?voice=marin", headers=net)[0], 403)
 
+    def test_usage_and_balance(self):
+        """What calls cost, from their logs: OpenAI's active/standby seconds by the second; a call that ended without
+        usage counts its length as active; last month's calls are not this month's; a balance the user gave counts
+        down by the calls since (and saying it again starts again)."""
+        import tempfile
+        from datetime import datetime
+        from orbit.services.live import usage
+        with tempfile.TemporaryDirectory() as d:
+            live_dir = Path(d, "live"); live_dir.mkdir()
+            now = datetime(2026, 11, 23, 12).timestamp()
+            def log(name, t, rows):
+                Path(live_dir, f"call-{name}.jsonl").write_text("".join(json.dumps({"t": t + r.get("ms", 0) / 1000, **r}) + "\n" for r in rows))
+            log("a", now - 3600, [{"ms": 0, "stage": "create"}, {"ms": 600000, "stage": "ended", "usage": {"active_seconds": 300, "paused_seconds": 300}}])
+            log("b", now - 1800, [{"ms": 0, "stage": "create"}, {"ms": 90000, "stage": "ended", "usage": {"seconds": 90}}])
+            log("c", now - 900, [{"ms": 0, "stage": "create"}, {"ms": 60000, "stage": "ended", "usage": {}}])  # (no usage: its length)
+            log("d", datetime(2026, 10, 30).timestamp(), [{"ms": 0, "stage": "create"}, {"ms": 600000, "stage": "ended", "usage": {"active_seconds": 600}}])
+            log("e", now - 60, [{"ms": 0, "stage": "create"}, {"ms": 200, "stage": "create_failed"}])  # (never made: free)
+            u = usage.summary(Path(d), {}, now=now)
+            self.assertEqual(u["month"], {"calls": 3, "active_s": 450, "standby_s": 300, "cost": round(450 / 60 * .05 + 300 / 60 * .02, 4), "estimated": True})
+            self.assertNotIn("budget", u)
+            b = usage.summary(Path(d), {"live_budget": 10.0, "live_budget_at": now - 2000}, now=now)["budget"]  # (calls b and c since)
+            self.assertEqual((b["spent"], b["left"]), (0.125, 9.875))
+            self.assertEqual((b["active_min"], b["standby_min"]), (197.5, 493.8))
+        before = time.time()
+        self.assertEqual(self.req("POST", "/api/settings", {"live_budget": 20})[0], 200)  # (an int is taken as a float)
+        try:
+            self.assertGreaterEqual(self.desk.settings["live_budget_at"], before)
+            code, u = self.req("GET", "/api/live/usage")
+            self.assertEqual((code, u["budget"]["given"]), (200, 20.0))
+            self.assertEqual(self.req("POST", "/api/settings", {"live_budget": -1})[0], 400)
+        finally:
+            self.req("POST", "/api/settings", {"live_budget": 0})
+
     def test_no_key_and_another_machine(self):
         s = self.new_session("Nokey")
         keys.set_key(self.state, "openai", None)

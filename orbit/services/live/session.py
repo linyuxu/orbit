@@ -403,7 +403,7 @@ class Call:
 
     def state(self, transcript: bool = True) -> dict:
         with self.lock:
-            out = {"call": self.id, "phase": self.phase, "sid": self.sid, "live": self.live_id, "started": self.t0,
+            out = {"call": self.id, "phase": self.phase, "sid": self.sid, "live": self.live_id, "started": self.t0, "usage": dict(self.usage),
                    "expires_at": self.expires_at, "reason": self.reason, "error": self.error, "model": self.model,
                    "delegations": [{"id": k, **{x: self.dels[k].get(x) for x in ("cid", "how", "text", "done")}}
                                    for k in self.order]}

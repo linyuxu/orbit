@@ -629,6 +629,9 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             return self._json({"voices": [{"name": v, "about": a} for v, a in live_config.VOICES],
                                "languages": live_config.LANGUAGES, "models": live_config.MODELS,
                                "wake": live_config.WAKE, "prompt_max": live_config.PROMPT_MAX})
+        if p == "/api/live/usage":  # what the voice calls cost: this month, and the balance left if the user gave one
+            from orbit.services.live import usage as live_usage
+            return self._json(live_usage.summary(self.desk.state_dir, self.desk.settings))
         if p == "/api/live":  # the voice call: phase, bound session, transcript so far (any client with the token: the phone)
             return self._json(self.desk.live.state())
         if p == "/api/harnesses":

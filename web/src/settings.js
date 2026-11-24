@@ -225,11 +225,42 @@ function voicePreview(voice, delay = 0, keep = false) {
     VPREV.audio.play().catch(() => say("Click ▶ to hear it"));
   }, delay);
 }
+/* What the calls cost (GET /api/live/usage): this month's, from each call's usage as GPT Live reported it; and, when
+   the user says what is left on their OpenAI account (an API key cannot read it), the time that buys. */
+const vdur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h} h ${m} min` : m ? `${m} min${s % 60 && m < 10 ? ` ${s % 60} s` : ""}` : `${s} s`; };
+const vusd = v => "$" + v.toFixed(2);
+async function voiceUsage(pane) {
+  setHeading(pane, "Usage");
+  const mrow = setRow(pane, "This month", "What Orbit's calls cost: talking $0.05 a minute, standby $0.02, by the second.");
+  const brow = setRow(pane, "Balance left", "What is left on your OpenAI account: an API key cannot read it, so copy it from platform.openai.com → Settings → Billing. Orbit then takes off what its calls cost.");
+  const tip = document.createElement("div"); tip.className = "set-desc vleft"; brow.closest(".set-row").querySelector(".set-text").appendChild(tip);
+  brow.innerHTML = `<span class="vusd">$</span><input type="number" class="fin vbudget" min="0" max="100000" step="0.01" placeholder="e.g. 20"><button type="button" class="btn sm">Save</button>`;
+  const inp = brow.querySelector("input"), save = brow.querySelector("button");
+  const draw = async () => {
+    let u;
+    try { u = await api("GET", "/api/live/usage"); } catch (e) { mrow.textContent = e.message; return; }
+    const m = u.month;
+    mrow.innerHTML = `<span class="vmon">${m.calls ? `${m.estimated ? "≈ " : ""}<b>${vusd(m.cost)}</b> · ${m.calls} call${m.calls > 1 ? "s" : ""} · ${vdur(m.active_s)} talking${m.standby_s ? ` · ${vdur(m.standby_s)} standby` : ""}` : "No calls yet"}</span>`;
+    const b = u.budget;
+    inp.placeholder = b ? `${b.given} given` : "e.g. 20";
+    tip.innerHTML = b ? `<b>≈ ${vdur(b.active_min * 60)} of talking left</b> (or ${vdur(b.standby_min * 60)} on standby): ${vusd(b.left)} of the ${vusd(b.given)} you gave on ${new Date(b.at * 1000).toLocaleDateString()}, after ${vusd(b.spent)} of calls.` : "";
+  };
+  const put = async () => {
+    const v = parseFloat(inp.value);
+    if (!(v >= 0)) { inp.focus(); return; }
+    try { S.settings = await api("POST", "/api/settings", { live_budget: v }); inp.value = ""; toast(v ? "Balance saved: Orbit counts down from it" : "Balance cleared"); draw(); }
+    catch (e) { toast(e.message); }
+  };
+  save.addEventListener("click", put);
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); put(); } });
+  draw();
+}
 async function settingsVoice(pane, keys) {
   const note = document.createElement("div"); note.className = "set-desc set-lead";
-  note.textContent = "Talk with a session (⌘⇧V or the round button by Send): what you ask becomes a request, and the answer is spoken back. A change here applies to the next call.";
+  note.textContent = "Talk with a session (⌘⇧V or the blue bars by Send): what you ask becomes a request, and the answer is spoken back. A change here applies to the next call.";
   pane.appendChild(note);
   apiKeyRow(pane, "openai", "Kept on this machine (a 0600 file in Orbit's state folder), never shown again, sent only to OpenAI.");
+  voiceUsage(pane);
   let o;
   try { o = await api("GET", "/api/live/options"); }
   catch (e) { const d = document.createElement("div"); d.className = "set-desc"; d.textContent = e.message; pane.appendChild(d); return; }

@@ -36,6 +36,7 @@ LANGUAGES = {"auto": "", "zh": "Mandarin Chinese (Simplified)", "en": "English",
              "es": "Spanish", "fr": "French", "de": "German", "pt": "Portuguese"}
 WAKE = (0.3, 0.5, 0.7)  # vad_threshold: wakes on quieter speech · normal · needs clear speech
 PROMPT_MAX = 4000  # characters of the user's own instructions (the API allows 16 384 tokens in all)
+RATES = {"active": 0.05, "standby": 0.02}  # USD a minute, billed by the second (OpenAI's price for gpt-live-1 and 1.1)
 
 DEFAULTS: dict[str, Any] = {
     "live_model": "gpt-live-1.1",
@@ -47,6 +48,8 @@ DEFAULTS: dict[str, Any] = {
     "live_detail": "brief",  # results: brief (one to three sentences) | detailed (the key details too)
     "live_context": True,    # the session's recent requests and answers at the call's start
     "live_prompt": "",       # the user's own instructions, after Orbit's
+    "live_budget": 0.0,      # what the user said is left on their OpenAI account (USD; 0: not given); an API key cannot read it
+    "live_budget_at": 0.0,   # when they said so (set by the desk): calls since count down from it
 }
 
 
@@ -64,6 +67,8 @@ def check(k: str, v: Any) -> None:
         raise ValueError(f"live_wake is one of {', '.join(map(str, WAKE))}")
     if k == "live_detail" and v not in ("brief", "detailed"):
         raise ValueError("live_detail is brief or detailed")
+    if k == "live_budget" and not 0 <= v <= 100000:
+        raise ValueError("live_budget is 0–100000 (USD)")
     if k == "live_prompt" and len(v) > PROMPT_MAX:
         raise ValueError(f"live_prompt is at most {PROMPT_MAX} characters")
 
