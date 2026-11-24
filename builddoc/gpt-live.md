@@ -212,8 +212,10 @@ GPT Live sees silence, so standby follows the same rule.
 In standby a `commentary.append` is **not spoken and not even acknowledged** (no `.appended`), whether on the
 finished delegation or with `delegation_id: null`; while active, a second commentary on a finished delegation is
 spoken (~0.9 s). Orbit only speaks on delegations that are still open (results, failures, take-back / move-in
-facts), which keep the session active, so nothing is lost today; anything spoken without an open delegation (a
-request typed in Orbit finishing, an auto turn) would have to wait for the user's next words, or the next call.
+facts), which keep the session active. The silent state snapshots (`delegation_id: null`) do go in standby, though:
+so whatever Orbit sends while the session is in standby is dealt with when it wakes (`session.resumed`, or the
+user's words): the snapshot goes again (as it is then, even if unchanged), and words to say are sent again
+(`<event_id>_again`).
 
 ## 7. Interruption, hang-up, expiry
 

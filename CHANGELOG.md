@@ -8,6 +8,8 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Voice: what Orbit sends while GPT Live is in standby (dropped there, as tested) goes again when it wakes: the
+  session's state, and any words it was to say.
 - Voice: several OpenAI API keys, each with a name, tried in order: one refused (a bad key, no quota, rate-limited:
   401 / 402 / 403 / 429) and the call goes on with the next (its sideband attaches with the key that made it); a key
   refused in the last 10 minutes is tried after the others; Settings → Voice lists them (name edited in place, last

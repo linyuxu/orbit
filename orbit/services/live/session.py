@@ -592,6 +592,8 @@ class Call:
         self.phase = "connecting"
         self.live_id = ""
         self.key = self.key_label = ""  # (the key that made the session: its sideband attaches with it)
+        self.unheard: list[dict] = []  # words sent while in standby (dropped there): sent again when it wakes
+        self.stale_snap = False  # a session fact went while in standby: the snapshot goes again when it wakes
         self.expires_at: int | None = None
         self.reason = ""
         self.error = ""
@@ -777,8 +779,15 @@ class Call:
                 return
 
     def _send(self, ev: dict) -> None:
-        """A client event on the sideband; while it is down, queued for the next attach."""
+        """A client event on the sideband; while it is down, queued for the next attach. In standby GPT Live drops what
+        it is sent (tested: no .appended, nothing said): a session fact makes the next snapshot go again once it wakes,
+        and words to say are kept and sent again then (_on_message, session.resumed)."""
         with self.lock:
+            if self.phase == "standby":
+                if ev["type"] == "session.commentary.append":
+                    self.unheard.append(ev)
+                elif ev["type"] == "session.thinking.append" and ev.get("delegation_id") is None:
+                    self.stale_snap = True
             ws = self.ws
             if ws is None:
                 self.outbox.append(ev)
@@ -829,6 +838,7 @@ class Call:
             self._set_phase("standby")
         elif typ == "session.resumed":
             self._set_phase("listening")
+            self._woke()
         elif typ == "session.usage.updated":
             with self.lock:
                 self.usage = ev.get("usage") or {}
@@ -862,7 +872,23 @@ class Call:
         if who == "voice":
             self._set_phase("speaking")
         elif self.phase in ("standby", "connecting"):
+            was = self.phase
             self._set_phase("listening")
+            if was == "standby":
+                self._woke()
+
+    def _woke(self) -> None:
+        """Out of standby: what it was sent while there (and dropped) goes again: the session's state as it is now,
+        and any words it was to say."""
+        with self.lock:
+            again, self.unheard = self.unheard, []
+            if self.stale_snap:
+                self.stale_snap = False
+                self.snap_big = self.snap_step = None  # (unchanged is no reason to skip it now)
+                self.snap_due = time.time()
+        for ev in again:
+            self.log("resent", type=ev["type"], event_id=ev.get("event_id"), delegation=ev.get("delegation_id"))
+            self._send({**ev, "event_id": f"{ev.get('event_id') or 'ev'}_again"})
 
     # ------------------------------------------------------------------ delegations → requests
     def _on_delegation(self, ev: dict) -> None:
