@@ -58,7 +58,8 @@ function renderStatus() {
     if (s.compactions) bits.push("⟲" + s.compactions);
   }
   $("#runon").innerHTML = bits.map(b => `<span>${esc(b)}</span>`).join("");
-  $("#runhint").textContent = s && s.state === "working" ? (s.steers ? "⌘⏎ queue · ⌘⇧⏎ steer" : "⌘⏎ queue") : "";
+  // The keys that send: while it works ⌘⏎ queues (and ⌘⇧⏎ steers, where the harness can); otherwise ⌘⏎ sends.
+  $("#runhint").textContent = !s || s.remote && s.state === "offline" ? "" : s.state === "working" ? (s.steers ? "⌘⏎ queue · ⌘⇧⏎ steer" : "⌘⏎ queue") : "⌘⏎ send";
   $("#runon").title = "What the request runs on: model · context the last model call read · compactions";
   $("#composer").style.display = s ? "" : "none";
   const badge = $("#bellbtn .badge");

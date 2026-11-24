@@ -191,6 +191,7 @@ kbd { font-family:var(--font); font-size:calc(11px * var(--ui-k)); padding:1px 5
 /* By the composer's own width (a side tab can make it narrow in a wide window). */
 #send, .psend { margin-left:auto; }
 @container (max-width:420px) { .runon { display:none; } }
+@container (max-width:300px) { .runhint { display:none; } }  /* (very narrow: the buttons keep their room) */
 /* ===================================================================== a plugin's views (pviews.js, plugin API 2.0) */
 /* A thread: the conversation's own boxes and type (.col, .md, .head, .bubble, .composer); only what a chat has more. */
 .pthread { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; position:relative; }
