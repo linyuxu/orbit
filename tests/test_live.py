@@ -870,40 +870,6 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertTrue(wait(lambda: self.live_state()["phase"] == "speaking"))
         self.assertTrue(wait(lambda: self.live_state()["phase"] == "listening", timeout=4))
 
-    def test_what_standby_dropped_goes_again_on_waking(self):
-        """GPT Live drops what it is sent in standby (tested against it): words to say are sent again once it wakes,
-        and the session's state goes again (even if unchanged since); nothing is resent while awake."""
-        old = live.COALESCE_S
-        live.COALESCE_S = 0.3
-        try:
-            s, _ = self.start_call("Asleep")
-            c = self.desk.live.call
-            self.assertTrue(wait(lambda: self.live_state()["phase"] == "listening"))
-            self.fake.emit({"type": "session.paused", "event_id": "p1"})
-            self.assertTrue(wait(lambda: self.live_state()["phase"] == "standby"))
-            self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "slow job"})  # (a fact, while asleep)
-            snap = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["delegation_id"] is None])
-            self.assertTrue(snap)
-            c._send({"type": "session.commentary.append", "event_id": "result_x", "delegation_id": "d1", "content": "Done."})
-            time.sleep(0.5)
-            self.assertEqual([e["event_id"] for e in self.commentary()], ["result_x"])
-            n = len(self.fake.got("session.thinking.append"))
-            self.fake.emit({"type": "session.resumed", "event_id": "p2"})
-            again = wait(lambda: [e for e in self.commentary() if e["event_id"] == "result_x_again"])
-            self.assertEqual(again[0]["content"], "Done.")
-            fresh = wait(lambda: [e for e in self.fake.got("session.thinking.append")[n:] if e["delegation_id"] is None])
-            self.assertIn('"Asleep"', fresh[0]["content"])
-            # awake: nothing is kept to send again
-            c._send({"type": "session.commentary.append", "event_id": "result_y", "delegation_id": "d2", "content": "More."})
-            self.fake.emit({"type": "session.paused", "event_id": "p3"})
-            self.assertTrue(wait(lambda: self.live_state()["phase"] == "standby"))
-            self.fake.emit(t_in("Hello?", 100, 600, "p4"))  # (woken by the user's words: the same)
-            self.assertTrue(wait(lambda: self.live_state()["phase"] == "listening"))
-            time.sleep(0.5)
-            self.assertEqual([e["event_id"] for e in self.commentary()], ["result_x", "result_x_again", "result_y"])
-        finally:
-            live.COALESCE_S = old
-
     def test_hang_up_adds_the_note_card(self):
         s, r = self.start_call("Hang")
         self.fake.emit(t_in("what time is it", 1000, 2000, "k1"), t_out("It's three.", 2500, 3000, "k2"),

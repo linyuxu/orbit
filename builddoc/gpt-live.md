@@ -209,13 +209,15 @@ delegation has no result yet the session does not go to standby (60 s of silence
 takes minutes is still said when it ends, and that wait is billed as active. (The WebSocket transport refuses
 `idle_timeout_s`: "requires a session with wake policy support".) Muting only disables the page's microphone track:
 GPT Live sees silence, so standby follows the same rule.
-In standby a `commentary.append` is **not spoken and not even acknowledged** (no `.appended`), whether on the
-finished delegation or with `delegation_id: null`; while active, a second commentary on a finished delegation is
-spoken (~0.9 s). Orbit only speaks on delegations that are still open (results, failures, take-back / move-in
-facts), which keep the session active. The silent state snapshots (`delegation_id: null`) do go in standby, though:
-so whatever Orbit sends while the session is in standby is dealt with when it wakes (`session.resumed`, or the
-user's words): the snapshot goes again (as it is then, even if unchanged), and words to say are sent again
-(`<event_id>_again`).
+In standby a `commentary.append` **waits**: no `.appended` while the session is paused (the docs:
+"If the session timeline stops, the acknowledgment can remain pending"); when the user's speech wakes it
+(`session.resumed`), it is acknowledged and goes in, and the voice says it with its answer (tested: a follow-up sent
+in standby, then "喂，你还在吗？" 34 s later → "在呢。还有刚补充说测试全过了，四百一十二个，没有失败。"). So nothing
+is lost, but nothing wakes it either: only speech does (no client wake event is documented). An earlier test that
+never woke the session took the waiting append for a dropped one. While active, a second commentary on a finished
+delegation is spoken (~0.9 s). Orbit speaks only on open delegations (results, failures, take-back / move-in
+facts), which keep the session active, so its words are heard when they come; silent state snapshots sent in
+standby should go in at the next wake by the same rule (`thinking.append` in standby: not tested).
 
 ## 7. Interruption, hang-up, expiry
 
