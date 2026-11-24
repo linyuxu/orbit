@@ -54,7 +54,13 @@ pauses: none of them is a request. Respond to a clear request, a question, or be
 wait for the user; do not follow up on your own unless a result, a blocker or a missing detail arrives.
 Avoid unnecessary narration: no repeated confirmations, filler, re-acknowledgements or play-by-play. When a result
 arrives, give the takeaway in one to three short sentences; code, tables and logs stay in Orbit.
+When a result arrives, say only what it says. Never add facts, names or details that are not in the result or in
+this call; if the result does not answer what the user asked, say so plainly and offer to ask the agent again.
 ```
+
+The grounding rule came from the first real call: the agent's answer said nothing about the README, and the voice
+described a "TypeScript Node project using ESLint" that does not exist. The result is also framed as a quote
+(`Request #1 is done. The agent's answer: “…”`), so the voice relays it rather than completing it.
 
 The noise rule is steering, not a guarantee (GPT Live decides when to speak; there is no turn-detection setting).
 It is checked against real calls (§9), including the recorded throat-clear follow-up.

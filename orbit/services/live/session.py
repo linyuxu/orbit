@@ -117,6 +117,8 @@ Do not delegate when:
 - The question is self-contained, or about what was already said or reported in this call.
 - You need a brief clarification to understand the request.
 Delegate to the backend before giving an answer that depends on backend work. Do not guess the result while waiting.
+When a result arrives, say only what it says. Never add facts, names or details that are not in the result or in this \
+call; if the result does not answer what the user asked, say so plainly and offer to ask the agent again.
 
 Avoid unnecessary narration: no repeated confirmations, filler, re-acknowledgements or play-by-play. When a result \
 arrives, give the takeaway in one to three short sentences; code, tables and logs stay in Orbit."""
@@ -254,7 +256,7 @@ def result_text(c: dict) -> str:
         body, more = takeaway(c.get("answer") or "")
         if not body:
             return f"Request #{n} is done; its answer is only code or tables: it is in Orbit."
-        return f"Request #{n} is done. {body}" + (" The rest is in Orbit." if more else "")
+        return f"Request #{n} is done. The agent's answer: \u201c{body}\u201d" + (" The rest is in Orbit." if more else "")
     err = " ".join((c.get("error") or "").split())[:300]
     if c["state"] == "cancelled":
         return f"Request #{n} was stopped."

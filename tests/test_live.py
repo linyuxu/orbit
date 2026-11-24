@@ -170,7 +170,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         time.sleep(0.4)
         com = self.commentary("del_1")
         self.assertEqual(len(com), 1)
-        self.assertEqual(com[0]["content"], "Request #1 is done. answer: please check the nightly build now")
+        self.assertEqual(com[0]["content"], "Request #1 is done. The agent's answer: \u201canswer: please check the nightly build now\u201d")
         self.assertEqual(len(self.cards(s["id"])), 1)
         st = self.live_state()
         self.assertEqual([d["cid"] for d in st["delegations"]], [1])
