@@ -370,9 +370,17 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
                 return
             s.loaded = True
             drv = self._make_driver(s, resume=True)
-            n = 0
+            n, k = 0, 0
             for h in drv.history():
-                n += 1
+                if h.kind == "auto":  # a turn of its own: after the request before it (5.501 …), as live (_auto_card)
+                    k += 1
+                    s.cards.append({**self._new_card(s, round(n + 0.5 + k / 1000, 3), h.text, h.time), "kind": "auto",
+                                    "auto": dict(h.auto or {}), "state": h.state, "steps": h.steps, "answer": h.answer,
+                                    "followups": h.followups, "started": h.time, "finished": h.finished,
+                                    "compactions": h.compactions, "steers": h.steers, "rev": 1})
+                    s.compactions += h.compactions
+                    continue
+                n, k = n + 1, 0
                 s.cards.append({"id": n, "sid": s.id, "text": h.text, "state": h.state, "steps": h.steps, "steers": h.steers,
                                 "answer": h.answer, "live": "", "followups": h.followups, "time": h.time,
                                 "started": h.time, "finished": h.finished, "compactions": h.compactions,
@@ -473,7 +481,7 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Meetings, Handoff):
                     print(f"orbit: {s.name}: hand-off failed ({type(e).__name__}: {e}): closed instead", flush=True)
         with self.lock:
             for s in self.sessions.values():
-                if s.id not in handed and s.current() is not None and s.driver and s.driver.alive():
+                if s.id not in handed and s.current_request() is not None and s.driver and s.driver.alive():
                     s.interrupted = True
         if self.live is not None:  # a voice call ends with the server (its transcript kept as a note card)
             try:

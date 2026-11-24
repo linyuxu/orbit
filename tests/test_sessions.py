@@ -101,6 +101,80 @@ class SessionsTest(test_skeleton.SkeletonTest):
         self.assertIn("ended when its agent's process did", a["result"])
         self.assertTrue(all(x["done"] for x in a["sub"]))
 
+    def test_a_turn_of_its_own_gets_a_card(self):
+        """A background subagent's report wakes the agent for a turn no request started (tests/fake_claude.py "wake"):
+        that turn is a card of its own (kind auto, titled by what woke it), with what it said, its Read, and the
+        background subagent it launched, whose work and report land on that card's Agent step; a request sent
+        meanwhile queues behind it (never into it) and then runs; requests keep their numbers; and the cards rebuilt
+        from the transcript (a restart) show the same turn the same way."""
+        sid = self.req("POST", "/api/sessions", {"cwd": self.work})[1]["id"]
+        self.req("POST", f"/api/sessions/{sid}/send", {"text": "wake please"})
+        self.wait_card(sid, 1, "completed")
+        cards = lambda: self.req("GET", f"/api/sessions/{sid}/cards")[1]["cards"]
+        end = time.time() + 10
+        while time.time() < end and not any(c.get("kind") == "auto" and any(st["kind"] == "tool" for st in c["steps"])
+                                            for c in cards()):
+            time.sleep(0.05)
+        auto = next(c for c in cards() if c.get("kind") == "auto")
+        self.assertEqual(auto["id"], 1.501)  # after request #1, not a request number
+        self.assertIn(auto["state"], ("thinking", "running"))
+        self.assertEqual(auto["text"], "After a background agent finished: Find the parser")
+        self.assertEqual(auto["auto"], {"why": "after a background agent finished", "what": "Find the parser"})
+        first = next(c for c in cards() if c["id"] == 1)
+        self.assertEqual(first["followups"], [])  # what it said before its first step moved into its own card
+        info = lambda: next(x for x in self.req("GET", "/api/sessions")[1]["sessions"] if x["id"] == sid)
+        self.assertEqual(info()["state"], "working")
+        q = self.req("POST", f"/api/sessions/{sid}/send", {"text": "hello"})[1]
+        self.assertEqual((q["id"], q["state"]), (2, "queued"))  # behind the turn, as behind a request
+        auto = self.wait_card(sid, 1.501, "completed")
+        self.assertEqual(auto["answer"], "I started an agent to check the tests.")  # (nothing was folded into it)
+        self.assertEqual([(st["kind"], st.get("name") or st.get("text")) for st in auto["steps"]],
+                         [("note", "The parser agent reported back; checking the file it named."), ("tool", "Read"),
+                          ("tool", "Agent")])
+        c2 = self.wait_card(sid, 2, "completed")
+        self.assertEqual(c2["answer"], "answer: hello")
+        end = time.time() + 10
+        while time.time() < end and not next(st for st in self.wait_card(sid, 1.501, "completed")["steps"] if st.get("agent"))["done"]:
+            time.sleep(0.05)
+        agent = next(st for st in self.wait_card(sid, 1.501, "completed")["steps"] if st.get("agent"))
+        self.assertEqual((agent["summary"], agent["background"], agent["done"], agent["error"]), ("Check the tests", True, True, False))
+        self.assertEqual([x.get("name") or x.get("text") for x in agent["sub"]][:3], ["Looking for the parser.", "Grep", "Found it in a.py."])
+        self.assertIn("returns early on empty input", agent["result"])
+        live = [(c["id"], c.get("kind", ""), c["text"]) for c in cards()]
+        type(self)._unserve()  # a restart: the cards come from Claude Code's transcript
+        type(self)._serve()
+        got = cards()
+        self.assertEqual([(c["id"], c.get("kind", ""), c["text"]) for c in got], live)
+        h = next(c for c in got if c.get("kind") == "auto")
+        self.assertEqual((h["auto"], h["answer"], h["state"]), (auto["auto"], auto["answer"], "completed"))
+        self.assertEqual([(st["kind"], st.get("name") or st.get("text")) for st in h["steps"]],
+                         [(st["kind"], st.get("name") or st.get("text")) for st in auto["steps"]])
+        ha = next(st for st in h["steps"] if st.get("agent"))
+        self.assertEqual([x.get("name") or x.get("text") for x in ha["sub"]][:3], ["Looking for the parser.", "Grep", "Found it in a.py."])
+        self.assertIn("returns early on empty input", ha["result"])
+        self.assertEqual(got[0]["followups"], [])
+        self.assertEqual(self.req("POST", f"/api/sessions/{sid}/send", {"text": "again"})[1]["id"], 3)
+
+    def test_stop_stops_a_turn_of_its_own(self):
+        """Stop while a turn of its own runs: the harness's interrupt ends it (cancelled), the requests queued behind
+        it are dropped as Stop always does, and the process stays (no restart)."""
+        import os
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"FAKE_WAKE_SLOW": "30"}):
+            sid = self.req("POST", "/api/sessions", {"cwd": self.work})[1]["id"]
+            self.req("POST", f"/api/sessions/{sid}/send", {"text": "wake please"})
+            self.wait_card(sid, 1, "completed")
+            self.wait_card(sid, 1.501, "running")
+        q = self.req("POST", f"/api/sessions/{sid}/send", {"text": "hello"})[1]
+        self.assertEqual(q["state"], "queued")
+        pid = self.desk.sessions[sid].driver.proc.pid
+        self.req("POST", f"/api/sessions/{sid}/stop", {})
+        self.assertEqual(self.wait_card(sid, 1.501, ("cancelled",), timeout=4)["state"], "cancelled")  # (before the 5 s grace)
+        self.assertEqual(self.wait_card(sid, 2, ("cancelled",))["state"], "cancelled")
+        self.req("POST", f"/api/sessions/{sid}/send", {"text": "again"})
+        self.assertEqual(self.wait_card(sid, 3, ("completed",))["answer"], "answer: again")
+        self.assertEqual(self.desk.sessions[sid].driver.proc.pid, pid)
+
     def test_what_the_agent_says_between_tools_is_kept_whole(self):
         """Every text the agent writes between tool calls stays in the card, whole (not cut to a summary), in order:
         live, and again when the cards are rebuilt from the transcript."""
@@ -414,6 +488,73 @@ class SessionsTest(test_skeleton.SkeletonTest):
 for name in [n for n in dir(test_skeleton.SkeletonTest) if n.startswith("test_")]:
     if name not in SessionsTest.__dict__:
         setattr(SessionsTest, name, None)
+
+class TurnOfItsOwnTest(unittest.TestCase):
+    """A turn Claude Code begins itself, without a process: the engine's events, and history from a transcript."""
+
+    def driver(self, emit):
+        from orbit.drivers.claude import ClaudeDriver
+        return ClaudeDriver(session_id="s1", cwd="/w", model="", mode="default", emit=emit, resume=True)
+
+    def test_the_engine_announces_and_ends_it(self):
+        """Idle, the first thing only a turn says begins a turn of its own: `auto` first (what woke it: the
+        notification names an earlier Agent call), its end a result marked auto; a request's result is not marked."""
+        evs = []
+        d = self.driver(evs.append)
+        d.ready = True
+        d.handle({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Agent",
+                                                                 "input": {"description": "Find the parser", "prompt": "?", "run_in_background": True}}]}})
+        d.finish(True, "first turn")  # (a turn of its own already: idle when it began)
+        evs.clear()
+        d.handle({"type": "system", "subtype": "task_notification", "tool_use_id": "t1", "status": "completed",
+                  "summary": "the report", "summary_is_report": True})
+        d.handle({"type": "stream_event", "event": {"type": "content_block_start", "content_block": {"type": "thinking"}}})
+        d.handle({"type": "assistant", "message": {"content": [{"type": "text", "text": "looking"}]}})
+        d.handle({"type": "result", "subtype": "success", "result": "done on its own"})
+        kinds = [e.kind for e in evs]
+        self.assertEqual(kinds[:3], ["agent_done", "auto", "thinking"])
+        self.assertEqual(evs[1].data, {"why": "after a background agent finished", "what": "Find the parser"})
+        res = evs[-1]
+        self.assertEqual((res.kind, res.data.get("auto"), res.data["ok"], res.data["text"]), ("result", True, True, "done on its own"))
+        self.assertFalse(d.auto)
+        d.handle({"type": "result", "subtype": "success", "result": "again"})  # idle, no turn: nothing
+        self.assertEqual(evs[-1], res)
+
+    def test_history_rebuilds_it(self):
+        """A transcript turn that starts with a user-role task notification: a card of kind auto when it ran a tool
+        (titled by the call it names), follow-ups on the card before when it only talked."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            (Path(t) / "p").mkdir()
+            rows = [
+                {"type": "user", "message": {"role": "user", "content": "go"}},
+                {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b1", "name": "Bash",
+                                                               "input": {"command": "make", "description": "Build it", "run_in_background": True}}]}},
+                {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b1", "content": "started"}]}},
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "building"}]}},
+                {"type": "user", "message": {"role": "user", "content": "<task-notification>\n<tool-use-id>b1</tool-use-id>\n<status>completed</status>\n<summary>Background command \"Build it\" completed (exit code 0)</summary>\n</task-notification>"},
+                 "origin": {"kind": "task-notification"}},
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "The build passed."}]}},
+                {"type": "user", "message": {"role": "user", "content": "<task-notification>\n<tool-use-id>zz</tool-use-id>\n<status>failed</status>\n<summary>Agent \"Check docs\" failed</summary>\n</task-notification>"}},
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "Let me look."}]}},
+                {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "r1", "name": "Read", "input": {"file_path": "/w/x"}}]}},
+                {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "r1", "content": "..."}]}},
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "Fixed."}]}},
+                {"type": "user", "message": {"role": "user", "content": "next"}},
+            ]
+            (Path(t) / "p" / "s1.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+            import os
+            from unittest import mock
+            with mock.patch.dict(os.environ, {"ORBIT_CLAUDE_PROJECTS": t}):
+                hist = self.driver(lambda e: None).history()
+        self.assertEqual([(h.kind, h.text) for h in hist],
+                         [("", "go"), ("auto", "After a background agent failed: Check docs"), ("", "next")])
+        self.assertEqual((hist[0].answer, hist[0].followups), ("building", ["The build passed."]))
+        auto = hist[1]
+        self.assertEqual(auto.auto, {"why": "after a background agent failed", "what": "Check docs"})
+        self.assertEqual([(st["kind"], st.get("name") or st.get("text")) for st in auto.steps], [("note", "Let me look."), ("tool", "Read")])
+        self.assertEqual(auto.answer, "Fixed.")
+
 
 if __name__ == "__main__":
     unittest.main()

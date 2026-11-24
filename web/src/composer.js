@@ -148,7 +148,7 @@ function mentionKey(combo) {  // from the key handler while the picker is open
 /* ↑ in the empty input: this session's earlier requests, newest first; typing filters, ⏎ puts one back. */
 function inputHistory() {
   const seen = new Set();
-  const texts = (S.cards.get(S.current) || []).filter(c => c.kind !== "note").reverse().map(c => c.text).filter(t => t && !seen.has(t) && seen.add(t));
+  const texts = (S.cards.get(S.current) || []).filter(c => c.kind !== "note" && c.kind !== "auto").reverse().map(c => c.text).filter(t => t && !seen.has(t) && seen.add(t));
   if (!texts.length) { toast("No earlier request in this session"); return; }
   menu(texts.slice(0, 200).map(t => ({ label: t.replace(/\s+/g, " ").slice(0, 120), run: () => { input.value = t; input.focus(); updateSend(); saveDraft(); } })),
     { anchor: $("#composer") }, "bell");

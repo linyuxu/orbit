@@ -578,6 +578,9 @@ class OpenCodeDriver(ProcessDriver):
                 self.emit(DriverEvent("sub_tool_end", {"parent": parent, "id": pid, "error": err}))
 
     def _idle(self) -> None:
+        if not self.busy and self.auto:  # a turn OpenCode began itself is over (the engine ends its card)
+            self.finish(not self._error, error=self._error or "")
+            return
         if not (self.busy and self._sent) or not (self._busy_seen or self._error or self._aborted):
             return  # (an idle from before this request)
         if self._asks:

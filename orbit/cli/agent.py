@@ -303,7 +303,8 @@ def cmd_read(a: argparse.Namespace) -> None:
     cards = [c for c in t.call("GET", f"/api/sessions/{t.s['id']}/cards")["cards"] if not c.get("hidden")]
     for c in cards[-max(1, a.last):]:
         text = re.sub(r"^\[orbit\] [^\n]*\n\n", "", c["text"])
-        print(f"## #{c['id']} ({c['state']})\n\n{text.strip()}\n")
+        own = " · on its own" if c.get("kind") == "auto" else ""  # (a turn no request started)
+        print(f"## #{c['id']} ({c['state']}{own})\n\n{text.strip()}\n")
         if c.get("answer"):
             print(f"### answer\n\n{c['answer'].strip()}\n")
     if not cards:

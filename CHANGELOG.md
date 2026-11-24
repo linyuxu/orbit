@@ -46,6 +46,12 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   two rings tumbling around it in 3D (each ring's near half in front of the core, its far half behind), faster while
   the voice speaks, nearly still and grey in standby; ⌨ types instead (the call goes on; the state by
   the voice button brings the orb back). The voice button is five blue bars beside Send, as big as its arrow.
+- A turn the agent takes on its own (Claude Code wakes when a background subagent or command finishes) is a card of
+  its own, "On its own · after a background agent finished" and the task, with its steps, the subagents it launches
+  (their live work and report) and its answer; before, only its text showed (a follow-up line) and a subagent it
+  launched was nowhere. Requests sent meanwhile queue behind it, Stop stops it; history rebuilds it after a restart.
+  One that only talks stays a follow-up. Any harness on the engine (`auto` event; Harness Protocol 1.3: a `result`
+  without a request, history lines with `"auto"`).
 - Sessions list: a session clicked in a filtered list no longer reshuffles the rows under the pointer; the filter
   clears once the pointer has been away a moment, the rows sliding to their places.
 - A voice call's note card is folded to its head (turns, the requests it made); a click shows the transcript, where

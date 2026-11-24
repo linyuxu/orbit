@@ -124,6 +124,15 @@ function noteHtml(c) {
     `<span class="vsum">${esc(sum)}${sum ? " · " : ""}${esc(dayTime(c.time))}</span></span></button>` +
     (open ? `<div class="md">${renderMd(c.answer || "")}</div>` : "") + `</div>`;
 }
+/* A turn the agent took by itself (kind "auto": a background task finished and woke it): not the user's words, so no
+   bubble, nothing to copy, resend or withdraw; a quiet line says so and what woke it (the desktop's autoReqHtml). */
+function autoReqHtml(c) {
+  const a = c.auto || {}, why = a.why || "", what = a.what || (c.text !== "On its own" && !why ? c.text : "");
+  return `<div class="req auto"><div class="autoreq"><div class="ahead">${I("bell", 13)}<span class="lbl">On its own</span>` +
+    `${why ? `<span class="why">· ${esc(why)}</span>` : ""}</div>` +  // (the time beside the task: the reason stays whole)
+    `<div class="awhat"><span class="what">${esc(what)}</span><span class="when">${esc(dayTime(c.time))}</span></div></div>` +
+    (c.steers || []).map(x => `<div class="steer"><span class="lbl">steer</span>${reqHtml(x.text)}</div>`).join("") + `</div>`;
+}
 function cardHtml0(c) {
   if (c.kind === "note") return noteHtml(c);
   const active = ACTIVE.has(c.state), tool = active ? currentTool(c) : "";
@@ -132,11 +141,11 @@ function cardHtml0(c) {
     ? `${canSteer(c.sid) ? `<button data-steernow="${c.id}">${I("zap", 12)}Steer now</button>` : ""}<button data-withdraw="${c.id}">${I("undo", 12)}Withdraw</button>`
     : active ? "" : `<button data-resend="${c.id}">${I("resend", 12)}Resend</button>`;
   return `
-    <div class="req">
+    ${c.kind === "auto" ? autoReqHtml(c) : `<div class="req">
       <div class="bubble">${originHtml(c.origin)}${reqBody(c)}
         <div class="meta"><button data-copyreq="${c.id}">${I("copy", 12)}Copy</button>${acts}<span class="when">#${c.id} · ${esc(dayTime(c.time))}</span></div></div>
       ${(c.steers || []).map(x => `<div class="steer"><span class="lbl">steer</span>${reqHtml(x.text)}</div>`).join("")}
-    </div>
+    </div>`}
     <div class="ans s-${c.state}">
       <div class="head"><span class="cdot"></span><span class="st">${STATE_WORD[c.state] || esc(c.state)}</span>${tool ? `<span class="cur">${esc(tool)}</span>` : ""}
         <span class="el"${active && c.started ? ` data-t0="${c.started}"` : ""}>${esc(footText(c))}</span>

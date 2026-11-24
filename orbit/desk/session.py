@@ -138,6 +138,7 @@ class Session:
         self.driver: Driver | None = None
         self.loaded = False
         self.intro_pending = False  # the next request of this process carries the [orbit] line
+        self.auto_turn: dict | None = None  # a turn the harness began itself, not yet a card: what woke it, follow-ups so far
 
     def meta(self) -> dict[str, Any]:
         return {"id": self.id, "name": self.name, "cwd": self.cwd, "model": self.model, "mode": self.mode,
@@ -148,7 +149,7 @@ class Session:
                 **({"client_ids": dict(list(self.client_ids.items())[-ORIGINS_KEPT:])} if self.client_ids else {}),
                 **({"notes": self.notes[-NOTES_KEPT:]} if self.notes else {}),
                 **({"interrupted": True} if self.interrupted else {}),
-                **({"running": True} if (self.current() is not None if self.loaded else self.was_running) else {}),
+                **({"running": True} if (self.current_request() is not None if self.loaded else self.was_running) else {}),
                 **({"fork_carry": self.fork_carry} if self.fork_carry else {}),
                 "pending": [c for c in self.cards if c["state"] == "queued"] or self.pending}
 
@@ -169,11 +170,18 @@ class Session:
                 "last": self.last, "created": self.created, "fleet": self.fleet, "agents": self.running_agents()}
 
     def next_id(self) -> int:
-        """The next request's card id (note cards sit between requests with ids like 4.001: never counted)."""
-        return max((c["id"] for c in self.cards if c.get("kind") != "note"), default=0) + 1
+        """The next request's card id (note cards and turns of the agent's own sit between requests with ids like 4.001
+        and 4.501: never counted)."""
+        return max((c["id"] for c in self.cards if c.get("kind") not in ("note", "auto")), default=0) + 1
 
     def current(self) -> dict | None:
+        """The card at work: a request, or a turn the agent began itself (kind "auto": requests queue behind it too)."""
         for c in self.cards:
             if c["state"] in ACTIVE:
                 return c
         return None
+
+    def current_request(self) -> dict | None:
+        """The request at work (a turn of the agent's own is not one: cut off, there is nothing to continue)."""
+        c = self.current()
+        return c if c is not None and c.get("kind") != "auto" else None

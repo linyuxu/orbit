@@ -20,6 +20,16 @@
 .meta { font-size:calc(11px * var(--ui-k)); color:var(--ink-3); display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:2px 12px;
   margin-top:6px; opacity:.6; white-space:nowrap; }
 .req:hover .meta { opacity:1; }
+/* A turn the agent took by itself (cards.js autoReqHtml): not a bubble (not the user's words), a quiet line on the left */
+.req.auto { align-items:stretch; }
+.req.auto .steer { align-self:flex-end; }
+.autoreq { display:flex; flex-direction:column; gap:2px; padding:1px 0 1px 12px; border-left:2px solid color-mix(in srgb, var(--run) 40%, var(--line)); }
+.autoreq .ahead { display:flex; align-items:center; gap:6px; min-height:20px; font-size:calc(12px * var(--ui-k)); color:var(--ink-3); }
+.autoreq .ahead > svg { flex:none; }
+.autoreq .ahead .lbl { color:var(--ink-2); font-weight:calc(600 + var(--wd)); }
+.autoreq .ahead .why { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.autoreq .ahead .when { margin-left:auto; padding-left:12px; font-size:calc(11px * var(--ui-k)); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.autoreq .what { font-family:var(--read-font); font-size:calc(var(--read-size) - .5px); line-height:1.45; color:var(--ink); overflow-wrap:anywhere; }
 .meta button { border:0; background:none; padding:1px 3px; margin:0 -3px; color:var(--ink-3); border-radius:4px; display:inline-flex;
   align-items:center; gap:4px; font-size:calc(11px * var(--ui-k)); cursor:default; }
 .meta button:hover { background:var(--btn-hover); color:var(--ink); }

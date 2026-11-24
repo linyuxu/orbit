@@ -11,6 +11,10 @@
 - **a process that ends between requests**: after Stop, or with exit code 0, quietly replaced by the next request;
   otherwise the session is "not ready" with the error (the Desk starts a new driver on the next request);
 - **close** ends the process (stdin closed, then terminate, then kill) and reports "stopped".
+- **a turn of its own**: a harness may begin a turn no request started (Claude Code wakes when a background task
+  finishes). Its first event while idle (`TURN_EVENTS`) is preceded by an `auto` event (what woke it, when the harness
+  said: `woke`), and its end is a `result` marked `auto` (from `finish`, its process's exit, or a Stop). `busy` stays
+  the requests' alone (a harness's own bookkeeping keys on it); a request written meanwhile takes the turn over.
 
 A harness says only what differs: `program()`/`command()`, `request_line`, `steer_line`, `interrupt_line`,
 `handle(msg)` (its events → DriverEvents, through `said`, `tool_started`, `finish`), `plain_line`, and `history()`.
@@ -49,6 +53,9 @@ STOP_GRACE = 5.0  # seconds an interrupted request has to finish before SIGINT (
 EXIT_WAIT = 15.0  # seconds the next request waits for an interrupted process to exit
 
 
+TURN_EVENTS = ("delta", "thinking", "text", "tool_start")  # what only a turn says: while idle, one of the harness's own
+
+
 class ProcessDriver(Driver):
     per_request = False  # True: a process per request, the request on its stdin (then closed): Codex's exec mode
     launcher = DIRECT  # where its processes start (the Desk sets the Harness Server's when it runs the agents)
@@ -66,6 +73,10 @@ class ProcessDriver(Driver):
         self.ready = self.failed = self.busy = self.stopping = self.closing = False
         self.acked = True  # the harness said something since the request was written (it took it)
         self._line_ts: float | None = None  # when the stdout line being handled arrived (a hosted process says)
+        self.auto = False  # a turn the harness began itself (no request) is running: its end is a result marked auto
+        self._autos = 0  # how many such turns began (a Stop's give-up must not end the next one)
+        self.woke: dict[str, str] | None = None  # what will have woken it ({why, what}: a harness sets it, the turn takes it)
+        self._out, self.emit = self.emit, self._emit  # (every event passes _emit: a turn of its own is noticed there)
 
     # ------------------------------------------------------------------ what a harness says
     def program(self) -> list[str]:
@@ -124,17 +135,39 @@ class ProcessDriver(Driver):
     def answer_so_far(self) -> str:
         return "\n\n".join(self.turn_text)
 
+    def _emit(self, ev: DriverEvent) -> None:
+        """Every event goes out here: the first one only a turn says, while no request runs, begins a turn of the
+        harness's own (announced first, with what woke it), so the Desk can give it a card."""
+        if ev.kind in TURN_EVENTS and not self.busy and not self.auto and not self.closing:
+            with self.lock:
+                began = not self.busy and not self.auto
+                if began:
+                    self.auto, woke, self.woke = True, self.woke, None
+                    self._autos += 1
+                    if ev.kind != "text":  # (said() put its text in already: what came before is the last turn's)
+                        self.turn_text = []
+            if began:
+                self._out(DriverEvent("auto", dict(woke or {})))
+        self._out(ev)
+
     def finish(self, ok: bool, text: str | None = None, *, cancelled: bool = False, error: str = "",
                paused: bool = False) -> bool:
-        """The running request ended (once: later calls, and calls while idle, are ignored)."""
+        """The running request ended, or the turn the harness began itself (once: later calls, and calls while
+        idle, are ignored)."""
         with self.lock:
-            if not self.busy:
+            if self.busy:
+                self.busy, self.req_proc, auto = False, None, False
+            elif self.auto:
+                self.auto, auto = False, True
+            else:
                 return False
-            self.busy, self.req_proc = False, None
         data: dict[str, Any] = {"ok": ok, "text": self.answer_so_far() if text is None else text,
                                 "cancelled": cancelled and not ok}
+        self.turn_text = []  # (a turn of its own that follows starts from nothing)
         if paused:
             data["paused"] = True
+        if auto:
+            data["auto"] = True
         if not ok and not cancelled:
             data["error"] = error or "error"
         self.emit(DriverEvent("result", data))
@@ -168,6 +201,9 @@ class ProcessDriver(Driver):
             if self.busy:
                 raise RuntimeError("a request is already running")
             self.busy, self.stopping = True, False
+            # A turn the harness began itself is running: the request is written all the same (as before: the harness
+            # folds it into that turn, whose one result is then the request's), and the turn is the request's now.
+            self.auto, self.woke = False, None
             self.turn_text = []
             self.begin()
             p = self.proc
@@ -190,14 +226,16 @@ class ProcessDriver(Driver):
         if not self.steers:
             raise RuntimeError(f"{self.label} cannot take a message in the middle of a request")
         with self.lock:
-            p = self.req_proc
-            if not self.busy or p is None:
+            p = self.req_proc if self.busy else self.proc if self.auto else None  # (a turn of its own takes one too)
+            if p is None:
                 raise RuntimeError("no request is running")
             self._write(p, self.steer_line(text))
 
     def stop(self) -> None:
         with self.lock:
             if not self.busy:
+                if self.auto:
+                    self._stop_auto()
                 return
             self.stopping = True
             p = self.req_proc
@@ -226,6 +264,26 @@ class ProcessDriver(Driver):
             except OSError:
                 pass
         t = threading.Timer(STOP_GRACE, escalate)
+        t.daemon = True
+        t.start()
+
+    def _stop_auto(self) -> None:
+        """Stop a turn the harness began itself: its interrupt message, never a signal (the process, and the background
+        subagents it runs, stay); no end within STOP_GRACE s: the turn is taken as ended, so nothing waits behind it."""
+        p = self.proc
+        try:
+            line = self.interrupt_line() if p is not None else None
+            if line:
+                self._write(p, line)
+        except RuntimeError:
+            pass
+
+        n = self._autos
+
+        def give_up() -> None:
+            if self.auto and not self.busy and self._autos == n:
+                self.finish(False, cancelled=True)
+        t = threading.Timer(STOP_GRACE, give_up)
         t.daemon = True
         t.start()
 
@@ -277,11 +335,12 @@ class ProcessDriver(Driver):
 
     def checkpoint(self) -> dict[str, Any]:
         """What the next server needs to read on (plain JSON): a harness adds its own to this."""
-        return {"turn_text": list(self.turn_text), "resume": self.resume, "busy": self.busy}
+        return {"turn_text": list(self.turn_text), "resume": self.resume, "busy": self.busy, "auto": self.auto}
 
     def restore(self, cp: dict[str, Any]) -> None:
         self.turn_text = [str(x) for x in cp.get("turn_text") or []]
         self.resume = bool(cp.get("resume", True))
+        self.auto = bool(cp.get("auto")) and not cp.get("busy")  # a turn of its own read on (its result ends its card)
 
     def running(self) -> bool:
         """Its process is running (hosted or direct)."""
@@ -417,6 +476,7 @@ class ProcessDriver(Driver):
                 return  # an older process (replaced)
             self.proc = None
             mine = self.busy and self.req_proc is proc
+            auto, self.auto = self.auto, False  # a turn of its own ends with its process
             expected = self.per_request or proc is self.doomed or self.stopping or self.closing or code == 0
             if not expected:
                 self.failed = True
@@ -430,6 +490,10 @@ class ProcessDriver(Driver):
                 self.emit(DriverEvent("result", {"ok": False, "text": self.answer_so_far(), "cancelled": False,
                                                  "paused": True, "died": True,
                                                  "error": err or f"the agent stopped before it finished (exit {code})"}))
+        if auto and not mine:
+            self.emit(DriverEvent("result", {"ok": False, "text": self.answer_so_far(), "auto": True,
+                                             "cancelled": bool(self.stopping or self.closing or proc is self.doomed),
+                                             "error": err or f"the agent's process ended (exit {code})"}))
         if self.closing:
             self.emit(DriverEvent("state", {"state": "stopped"}))
         elif not expected:

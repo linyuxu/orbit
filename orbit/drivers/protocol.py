@@ -303,7 +303,9 @@ class ProtocolDriver(ProcessDriver):
                 text=strip_orbit_line(str(x["text"])), time=x.get("time"), steps=steps, answer=str(x.get("answer") or ""),
                 followups=[str(f) for f in x.get("followups") or []], finished=x.get("finished"),
                 state=str(x.get("state") or "completed"),
-                steers=[s if isinstance(s, dict) else {"text": str(s)} for s in x.get("steers") or []]))
+                steers=[s if isinstance(s, dict) else {"text": str(s)} for s in x.get("steers") or []],
+                **({"kind": "auto", "auto": {k: str(v) for k, v in x["auto"].items() if k in ("why", "what")}}
+                   if isinstance(x.get("auto"), dict) else {})))  # (1.3) a turn the agent began itself
         return cards
 
 

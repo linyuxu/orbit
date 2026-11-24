@@ -7,6 +7,8 @@ Conversations are JSON files in $FAKE_PROTOCOL_DIR (one per id). Requests, by th
   agent ...   a subagent with two steps of its own
   fail ...    a failed result
   die ...     the process exits in the middle of the request
+  later ...   the answer, then (0.3 s later, unless a message came) a turn of its own: a word, a Bash step that runs
+              $FAKE_LATER_SLOW s (1), an answer and a result with no request (1.3; its history line carries "auto")
 Every process logs its argv to $FAKE_PROTOCOL_DIR/argv.log; a session's process also every stdin line (stdin.log,
 with its pid) and its ORBIT_PLUGIN_TOKEN (token.log).
 """
@@ -175,3 +177,20 @@ while True:
     state["turns"].append(turn)
     save(conv, state)
     out(type="result", request=rid, ok=True, text=answer)
+    if first == "later":  # (1.3) a turn of its own, between requests (as when a background task it ran finishes)
+        ln = read_line(0.3)
+        if ln is not None:
+            pending.append(ln)
+            continue
+        out(type="text", text="the nightly check finished; looking at it")
+        out(type="tool_start", id="l1", name="Bash", input={"command": "cat check.log"})
+        time.sleep(float(os.environ.get("FAKE_LATER_SLOW", "1")))
+        out(type="tool_end", id="l1", error=False)
+        out(type="text", text="all green")
+        state["turns"].append({"text": "After a background check finished: nightly check", "time": time.time(),
+                               "auto": {"why": "after a background check finished", "what": "nightly check"},
+                               "steps": [{"id": "", "kind": "note", "name": "", "text": "the nightly check finished; looking at it"},
+                                         {"id": "l1", "kind": "tool", "name": "Bash", "summary": "cat check.log"}],
+                               "answer": "all green", "finished": time.time()})
+        save(conv, state)
+        out(type="result", ok=True, text="all green")

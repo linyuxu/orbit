@@ -21,10 +21,12 @@ Events (`DriverEvent.kind`, data):
 | activity | detail | a short progress line |
 | usage | context, model? | context the last model call read |
 | compaction | | the conversation was compacted |
-| result | ok, text, cancelled, paused?, died?, error? | the request finished (died: its process went away) |
+| auto | why?, what? | the harness began a turn on its own (no request; e.g. a background task finished): what woke it |
+| result | ok, text, cancelled, paused?, died?, auto?, error? | the request finished (died: its process went away; auto: the turn of its own did) |
 | attention | detail ("" clears it) | the agent waits for the user (in its terminal: ⌘T), not for Orbit |
 
-Text that arrives while no request is running is a follow-up; the Desk decides that, not the driver.
+A turn the harness began itself (`auto`, from the engine) that runs a tool gets a card of its own (kind "auto"); one
+that only talks stays follow-ups on the last card. The Desk decides that, not the driver.
 """
 
 from __future__ import annotations
@@ -52,6 +54,13 @@ def strip_orbit_line(text: str) -> str:
     if text.startswith(FORK_OPEN) and FORK_CLOSE in text:
         text = text.split(FORK_CLOSE, 1)[1].lstrip("\n")
     return text
+
+
+def auto_title(why: str, what: str) -> str:
+    """A turn of its own as one line (its card's text, for read-outs and search): "After a background agent finished:
+    Find the parser", or "On its own" when the harness did not say what woke it."""
+    why = why[:1].upper() + why[1:]
+    return f"{why}: {what}" if why and what else why or what or "On its own"
 
 
 # Argument names that say what a tool call works on, in the spellings harnesses use (command, CommandLine, file_path,
@@ -105,6 +114,9 @@ class HistoryCard:
     finished: float | None = None
     state: str = "completed"
     steers: list[dict[str, Any]] = field(default_factory=list)  # messages that joined the request mid-turn
+    # "auto": a turn the harness began itself (no request), with auto = {why, what} (what woke it); text is its title
+    kind: str = ""
+    auto: dict[str, str] | None = None
 
 
 class Driver:

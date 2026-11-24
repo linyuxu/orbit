@@ -79,7 +79,11 @@ blank line before the user's text: pass it to the model as part of the request.
 | `error` | `text` | something went wrong outside a request (shown as the session's error) |
 
 A request always ends with exactly one `result`. Text that arrives between requests is shown as a follow-up of the
-last answer.
+last answer. (1.3) An agent may also take a turn of its own between requests (e.g. when a background task it started
+finishes): once it runs a tool, that turn gets a card of its own ("On its own", not a request: no edit or resend), with
+its steps, subagents and answer; end the turn with a `result` (no `request`). Requests sent meanwhile wait behind it, as
+behind a request; Stop sends `interrupt` (no `result` within 5 s: the turn is taken as ended; the process is kept). A
+turn that only talks stays follow-ups.
 
 ### When the process ends
 
@@ -93,7 +97,7 @@ last answer.
 | Run | Prints |
 |---|---|
 | `command --describe` | `{"protocol": 1, "label"?, "models": [{"value", "label"}], "efforts": [..], "modes": [..], "capabilities": {"steer": bool, "thinking": bool, "subagents": bool}}` |
-| `command --history ID` | JSON lines, one per past request: `{"text", "time", "answer", "finished"?, "state"?, "steps"?, "steers"?, "followups"?}`. Steps: `{"id", "kind": "tool" \| "note", "name", "summary", "text"?, "error"?}` |
+| `command --history ID` | JSON lines, one per past request: `{"text", "time", "answer", "finished"?, "state"?, "steps"?, "steers"?, "followups"?, "auto"?}`. Steps: `{"id", "kind": "tool" \| "note", "name", "summary", "text"?, "error"?}`. (1.3) `"auto": {"why"?, "what"?}`: a turn the agent began itself (`text`: its title; `why`, e.g. "after a background agent finished", and `what`, the task, label its card) |
 | `command --list-conversations [--limit N]` | JSON lines: `{"id", "cwd", "first", "time", "name"?, "live"?}`, newest first: conversations Orbit may resume (⌘O → Other sessions) |
 | `command --usage` | `{"plan"?, "limits": [{"label", "used" (0–1), "resets_at"?}], "quota"?}`: the status bar's "Used" |
 
@@ -164,6 +168,17 @@ A harness on the engine says only: `program()` / `command()`, `request_line`, `s
 `per_request` (a process per request, the request on its stdin: Codex's `exec` fallback; Codex itself runs one
 `codex app-server` per session, JSON-RPC over stdio), `handle(msg)` (its events, through `said`,
 `tool_started`, `finish`), and `history()`. `ProtocolDriver` is that, for this protocol.
+
+A turn the harness begins itself (no request: Claude Code wakes when a background task finishes) needs nothing more
+from a harness: the engine notices the first turn event (`delta`, `thinking`, `text`, `tool_start`) while idle, emits
+`auto` first (`{why, what}` from `self.woke`, which a harness may set when it learns what woke it; Claude Code's task
+notification names the finished call), and the harness's ordinary end-of-turn `finish` ends it as a `result` marked
+`auto` (as do its process's exit, and a Stop: the interrupt message, never a signal, then 5 s). `busy` stays the
+requests' (harnesses key their own bookkeeping on it). The Desk gives such a turn a card of kind `auto` at its first
+`tool_start` (the text it said before moves from the last card's follow-ups into it), titled by `why` and `what`, id
+after the last request's (5.501: requests keep their history numbers); requests queue behind it; one that only talks
+stays follow-ups. A request written while a talking-only turn runs (no card, nothing queued it) takes the turn over,
+as before. History rebuilds the same: Claude Code's transcript starts such a turn with a user-role `<task-notification>`.
 
 `orbit.drivers.base.Driver`: one instance per session; the Desk calls `start`, `send`, `steer`, `stop`, `close`,
 `alive`, `history`, and receives the events of §2 (stdout table, as `DriverEvent(kind, data)`) plus

@@ -142,13 +142,25 @@ document.addEventListener("click", e => {
   const c = (S.cards.get(sid) || []).find(x => x.id === id);
   if (c) renderCard(c);
 });
+/* A turn the agent took by itself (kind "auto": a background task finished and woke it; no request started it):
+   not the user's words, so no bubble and nothing to edit, resend or link to; a quiet line on the left says so and what
+   woke it ("On its own · after a background agent finished", then the task). Its work and answer show as a request's. */
+function autoReqHtml(c) {
+  const a = c.auto || {}, why = a.why || "", what = a.what || (c.text !== "On its own" && !why ? c.text : "");
+  const tip = `The agent took this turn by itself: no request started it${why ? ` (${why})` : ""}. Its steps, subagents and answer are below.`;
+  return `<div class="req auto"><div class="autoreq" title="${esc(tip)}">` +
+    `<div class="ahead">${I("bell", 12)}<span class="lbl">On its own</span>${why ? `<span class="why">· ${esc(why)}</span>` : ""}` +
+    `<span class="when">${dayTime(c.time)}</span></div>${what ? `<div class="what">${esc(what)}</div>` : ""}</div>` +
+    (c.steers || []).map(x => `<div class="steer" title="Sent while this turn ran: it joined it${x.time ? " · " + dayTime(x.time) : ""}"><span class="lbl">steer</span>${reqHtml(x.text)}</div>`).join("") +
+    `</div>`;
+}
 function cardHtml0(c) {
   if (c.kind === "note") return noteHtml(c);
   const active = ACTIVE.has(c.state);
   const tool = active ? currentTool(c) : "";
   const body = c.answer || [c.live, c.partial].filter(Boolean).join("\n\n");
   return `
-    <div class="req">
+    ${c.kind === "auto" ? autoReqHtml(c) : `<div class="req">
       <div class="bubble">${originHtml(c.origin)}${reqBody(c)}
       <div class="meta">
         <button data-linkreq="${c.id}" title="Copy a link to this request">${I("link", 11)}link</button>
@@ -158,10 +170,10 @@ function cardHtml0(c) {
           : active ? "" : `<button data-resend="${c.id}" title="Resend as a new request">${I("resend", 11)}resend</button>`}
         <span class="when">#${c.id} · ${dayTime(c.time)}</span></div></div>
       ${(c.steers || []).map(x => `<div class="steer" title="Sent while the request ran: it joined this turn${x.time ? " · " + dayTime(x.time) : ""}"><span class="lbl">steer</span>${reqHtml(x.text)}</div>`).join("")}
-    </div>
+    </div>`}
     <div class="ans s-${c.state}">
       <div class="head"><span class="cdot"></span><span class="st">${STATE_WORD[c.state] || c.state}</span>${tool ? `<span class="cur">${esc(tool)}</span>` : ""}
-        ${active ? `<button class="btn sm stop" data-stop title="Stop this request (⌘E → Session → Stop)">Stop</button>` : ""}
+        ${active ? `<button class="btn sm stop" data-stop title="Stop this ${c.kind === "auto" ? "turn" : "request"} (⌘E → Session → Stop)">Stop</button>` : ""}
         ${c.state === "paused" && !c.continued ? `<button class="btn sm stop" data-continue="${c.id}" title="Resume the agent and let it go on">Continue</button>` : ""}</div>
       ${processHtml(c, timelineHtml(c), body)}
       ${active && c.thinking && !c.partial ? `<div class="thinking" title="What the model is thinking (streams while it runs)">${esc(c.thinking.slice(-400))}</div>` : ""}
@@ -362,13 +374,13 @@ function noteCard(c) {
   if (S.vault) { loadNoteNames(); if (S.left.shown && S.left.tab === "notes") refreshTree(S.vault, true); }  // or notes (orbit-agent note)
   if (EMBED_REVIEW && s && s.id === EMBED.sid) loadReview();
   if (EMBED || !s || (c.sid === S.current && !S.file && !document.hidden)) return;
-  S.notes = [{ sid: c.sid, cid: c.id, name: s.name, state: c.state, time: c.finished || Date.now() / 1000,
+  S.notes = [{ sid: c.sid, cid: c.id, name: s.name, state: c.state, time: c.finished || Date.now() / 1000, ...(c.kind === "auto" ? { auto: true } : {}),
                text: oneLine(c.state === "error" ? c.error : c.answer).slice(0, 160) },
              ...S.notes.filter(n => !(n.sid === c.sid && n.cid === c.id))].slice(0, 50);
   S.unread.add(c.sid);
   LS.set("notes", S.notes); LS.set("unread", [...S.unread]);
   renderTabs(); renderStatus(); renderLeft();
-  toast(`${s.name}: #${c.id} ${c.state === "error" ? "failed" : "finished"}`, () => openCard(c.sid, c.id));
+  toast(`${s.name}: ${c.kind === "auto" ? "its turn on its own" : "#" + c.id} ${c.state === "error" ? "failed" : "finished"}`, () => openCard(c.sid, c.id));
 }
 /* The agent needs the user in its terminal (Harness Protocol 1.1 attention): a mark on its tab, a toast, the bell. */
 function attentionChanged(s) {
@@ -397,7 +409,7 @@ function notifications() {
     label: `${n.name}${n.text ? " — " + n.text : ""}`, key: ago(n.time),
     run: () => n.open ? openPluginTab(n.plugin, n.open.kind, n.open.key, { title: n.open.title }) : null } : n.kind === "attention" ? {
     label: `${n.name} needs you in its terminal — ${n.text}`, key: ago(n.time), run: () => { switchTo(n.sid); toggleTerminal(); } } : {
-    label: `${n.name} #${n.cid}${n.state === "error" ? " · failed" : ""} — ${n.text || "(no text)"}`, key: ago(n.time),
+    label: `${n.name} ${n.auto ? "· on its own" : "#" + n.cid}${n.state === "error" ? " · failed" : ""} — ${n.text || "(no text)"}`, key: ago(n.time),
     run: () => openCard(n.sid, n.cid) }) : [{ label: "Nothing new", disabled: true }];
   if (S.notes.length) items.push({ sep: true }, { label: "Clear all", run: () => { S.notes = []; S.unread.clear(); LS.set("notes", []); LS.set("unread", []); renderAll(); } });
   menu(items, { anchor: $("#bellbtn"), maxWidth: 520 }, "bell");

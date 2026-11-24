@@ -156,13 +156,16 @@ The hand-off, `<state>/handoff/<session>.json`, written atomically, one per sess
 
 ```json
 {"proc": "…", "offset": 48211, "driver": {…checkpoint()…},
- "session": {"state", "model_seen", "commands", "terminal", "context", "attention", "compactions"},
+ "session": {"state", "model_seen", "commands", "terminal", "context", "attention", "compactions", "auto_turn"},
  "cards": [ …every card of the session, verbatim… ], "busy": true, "time": 1732300000.0}
 ```
 
 The cards are saved whole (ids, hidden, origins, retries, timestamps, steps and their `t0`, background subagents
-still at work, steers, follow-ups): the next server shows exactly what this one showed, and never rebuilds a
-handed-off session from `history()` (whose numbering differs from the Desk's ids, and which marks every step done).
+still at work, steers, follow-ups, a turn the agent began itself still running): the next server shows exactly what
+this one showed, and never rebuilds a handed-off session from `history()` (whose numbering differs from the Desk's
+ids, and which marks every step done). Such a turn is handed off too: the engine's checkpoint carries `auto`, so its
+result still ends its card; a session cut off with one running ends it (cancelled), and is not "interrupted" (there
+is no request to continue).
 
 ### 4.3 Start again: taking the hand-off
 

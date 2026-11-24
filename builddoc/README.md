@@ -115,8 +115,8 @@ One term per concept; use these names in code, UI text and docs.
 |---|---|
 | session | One agent conversation with its own process, folder and model; one session tab |
 | request | One message the user (or another agent, or a schedule) sends to a session; numbered `#<id>` per session |
-| card | The UI unit for one request: the request bubble, its state, tool steps, the answer, follow-ups |
-| answer | The agent's final text for a request; follow-up = text the agent writes after it, before the next request |
+| card | The UI unit for one request: the request bubble, its state, tool steps, the answer, follow-ups. Also a turn the agent took on its own (kind `auto`, "On its own · after a background agent finished": no request started it; id after the last request's, `#5.501`) and a note card (kind `note`, a voice call's transcript) |
+| answer | The agent's final text for a request; follow-up = text the agent writes after it, before the next request, in a turn of its own that runs no tool (one that does is an `auto` card) |
 | driver | The adapter between the server and one harness (create, send, progress, history, stop, close) |
 | Desk | The server's harness-independent layer above the drivers: request queue, cards, groups, history, agent mail |
 | group | A named set of session tabs; ⌘1 is ★ Favorites, ⌘2… the groups in left-panel order |

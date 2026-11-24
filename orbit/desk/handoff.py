@@ -19,7 +19,8 @@ from orbit.drivers.base import Driver
 from orbit.drivers.process import DIRECT, ProcessDriver
 
 
-SESSION_FIELDS = ("state", "model_seen", "commands", "terminal", "context", "attention", "compactions")
+SESSION_FIELDS = ("state", "model_seen", "commands", "terminal", "context", "attention", "compactions",
+                  "auto_turn")  # (a turn of its own not yet a card: read on by the next server)
 
 
 class Handoff:
@@ -98,7 +99,7 @@ class Handoff:
             live = [s for s in self.sessions.values() if s.driver is not None and s.driver.alive()]
             with self.lock:  # a request at work is cut off: it goes on once the new one is up (as after a restart)
                 for s in live:
-                    if s.current() is not None:
+                    if s.current_request() is not None:
                         s.interrupted = True
             self.save()
             closing = [threading.Thread(target=s.driver.close, daemon=True) for s in live]
@@ -203,8 +204,9 @@ class Handoff:
 
     def _cut_off(self, s: Session) -> None:
         """A handed-off session whose process is gone: the request it ran is resumed (resume_interrupted), its
-        background subagents ended with it."""
+        background subagents, and a turn it began itself, ended with it."""
         with self.lock:
+            self._end_auto(s)
             c = s.current()
             if c is not None:
                 c["state"], c["finished"], c["continued"] = "paused", time.time(), True  # (resumed for the user)
@@ -233,7 +235,7 @@ class Handoff:
             print(f"orbit: ending them: {e}", flush=True)
         for p in live:
             s = self.sessions.get(p.get("tag") or "")
-            if s is not None and not s.closed and (s.current() is not None if s.loaded else s.was_running):
+            if s is not None and not s.closed and (s.current_request() is not None if s.loaded else s.was_running):
                 s.interrupted = True
         self.save()
 

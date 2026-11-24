@@ -130,6 +130,33 @@ local_only = true
         self.assertEqual((agent["agent"], agent["result"]), ("explorer", "the README says hello"))
         self.assertEqual([(x["name"], x["summary"]) for x in agent["sub"] if x["kind"] == "tool"], [("Read", "README.md")])
 
+    def test_a_turn_of_its_own(self):
+        """(1.3) Any harness on the engine, not only Claude Code: a turn the agent begins between requests that runs a
+        tool is a card of its own (kind auto) that a request queues behind; its `result` without a request ends it;
+        history's "auto" line rebuilds it at the same place."""
+        s = self.new_fake("later")
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "later please"})
+        self.wait_card(s["id"], 1, ("completed",))
+        end = time.time() + 5
+        cards = lambda: self.req("GET", f"/api/sessions/{s['id']}/cards")[1]["cards"]
+        while time.time() < end and not any(c.get("kind") == "auto" for c in cards()):
+            time.sleep(0.05)
+        auto = next(c for c in cards() if c.get("kind") == "auto")
+        self.assertEqual((auto["id"], auto["text"], auto["state"]), (1.501, "On its own", "running"))  # (it did not say why)
+        q = self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "next"})[1]
+        self.assertEqual((q["id"], q["state"]), (2, "queued"))
+        auto = self.wait_card(s["id"], 1.501, ("completed",))
+        self.assertEqual(auto["answer"], "all green")
+        self.assertEqual([(x["kind"], x.get("name") or x.get("text")) for x in auto["steps"]],
+                         [("note", "the nightly check finished; looking at it"), ("tool", "Bash")])
+        self.assertEqual(self.wait_card(s["id"], 2, ("completed",))["answer"], "answer: next")
+        type(self)._unserve()
+        type(self)._serve()
+        got = cards()
+        self.assertEqual([(c["id"], c.get("kind", "")) for c in got], [(1, ""), (1.501, "auto"), (2, "")])
+        self.assertEqual((got[1]["text"], got[1]["auto"]["what"], got[1]["answer"]),
+                         ("After a background check finished: nightly check", "nightly check", "all green"))
+
     def test_a_process_that_dies_is_continued_and_the_conversation_kept(self):
         from unittest import mock
         from orbit.desk import driving

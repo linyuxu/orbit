@@ -56,6 +56,7 @@ class StreamTest(unittest.TestCase):
         got = []
         d = ClaudeDriver(session_id="x", cwd="/tmp", model="", mode="default", emit=got.append, resume=False)
         self.assertIn("--include-partial-messages", d.command())
+        d.busy = True  # (in a request: while idle, the first of them would begin a turn of its own, announced by `auto`)
         d.handle({"type": "stream_event", "event": {"type": "content_block_start", "content_block": {"type": "thinking"}}})
         d.handle({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "thinking_delta", "thinking": "hmm"}}})
         d.handle({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hel"}}})

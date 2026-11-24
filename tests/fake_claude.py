@@ -15,6 +15,9 @@ without spending API calls. Behaviour per request text:
   "bgagent ..." the same in the background: launched at once, the answer, then the subagent works and a task
                 notification brings its report
   "bgslow ..." a background subagent that greps, then works on for $FAKE_BG_SLOW s (60) before it reports
+  "wake ..."  like bgagent, but the subagent's task notification wakes it for a turn of its own (no request): it
+              says something, reads a file ($FAKE_WAKE_SLOW s, 1.5), launches a background subagent of its own
+              (which works and reports after that turn) and answers; a message sent meanwhile is folded into it
   anything else: one Bash step, then "answer: <text>"
 Its init event names its pid; inputs.log records each message it received with its pid.
 """
@@ -83,30 +86,30 @@ def tool_result(tid, text, err=False):
 SUB_REPORT = "The parser lives in `a.py`: `parse()` returns early on empty input."
 
 
-def subagent(tid, background=False, slow=False):
+def subagent(tid, background=False, slow=False, agent="x1", what="Find the parser", wakes=False):
     """An Agent call: the subagent's turn streams with parent_tool_use_id (and goes to <session>/subagents/)."""
     assistant([{"type": "tool_use", "id": tid, "name": "Agent",
-                "input": {"subagent_type": "Explore", "description": "Find the parser", "prompt": "Where is the parser?",
+                "input": {"subagent_type": "Explore", "description": what, "prompt": "Where is the parser?",
                           **({"run_in_background": True} if background else {})}}])
     sub_dir = os.path.join(root, "fake", sid, "subagents")
     os.makedirs(sub_dir, exist_ok=True)
-    with open(os.path.join(sub_dir, "agent-x1.meta.json"), "w") as f:
-        json.dump({"agentType": "Explore", "description": "Find the parser", "toolUseId": tid,
+    with open(os.path.join(sub_dir, f"agent-{agent}.meta.json"), "w") as f:
+        json.dump({"agentType": "Explore", "description": what, "toolUseId": tid,
                    "requestShape": "background" if background else "foreground"}, f)
     if background:  # answered at once; the work and the report come after
-        launch = [{"type": "tool_result", "tool_use_id": tid, "content": [{"type": "text", "text": "Async agent launched successfully. agentId: x1"}]}]
+        launch = [{"type": "tool_result", "tool_use_id": tid, "content": [{"type": "text", "text": f"Async agent launched successfully. agentId: {agent}"}]}]
         out({"type": "user", "message": {"role": "user", "content": launch}, "parent_tool_use_id": None,
              "tool_use_result": {"isAsync": True, "status": "async_launched"}})
         log({"type": "user", "message": {"role": "user", "content": launch}, "toolUseResult": {"isAsync": True, "status": "async_launched"}})
-        return lambda: subagent_work(tid, sub_dir, background=True, slow=slow)
+        return lambda: subagent_work(tid, sub_dir, background=True, slow=slow, agent=agent, what=what, wakes=wakes)
     subagent_work(tid, sub_dir)
 
 
-def subagent_work(tid, sub_dir, background=False, slow=False):
+def subagent_work(tid, sub_dir, background=False, slow=False, agent="x1", what="Find the parser", wakes=False):
     def sub(msg):
         out({**msg, "parent_tool_use_id": tid, "session_id": sid})
-        with open(os.path.join(sub_dir, "agent-x1.jsonl"), "a") as f:
-            f.write(json.dumps({**msg, "isSidechain": True, "agentId": "x1", "timestamp": now()}) + "\n")
+        with open(os.path.join(sub_dir, f"agent-{agent}.jsonl"), "a") as f:
+            f.write(json.dumps({**msg, "isSidechain": True, "agentId": agent, "timestamp": now()}) + "\n")
     sub({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Looking for the parser."}]}})
     sub({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": tid + "g", "name": "Grep", "input": {"pattern": "def parse"}}]}})
     sub({"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tid + "g", "content": "a.py:3"}]}})
@@ -117,11 +120,15 @@ def subagent_work(tid, sub_dir, background=False, slow=False):
     sub({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Found it in a.py."}]}})
     if background:  # its report arrives as a task notification (a queued command for the main agent)
         sub({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": SUB_REPORT}]}})
-        note = (f"<task-notification>\n<task-id>x1</task-id>\n<tool-use-id>{tid}</tool-use-id>\n<status>completed</status>\n"
-                f"<summary>Agent \"Find the parser\" finished</summary>\n<result>{SUB_REPORT}</result>\n</task-notification>")
-        out({"type": "system", "subtype": "task_notification", "task_id": "x1", "tool_use_id": tid, "status": "completed",
+        note = (f"<task-notification>\n<task-id>{agent}</task-id>\n<tool-use-id>{tid}</tool-use-id>\n<status>completed</status>\n"
+                f"<summary>Agent \"{what}\" finished</summary>\n<result>{SUB_REPORT}</result>\n</task-notification>")
+        out({"type": "system", "subtype": "task_notification", "task_id": agent, "tool_use_id": tid, "status": "completed",
              "summary": SUB_REPORT, "summary_is_report": True, "session_id": sid})  # as Claude Code sends it
-        log({"type": "attachment", "attachment": {"type": "queued_command", "prompt": note}})
+        if wakes:  # it begins a turn of its own: the notification is that turn's user-role message
+            log({"type": "user", "message": {"role": "user", "content": note}, "origin": {"kind": "task-notification"},
+                 "turnOrigin": "task_notification", "promptSource": "system"})
+        else:
+            log({"type": "attachment", "attachment": {"type": "queued_command", "prompt": note}})
         return
     tool_result(tid, [{"type": "text", "text": SUB_REPORT}])
 
@@ -203,6 +210,8 @@ def _handle(text, n):
         subagent(tid + "s")
     if text.startswith("bgagent"):
         later = subagent(tid + "s", background=True)
+    if text.startswith("wake"):
+        later = subagent(tid + "s", background=True, wakes=True)
     if text.startswith("bgslow"):  # (on its own thread: the next requests are not held up)
         work = subagent(tid + "s", background=True, slow=True)
         later = lambda: threading.Thread(target=work, daemon=True).start()
@@ -220,12 +229,52 @@ def _handle(text, n):
     assistant([{"type": "text", "text": answer}])
     result(answer)
     if later:  # a background subagent works on after the answer
+        running.clear()  # (idle: a message now is a request of its own)
         time.sleep(0.3)
         later()
+    if text.startswith("wake") and inbox.empty():  # its report woke it: a turn of its own (no request)
+        woken(tid)
     if text.startswith("follow"):
         time.sleep(0.3)
         if inbox.empty():  # like the real harness: a spontaneous turn only while no request is waiting
             assistant([{"type": "text", "text": "a follow-up"}])
+            result("a follow-up")  # (a turn of its own ends with a result too)
+
+
+WAKE_SAID = "The parser agent reported back; checking the file it named."
+WAKE_ANSWER = "I started an agent to check the tests."
+
+
+def woken(tid):
+    """A turn Claude Code begins itself after a background task's notification: thinking, a word, a Read, a background
+    subagent of its own, the answer, its result; that subagent works and reports after the turn."""
+    running.set()
+    out({"type": "system", "subtype": "init", "session_id": sid, "cwd": os.getcwd(), "model": "fake-1", "pid": os.getpid(),
+         "slash_commands": ["compact"], "terminal_slash_commands": []})
+    out({"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking"}},
+         "parent_tool_use_id": None, "session_id": sid})
+    out({"type": "stream_event", "event": {"type": "content_block_delta", "index": 0,
+                                           "delta": {"type": "thinking_delta", "thinking": "The report is in."}},
+         "parent_tool_use_id": None, "session_id": sid})
+    assistant([{"type": "text", "text": WAKE_SAID}])
+    assistant([{"type": "tool_use", "id": tid + "wr", "name": "Read", "input": {"file_path": "/src/parser/a.py"}}])
+    interrupted.clear()
+    end = time.time() + float(os.environ.get("FAKE_WAKE_SLOW", "1.5"))
+    while time.time() < end:
+        if interrupted.is_set():  # Stop: the interrupt ends this turn too
+            tool_result(tid + "wr", "interrupted", True)
+            result("", ok=False)
+            running.clear()
+            return
+        time.sleep(0.05)
+    tool_result(tid + "wr", "def parse(): ...")
+    work = subagent(tid + "wa", background=True, agent="x2", what="Check the tests")
+    answer = WAKE_ANSWER + ("" if not steered else " steered: " + ", ".join(steered))
+    steered.clear()
+    assistant([{"type": "text", "text": answer}])
+    result(answer)
+    running.clear()
+    threading.Thread(target=lambda: (time.sleep(0.3), work()), daemon=True).start()
 
 
 def worker():

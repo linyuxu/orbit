@@ -8,7 +8,7 @@ import threading
 import time
 
 from orbit.desk.session import ACTIVE, DRIVERS, MODES, ORBIT_PREFIX, orbit_line, orbit_skill_hint, Session
-from orbit.drivers.base import Driver, DriverEvent, unavailable
+from orbit.drivers.base import auto_title, Driver, DriverEvent, unavailable
 from orbit.drivers.process import ProcessDriver
 
 AUTO_RETRIES = 2  # a request whose agent died goes on by itself this many times before it waits for Continue
@@ -49,6 +49,7 @@ class Driving:
                     s.catching_up = False  # (a protocol agent's error is a "ready" too: not the end of catching up)
                 if s.state in ("stopped", "not ready", "starting"):  # its process is gone: so are its background subagents
                     self._end_background(s)
+                    self._end_auto(s)  # (and a turn it began itself)
                 self._session_changed(s)
                 if s.state == "ready":
                     self._pump(s)
@@ -116,13 +117,22 @@ class Driving:
                             st["done"], st["error"] = True, d["error"]
                 self._card_changed_soon(card)
                 return
+            if ev.kind == "auto":  # the harness began a turn by itself (no request): what woke it; its card comes with
+                if c is None:      # its first step, and a turn that only talks stays follow-ups on the last card
+                    last = self._last_card(s)
+                    s.auto_turn = {"why": str(d.get("why") or ""), "what": str(d.get("what") or ""),
+                                   "card": last["id"] if last else None, "n": len(last["followups"]) if last else 0}
+                return
+            if c is None and ev.kind == "tool_start":  # a turn of its own that works: a card of its own (its steps,
+                c = self._auto_card(s)                 # subagents and answer show as a request's do)
             if c is None:
                 # Text after the answer, before the next request: a follow-up on the last finished card.
-                last = next((x for x in reversed(s.cards) if x.get("kind") != "note"), None)
+                last = self._last_card(s)
                 if ev.kind == "text" and last is not None:
-                    if last["state"] not in ("queued",):
-                        last["followups"].append(d["text"])
-                        self._card_changed(last)
+                    last["followups"].append(d["text"])
+                    self._card_changed(last)
+                elif ev.kind == "result":
+                    s.auto_turn = None
                 return
             if ev.kind in ("delta", "thinking"):  # streaming: the text (or thinking) being written right now
                 if ev.kind == "delta":
@@ -172,6 +182,9 @@ class Driving:
                     c["state"] = "completed"
                 elif d.get("cancelled"):
                     c["state"] = "cancelled"
+                elif c.get("kind") == "auto":  # (no request to continue: a turn of its own that broke off ends there)
+                    c["state"] = "error"
+                    c["error"] = d.get("error", "") or "the agent stopped before it finished"
                 elif d.get("paused"):
                     c["state"] = "paused"
                     c["error"] = d.get("error", "") or "the agent stopped before it finished"
@@ -254,6 +267,47 @@ class Driving:
                     hit = True
             if hit:
                 self._card_changed(card)
+
+    @staticmethod
+    def _last_card(s: Session) -> dict | None:
+        """The card a follow-up goes on: the last request or turn of its own (not a note, not one still queued)."""
+        return next((x for x in reversed(s.cards) if x.get("kind") != "note" and x["state"] != "queued"), None)
+
+    def _auto_card(self, s: Session) -> dict:
+        """A card for a turn the harness began itself: not a request (kind "auto", drawn as "On its own", no edit or
+        resend), titled by what woke it. Its id sits after the last request's (5.501, 5.502 …, as notes' 5.001 do), so
+        requests keep the numbers the harness's history gives them, whether or not history finds the same turns. The
+        text it said before its first step (follow-ups on the last card until then) moves into it."""
+        a = s.auto_turn or {}
+        s.auto_turn = None
+        why, what = a.get("why", ""), a.get("what", "")
+        after = max((int(x["id"]) for x in s.cards if x.get("kind") not in ("note", "auto") and x["state"] != "queued"),
+                    default=0)
+        k = sum(1 for x in s.cards if x.get("kind") == "auto" and int(x["id"]) == after)
+        now = time.time()
+        c = {**self._new_card(s, round(after + 0.5 + (k + 1) / 1000, 3), auto_title(why, what), now), "kind": "auto",
+             "auto": {"why": why, "what": what}, "state": "thinking", "started": now}
+        prev = next((x for x in s.cards if x["id"] == a.get("card")), None)
+        if prev is not None and len(prev["followups"]) > a.get("n", 0):
+            said, prev["followups"] = prev["followups"][a["n"]:], prev["followups"][:a["n"]]
+            c["live"] = "\n\n".join(said)  # (the next step makes it a note, as a request's narration)
+            self._card_changed(prev)
+        s.cards.append(c)
+        s.cards.sort(key=lambda x: x["id"])
+        self._session_changed(s)
+        return c
+
+    def _end_auto(self, s: Session) -> None:
+        """A turn of its own still marked running when its agent's process went: it ended with it."""
+        s.auto_turn = None
+        for c in s.cards:
+            if c.get("kind") == "auto" and c["state"] in ACTIVE:
+                c["state"], c["finished"] = "cancelled", time.time()
+                c["partial"] = c["thinking"] = c["activity"] = ""
+                for st in c["steps"]:
+                    if not st.get("background"):
+                        st["done"] = True
+                self._card_changed(c)
 
     @staticmethod
     def _agent_step(s: Session, tool_id: str) -> tuple[dict | None, dict | None]:

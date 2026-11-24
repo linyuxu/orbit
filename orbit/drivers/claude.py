@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from orbit import ROOT
-from orbit.drivers.base import DriverEvent, HistoryCard
+from orbit.drivers.base import auto_title, DriverEvent, HistoryCard
 from orbit.drivers.process import ProcessDriver
 
 
@@ -82,6 +82,44 @@ def _notifications(obj: Any) -> list[dict]:
                 walk(x)
     walk(obj)
     return out
+
+
+def _tool_label(b: dict) -> list[str]:
+    """A tool call as [name, what it does]: what a turn it wakes later is titled by (a Bash call's description, else
+    the line its step shows)."""
+    name, inp = b.get("name", "tool"), b.get("input") or {}
+    desc = inp.get("description") if isinstance(inp.get("description"), str) else ""
+    return [name, (desc.strip() or tool_summary(name, inp))[:200]]
+
+
+_NOTE_SUMMARY = re.compile(r'\s*(Agent|Background command|Background task|Task|Command)\s+"(.+?)"', re.S)
+
+
+def _woke(label: list[str] | None, status: str = "", summary: str = "") -> dict[str, str]:
+    """What woke Claude Code for a turn of its own, from the task notification it got: {why, what}, e.g. "after a
+    background agent finished", "Find the parser". label: the finished call's _tool_label when known; summary: the
+    notification's own line ('Agent "Find the parser" completed'), when it is not the report itself."""
+    name, what = (label or ["", ""])[:2]
+    m = _NOTE_SUMMARY.match(summary or "")
+    if name in AGENT_TOOLS or (not name and m and m.group(1) == "Agent"):
+        kind = "agent"
+    elif name == "Bash" or (not name and m and "ommand" in m.group(1)):
+        kind = "command"
+    else:
+        kind = "task"
+    done = {"failed": "failed", "error": "failed", "killed": "was stopped", "stopped": "was stopped"}.get(status, "finished")
+    return {"why": f"after a background {kind} {done}", "what": (what or (m.group(2) if m else "")).strip()[:200]}
+
+
+def _notice_turn(content: Any) -> dict[str, str] | None:
+    """A user-role message that is a task notification (Claude Code begins a turn of its own with it): what woke it."""
+    text = content if isinstance(content, str) else "\n".join(
+        b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text") if isinstance(content, list) else ""
+    if not text.lstrip().startswith("<task-notification"):
+        return None
+    body = (NOTE_RE.findall(text) or [""])[0]
+    tag = lambda k: (re.search(rf"<{k}>(.*?)</{k}>", body, re.S) or [None, ""])[1].strip()
+    return {"id": tag("tool-use-id"), "status": tag("status"), "summary": tag("summary")}
 
 
 def _result_text(content: Any) -> str:
@@ -209,6 +247,7 @@ class ClaudeDriver(ProcessDriver):
     def __init__(self, **kw):
         super().__init__(**kw)
         self.agent_calls: set[str] = set()  # this session's Agent tool calls (their results are subagents' reports)
+        self.labels: dict[str, list[str]] = {}  # recent tool calls: [name, what] (a turn their end wakes is titled by it)
 
     # ------------------------------------------------------------------ process
     def program(self) -> list[str]:
@@ -239,11 +278,12 @@ class ClaudeDriver(ProcessDriver):
         self.resume = True  # later processes continue this conversation
 
     def checkpoint(self) -> dict[str, Any]:
-        return {**super().checkpoint(), "agent_calls": sorted(self.agent_calls)}
+        return {**super().checkpoint(), "agent_calls": sorted(self.agent_calls), "labels": self.labels}
 
     def restore(self, cp: dict[str, Any]) -> None:
         super().restore(cp)
         self.agent_calls = {str(x) for x in cp.get("agent_calls") or []}
+        self.labels = {str(k): [str(x) for x in v][:2] for k, v in (cp.get("labels") or {}).items() if isinstance(v, list)}
 
     def terminal_command(self) -> list[str] | None:
         return self.program() + ["--resume", self.session_id] if self.transcript() else None
@@ -266,7 +306,10 @@ class ClaudeDriver(ProcessDriver):
     def handle(self, msg: dict) -> None:
         t, st = msg.get("type"), msg.get("subtype")
         if t == "system" and st == "task_notification":  # a background subagent finished: its status and report
-            if msg.get("tool_use_id") in self.agent_calls:
+            tid = str(msg.get("tool_use_id") or "")  # (Claude Code may begin a turn of its own on it: titled by it)
+            self.woke = _woke(self.labels.get(tid), str(msg.get("status") or ""),
+                              "" if msg.get("summary_is_report") else str(msg.get("summary") or ""))
+            if tid in self.agent_calls:
                 self.emit(DriverEvent("agent_done", {"id": msg["tool_use_id"], "status": str(msg.get("status") or ""),
                                                      "result": str(msg.get("summary") or "")}))
             return
@@ -274,6 +317,7 @@ class ClaudeDriver(ProcessDriver):
             for n in _notifications(msg):
                 if n["id"] in self.agent_calls:
                     self.emit(DriverEvent("agent_done", n))
+                self.woke = self.woke or _woke(self.labels.get(n["id"]), n["status"])
         if t == "stream_event":  # --include-partial-messages: deltas of the block being written
             if msg.get("parent_tool_use_id"):
                 return  # a subagent's inner turn
@@ -305,6 +349,9 @@ class ClaudeDriver(ProcessDriver):
                     st = _step(b)
                     if "agent" in st:
                         self.agent_calls.add(st["id"])
+                    self.labels[st["id"]] = _tool_label(b)
+                    if len(self.labels) > 300:  # (the newest are the ones a notification names)
+                        self.labels.pop(next(iter(self.labels)))
                     self.tool_started(st)
             u = m.get("usage") or {}
             ctx = sum(int(u.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens",
@@ -361,10 +408,16 @@ class ClaudeDriver(ProcessDriver):
         cur: HistoryCard | None = None
         texts: list[str] = []  # text since the last tool call, the candidate answer
         open_steps: dict[str, dict] = {}
+        labels: dict[str, list[str]] = {}  # tool calls: [name, what] (a turn a notification begins is titled by it)
 
         def settle():
-            if cur is not None:
-                cur.answer = "\n\n".join(texts)
+            if cur is None:
+                return
+            cur.answer = "\n\n".join(texts)
+            if cur.kind == "auto" and not cur.steps:  # a turn of its own that only talked: follow-ups (as live)
+                cards.remove(cur)
+                if cards:
+                    cards[-1].followups.extend(t for t in texts if t.strip())
 
         with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -380,9 +433,17 @@ class ClaudeDriver(ProcessDriver):
                     if d.get("isMeta") or d.get("isCompactSummary"):
                         continue
                     text = _user_text(content)
+                    note = _notice_turn(content) if text is None else None
                     if text is not None:
                         settle()
                         cur = HistoryCard(text=text, time=_ts(d.get("timestamp")))
+                        cards.append(cur)
+                        texts, open_steps = [], {}
+                    elif note is not None:  # a background task finished and Claude Code began a turn of its own
+                        settle()
+                        woke = _woke(labels.get(note["id"]), note["status"], note["summary"])
+                        cur = HistoryCard(text=auto_title(woke["why"], woke["what"]), time=_ts(d.get("timestamp")),
+                                          kind="auto", auto=woke)
                         cards.append(cur)
                         texts, open_steps = [], {}
                     elif cur is not None and isinstance(content, list):
@@ -406,6 +467,7 @@ class ClaudeDriver(ProcessDriver):
                                                   "done": True, "error": False})
                             texts = []
                             s = _step(b)
+                            labels[s["id"]] = _tool_label(b)
                             cur.steps.append(s)
                             open_steps[s["id"]] = s
                     cur.finished = _ts(d.get("timestamp")) or cur.finished
