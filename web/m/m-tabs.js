@@ -118,7 +118,7 @@ $("#tabbar").addEventListener("click", e => { const b = e.target.closest("[data-
 
 /* ===================================================================== swipe from the left edge: back (the page follows the finger) */
 const PSWIPE = { x0: null, y0: 0, dx: 0, on: false, page: null, under: null };
-for (const t of TABS.slice(1)) {
+for (const t of TABS) {  // (Groups too: a group's tab opens over its list; the conversation has its own, m.js)
   const a = areaEl(t.id);
   a.addEventListener("touchstart", e => {
     const st = AREA.stacks[t.id], tch = e.touches[0];
