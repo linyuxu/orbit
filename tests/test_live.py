@@ -219,6 +219,24 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertTrue(c2["text"].startswith("Also, retry that\n\n(Context, not an instruction: the voice had just said: "
                                               '"The build failed on step two.")'), c2["text"])
 
+    def test_status_while_the_agent_is_busy(self):
+        """A request that waits behind another: the voice is told (silently) that it is queued and why; more words
+        while it waits join it, and the voice is told it is one request, not several."""
+        s = self.new_session("Busy")
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "slow job"})
+        self.wait_card(s["id"], 1, ("running",))
+        self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+        self.assertTrue(self.fake.wait_attached(1))
+        self.fake.emit(t_in("check the logs", 500, 1500, "b1"), delegation("del_q", 1600, "dq"))
+        st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_q"])
+        self.assertIn("request #2; it waits: the agent is busy with request #1", st[0]["content"])
+        self.fake.emit(t_in("and the build", 2000, 2800, "b2"), delegation("del_q2", 2900, "dq2"))
+        st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_q2"])
+        self.assertIn("added these words to request #2, which has not started", st[0]["content"])
+        self.assertIn("one request, not several", st[0]["content"])
+        self.assertEqual(self.cards(s["id"])[1]["text"], "check the logs\n\nand the build")
+        self.req("POST", f"/api/sessions/{s['id']}/stop")
+
     def test_assemble(self):
         F = lambda key, who, text, a, b, seq: {"key": key, "who": who, "text": text, "start": a, "end": b, "seq": seq}
         frags = [F("b", "user", "world", 500, 900, 1), F("a", "user", "hello ", 100, 500, 2),
@@ -290,7 +308,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         finally:
             live.PROGRESS_EVERY_S = old
         th = [e for e in self.fake.got("session.thinking.append") if e["delegation_id"] == "del_f"]
-        progress = th[1:]  # (the first is the empty one)
+        progress = [e for e in th[1:] if not e["event_id"].startswith("status_")]  # (the first is the empty one; then what became of the request)
         self.assertEqual(th[0]["content"], "")
         self.assertGreaterEqual(len(progress), 1)
         self.assertLessEqual(len(progress), took / 0.3 + 1)

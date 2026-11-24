@@ -110,10 +110,11 @@ function cardHtml(c) {
   MD_MACHINE = sess.remote || ""; MD_CWD = sess.cwd || "";
   try { return cardHtml0(c); } finally { MD_MACHINE = ""; MD_CWD = ""; }
 }
+const VOICE_SENT_TIP = "Asked in a voice call (GPT Live). The agent got the words below as they were transcribed; what you said while it waited to start is joined into this one request. It also got one line not shown here: “This request came by voice (the user's transcribed speech: it may mishear words); the start of your answer is spoken back to them, so lead with the takeaway in a sentence or two; code, tables and details stay in Orbit.”";
 /* Where a request came from, when a plugin sent it (Slack, a webhook …): "via <label>", a link if it gave one. */
 function originHtml(o) {
   if (!o || !(o.label || o.plugin)) return "";
-  if (o.label === "Voice" && !o.plugin) return `<div class="origin" title="Asked in a voice call (GPT Live)">${I("mic", 11)}via Voice</div>`;
+  if (o.label === "Voice" && !o.plugin) return `<div class="origin" title="${esc(VOICE_SENT_TIP)}">${I("mic", 11)}via Voice</div>`;
   const what = esc(o.label || o.plugin), tip = esc(`Sent by the ${o.plugin || "a"} plugin`);
   const url = o.url && /^(https?|slack):\/\//.test(o.url) ? o.url : "";
   return `<div class="origin" title="${tip}">${I("plug", 11)}via ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${what}</a>` : what}</div>`;

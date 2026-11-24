@@ -112,6 +112,13 @@ On `session.delegation.created` (`delegation.id`, `offset_ms`; it carries **no t
 Corrections: a delegation while the previous one's card is still queued edits that card instead (Orbit's `edit`);
 while it runs and the harness steers (Claude Code), it steers it; otherwise a new request.
 
+- **What became of it, told silently.** After each delegation the voice gets one `thinking.append` with the facts:
+  sent and running; queued behind request #N ("tell the user in a few words that it is queued"); words joined to
+  the waiting request #N ("one request, not several"); or added to the running one. Found in a real call: with the
+  session busy, three things the user said became one queued request, and the voice, told nothing, invented "I sent
+  several requests, handled one by one". The instructions also forbid describing Orbit's handling beyond what it is
+  told. With the spoken acknowledgement on, the status waits until after its moment (any append cancels it).
+
 ## 6. Results → spoken
 
 Following the card (`/api/events`, by session and card id):

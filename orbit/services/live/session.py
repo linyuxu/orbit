@@ -121,6 +121,7 @@ Do not delegate when:
 - The question is self-contained, or about what was already said or reported in this call.
 - You need a brief clarification to understand the request.
 Delegate to the backend before giving an answer that depends on backend work. Do not guess the result while waiting.
+Never describe how Orbit or the agent handles requests beyond what Orbit tells you in this call.
 When a result arrives, say only what it says. Never add facts, names or details that are not in the result or in this \
 call; if the result does not answer what the user asked, say so plainly and offer to ask the agent again.
 
@@ -609,7 +610,35 @@ class Call:
         self.log("request", delegation=did, cid=c["id"], how=how, state=c["state"], words=words,
                  ms_delegation_to_card=int((time.time() - d["at"]) * 1000), duplicate=bool(c.get("duplicate")))
         self._tell("delegation", delegation=did, cid=c["id"], how=how, sid=self.sid, offset=d["offset"])
+        if not c.get("duplicate") and c["state"] not in FINAL:
+            self._status(did, c, how)
         self._on_card(c)  # (a duplicate may already be done)
+
+    def _status(self, did: str, c: dict, how: str) -> None:
+        """What became of the request, as silent context: the voice knows the facts (sent, queued behind another,
+        joined to a waiting one) instead of guessing how Orbit handles it."""
+        s = self.desk.get(self.sid)
+        with self.desk.lock:
+            run = next((x for x in s.cards if x["state"] in ACTIVE and x["id"] != c["id"]), None)
+        busy = f'the agent is busy with request #{run["id"]}' if run else "another request runs first"
+        if how == "edit":
+            fact = (f"Orbit added these words to request #{c['id']}, which has not started: {busy}. It is one request, "
+                    "not several. Its answer comes when the agent gets to it.")
+        elif how == "steer":
+            fact = f"Orbit added these words to request #{c['id']} while the agent works on it."
+        elif c["state"] == "queued":
+            fact = (f"Orbit sent this as request #{c['id']}; it waits: {busy}. Tell the user in a few words that it "
+                    "is queued; its answer comes when the agent gets to it.")
+        else:
+            fact = f"Orbit sent this as request #{c['id']}; the agent is working on it."
+        ev = {"type": "session.thinking.append", "event_id": f"status_{did}", "delegation_id": did, "content": fact}
+        wait = ACK_DELAY_MS / 1000 + 0.3 - (time.time() - self.dels[did]["at"]) if self.cfg["live_ack"] else 0
+        if wait > 0:  # (any append cancels the spoken acknowledgement the user asked for: after its moment)
+            tm = threading.Timer(wait, lambda: None if self.ended else self._send(ev))
+            tm.daemon = True
+            tm.start()
+        else:
+            self._send(ev)
 
     # ------------------------------------------------------------------ results → spoken
     def _follow_cards(self) -> None:
