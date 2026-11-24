@@ -209,6 +209,11 @@ delegation has no result yet the session does not go to standby (60 s of silence
 takes minutes is still said when it ends, and that wait is billed as active. (The WebSocket transport refuses
 `idle_timeout_s`: "requires a session with wake policy support".) Muting only disables the page's microphone track:
 GPT Live sees silence, so standby follows the same rule.
+In standby a `commentary.append` is **not spoken and not even acknowledged** (no `.appended`), whether on the
+finished delegation or with `delegation_id: null`; while active, a second commentary on a finished delegation is
+spoken (~0.9 s). Orbit only speaks on delegations that are still open (results, failures, take-back / move-in
+facts), which keep the session active, so nothing is lost today; anything spoken without an open delegation (a
+request typed in Orbit finishing, an auto turn) would have to wait for the user's next words, or the next call.
 
 ## 7. Interruption, hang-up, expiry
 
