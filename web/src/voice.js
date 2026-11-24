@@ -38,6 +38,7 @@ function renderCallBtn() {
   /* In a call with the session in front: the orb in the input's place (unless typing instead); the state under it. */
   const orb = on && here && !S.file && !VOICE.typing, ob = $("#voiceorb");
   ob.hidden = !orb;
+  GYRO.run(orb);
   ob.className = on ? "call-" + VOICE.phase : "";
   $("#inputhost").style.display = orb ? "none" : "";
   ob.querySelector(".vorbst").textContent = orb ? VOICE_WORD[VOICE.phase] + (VOICE.phase === "standby" ? " · speak to wake it" : "") : "";
@@ -149,17 +150,69 @@ function meterTick() {
     const jig = 0.75 + 0.25 * Math.sin(tm * (7 + i * 1.7) + i * 2.1);  // so the bars do not move as one
     el.style.transform = `scaleY(${(0.42 + 0.58 * Math.min(1, METER.v * jig * (i === 2 ? 1 : 1.15))).toFixed(3)})`;
   });
-  ORB.style.setProperty("--lv", METER.v.toFixed(3));  // (the orb swells with the sound)
   METER.raf = requestAnimationFrame(meterTick);
 }
-const ORB = $("#voiceorb .vorb");
+/* The orb in a call: a gyroscope. A cloud core (it swells with the sound) and two rings tumbling around it in 3D:
+   each ring's near half passes in front of the core, its far half behind. Faster while the voice speaks, nearly
+   still in standby. Its own frame loop runs while it is shown. */
+const GYRO = (() => {
+  const svg = $("#voiceorb .vorb");
+  svg.innerHTML = `<defs>
+      <radialGradient id="vgN" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#dff0ff"/><stop offset=".35" stop-color="var(--voice-1)"/><stop offset=".75" stop-color="var(--voice-2)"/><stop offset="1" stop-color="#1a3596"/></radialGradient>
+      <radialGradient id="vgG"><stop offset="0" stop-color="var(--voice-1)" stop-opacity=".5"/><stop offset="1" stop-color="var(--voice-1)" stop-opacity="0"/></radialGradient>
+      <filter id="vgB" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
+      <clipPath id="vgC"><circle cx="50" cy="50" r="17"/></clipPath></defs>
+    <g class="gback"></g>
+    <g class="gcore"><circle cx="50" cy="50" r="31" fill="url(#vgG)"/><circle cx="50" cy="50" r="17" fill="url(#vgN)"/>
+      <g clip-path="url(#vgC)" style="mix-blend-mode:screen">
+        <ellipse class="gcl" cx="44" cy="46" rx="9" ry="6.5" fill="#fff" opacity=".75" filter="url(#vgB)"/>
+        <ellipse class="gcl" cx="55" cy="55" rx="7.5" ry="7" fill="#a5f3fc" opacity=".75" filter="url(#vgB)"/>
+        <ellipse class="gcl" cx="48" cy="58" rx="6.5" ry="5" fill="#c7d2fe" opacity=".75" filter="url(#vgB)"/></g></g>
+    <g class="gfront"></g>`;
+  const back = svg.querySelector(".gback"), front = svg.querySelector(".gfront"), core = svg.querySelector(".gcore");
+  const clouds = [...svg.querySelectorAll(".gcl")];
+  const path = () => {
+    const e = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    e.setAttribute("fill", "none"); e.setAttribute("stroke", "var(--voice-1)"); e.setAttribute("stroke-linecap", "butt");  // (round ends would overlap where the halves meet)
+    return e;
+  };
+  const rings = [0, 1].map(() => ({ lower: path(), upper: path() }));  // each ring as two halves (A40 ry, sweep 0 · 1)
+  let ph = 0, lv = 0, raf = 0, last = 0;
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)");  // (slower, not still: it still says the call is live)
+  const frame = now => {
+    const dt = Math.min(.05, (now - (last || now)) / 1000); last = now;
+    const p = VOICE.phase, T = now / 1000;
+    lv += ((p === "listening" || p === "speaking" ? METER.v : 0) - lv) * .3;
+    const speed = { speaking: 1.9, listening: 1, connecting: .6, standby: .12, ended: 0 }[p] ?? .5;
+    ph += dt * speed * (1 + lv) * (REDUCED.matches ? .3 : 1.6);
+    core.setAttribute("transform", `translate(50 50) scale(${(1 + lv * .14).toFixed(3)}) translate(-50 -50)`);
+    clouds.forEach((c, i) => c.setAttribute("transform", `translate(${(Math.sin(ph * (.5 + i * .2) + i) * 3.5).toFixed(2)} ${(Math.cos(ph * (.45 + i * .17) + i * 2) * 3.5).toFixed(2)})`));
+    rings.forEach((r, i) => {
+      const q = ph + i * 1.7, c = Math.cos(q * (i ? .8 : 1)), ry = Math.abs(c) * 40 + 3, rot = (q * 30 + i * 90) % 360;
+      const nearLower = c > 0;  // (the half towards the viewer flips as the ring turns through edge-on)
+      for (const [k, sw] of [["lower", 0], ["upper", 1]]) {
+        const el = r[k], near = (k === "lower") === nearLower, g = near ? front : back;
+        if (el.parentNode !== g) g.appendChild(el);
+        el.setAttribute("d", `M10 50 A40 ${ry.toFixed(2)} 0 0 ${sw} 90 50`);
+        el.setAttribute("transform", `rotate(${rot.toFixed(1)} 50 50)`);
+        el.setAttribute("stroke-width", near ? 1.5 : 1.1);
+        el.setAttribute("opacity", near ? .85 : .35);
+      }
+    });
+    raf = requestAnimationFrame(frame);
+  };
+  return {
+    run(on) {
+      if (on && !raf) { last = 0; raf = requestAnimationFrame(frame); }
+      else if (!on && raf) { cancelAnimationFrame(raf); raf = 0; }
+    } };
+})();
 function meterStop() {
   cancelAnimationFrame(METER.raf);
   METER.raf = 0; METER.taps = []; METER.v = 0;
   if (METER.ctx) METER.ctx.close().catch(() => {});
   METER.ctx = null;
   for (const el of WAVE_BARS) el.style.transform = "";
-  ORB.style.setProperty("--lv", "0");
 }
 function iceGathered(pc, ms = 10000) {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
