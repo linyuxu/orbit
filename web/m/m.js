@@ -12,6 +12,7 @@ async function loadAll() {
   renderList();
   sessionsChanged();
   if (S.current) { renderNav(); renderComposer(); }
+  loadLayoutTabs();  // (the tabs every screen shares: under their groups)
 }
 function setSessions(list, groups) {
   S.sessions = new Map(list.filter(s => !s.closed).map(s => [s.id, s]));
@@ -68,7 +69,7 @@ function onEvent(m) {
     setSessions(m.sessions, m.groups);
     for (const sid of [...S.cards.keys()]) if (!S.sessions.has(sid)) S.cards.delete(sid);
     if (S.current && !S.sessions.has(S.current)) { toast("This session was closed"); history.replaceState(null, "", location.pathname + location.search); closeSession(); return; }
-    renderList(); sessionsChanged();
+    renderList(); sessionsChanged(); loadLayoutTabs();
     if (S.current) { renderNav(); renderComposer(); loadCards(S.current); }
   } else if (m.t === "live") {
     voiceEvent(m);
@@ -86,6 +87,8 @@ function onEvent(m) {
     const list = S.cards.get(m.sid), act = S.active.get(m.sid);  // (the list shows a working session's card too)
     const have = (list && list.find(x => x.id === m.id)) || (act && act.id === m.id ? act : null);
     onCardPatch(m, have, c => { upsertCard(c); if (!S.current) renderListSoon(); });
+  } else if (m.t === "layout") {
+    S.layout = { layout: m.layout, rev: m.rev }; if (!S.current) renderList();
   } else if (m.t === "show" || m.t === "open" || m.t === "side") {
     sideEvent(m);
   } else if (m.t === "closed") {

@@ -33,6 +33,13 @@
 .hlogo { flex:none; display:block; }
 .hletter { border-radius:3px; background:var(--hc); color:#fff; font:700 calc(9px * var(--ui-k))/14px var(--font); text-align:center; }
 .prow.ss.stopped .hlogo { opacity:.45; }
+/* A group's other tabs (files, notes, views) in the Groups panel: one smaller line under its sessions */
+.prow.ftab { height:calc(var(--row) - 4px); gap:5px; padding:0 8px 0 53px;  /* (icon and name under a session's harness icon and name) */ color:var(--ink-2); font-size:calc(12.5px * var(--ui-k)); }
+.prow.ftab .ic { width:16px; flex:none; display:flex; justify-content:center; opacity:.7; }
+.prow.ftab .nm { flex:none; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.prow.ftab .wh { margin-left:auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; padding-left:8px;
+  font-size:calc(11px * var(--ui-k)); color:var(--ink-3); }
+.prow.ftab.cur { color:var(--ink); }
 .prow.ss .tm { margin-left:auto; flex:none; padding-left:6px; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); font-weight:calc(400 + var(--wd)); font-variant-numeric:tabular-nums; }
 .prow.ss.unread .nm { font-weight:calc(650 + var(--wd)); color:var(--ink); }
 .si { flex:none; width:12px; height:12px; display:inline-grid; place-items:center; font:700 calc(10px * var(--ui-k))/1 var(--font); border-radius:50%; }

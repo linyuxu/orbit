@@ -133,12 +133,12 @@ Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it
 | ⌘N | New session: name, folder (the current session's; ↓ lists recent folders), harness, model, mode, group; ⌘⏎ or ⏎ starts it |
 | ⌘O | Open: finder with Sessions · Files · History · Other sessions tabs (fuzzy; Sessions includes closed named sessions, ⏎ resumes one with its name; Other sessions is everything else that can be resumed, on every machine: closed unnamed sessions, and Claude Code / Codex conversations that are no Orbit session, ⏎ resumes one on its machine). Starts on Files in a file tab |
 | ⌘⌃O | Open into the side tab |
-| ⌘R | Recent: every kind of tab seen lately (sessions with a preview of their last answer, files, notes, threads), open or closed since; a closed file reopens as a preview. In the Sessions panel on a group: rename the group |
+| ⌘R | Recent: every kind of tab seen lately (sessions with a preview of their last answer, files, notes, threads), open or closed since; a closed file reopens as a preview. In the Groups panel on a group: rename the group |
 | ⌘W | Close what has the keyboard: the shown side tab (its neighbour shows), else the file tab, else the session tab: always asked (⏎ closes, Esc keeps it; it says so when the session is working), from ⌘W, its × or the menu alike; ⌘⇧T reopens. In Favorites, ⌘W and × only take the session off the favorites (it stays open in its group): nothing is asked |
 | ⌘⇧T | Reopen the last closed tab (again: the one before) |
 | ⌘1 · ⌘2…⌘9 | ★ Favorites · the groups in left-panel order |
 | ⌘⇧[ ⌘⇧] | Previous / next tab (in the left panel or a finder: its tabs) |
-| ⌘⌃H ⌘⌃L | Move the tab left / right: session and file tabs are alike, in one order per group (kept per device); in the Sessions panel: move the group up / down. The mouse does the same: drag a tab along the row; in the Sessions panel drag a session (onto another group to move it there) or a group's head (with its sessions): it follows the pointer and the others slide aside, as in a browser's tab strip; Esc puts it back |
+| ⌘⌃H ⌘⌃L | Move the tab left / right: session and file tabs are alike, in one order per group (the server's: every screen); in the Groups panel: move the group up / down. The mouse does the same: drag a tab along the row; in the Groups panel drag a session (onto another group to move it there) or a group's head (with its sessions): it follows the pointer and the others slide aside, as in a browser's tab strip; Esc puts it back |
 | ⌘⌃P | Toggle ★ Favorite for the current session |
 | ⌘- ⌘= | Back / forward through visited tabs |
 | ⌘E | Context menu of what has the keyboard (tab menu: Rename · Fork · Move to ▸ · Copy link · Copy resume command (`cd <folder> && claude --resume <id>`, `codex resume <thread>`, `agy --conversation <id>`: the same conversation in the agent's own terminal UI) · Favorite · Shell here · Side tab ▸ · Session ▸ Stop / Resume / Restart / Clone · Close); a file menu has Open · Copy path · Open in external editor · Open in Finder · Close |
@@ -170,7 +170,7 @@ Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it
 | ⌘J | Shell in the session's folder (three-state toggle); Esc Esc back to the input |
 | ⌃X 1 | Close every panel beside the main one (and every side tab of this tab) |
 | ⌘⇧O | Keyboard: main panel ⇄ side tab |
-| ⌥⇧[ ⌥⇧] | Previous / next side tab of this tab (from the main page or inside the side pane). In the left panel's Sessions tab (with other machines): its sub-tabs, the machine filter All · This Mac · each machine |
+| ⌥⇧[ ⌥⇧] | Previous / next side tab of this tab (from the main page or inside the side pane). In the left panel's Groups tab (with other machines): its sub-tabs, the machine filter All · This Mac · each machine |
 | ⌃⌥H ⌃⌥L · ⌃⌥K ⌃⌥J | Move the focused panel's edge |
 | ⌘T | The agent's own terminal (a harness that has one, Harness Protocol 1.1) in the ⌘J pane: show + focus → focus → hide; Esc Esc to the input; closing only detaches |
 | ⌘⇧I | ± Review: the session's uncommitted changes in the side tab (three-state toggle); comment on lines, revert a hunk |

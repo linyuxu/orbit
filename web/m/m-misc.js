@@ -19,7 +19,7 @@ function fmtNext(t) {
   const d = new Date(t * 1000);
   return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${hm24(t)}`;
 }
-const miscPages = () => AREA.stacks.misc.filter(p => p.refresh);
+const miscPages = () => Object.values(AREA.stacks).flat().filter(p => p.refresh && (p.tab === "misc" || p.misc));  // (Calendar, Schedules opened from a group too)
 function miscChanged() { for (const p of miscPages()) p.refresh(); }
 async function loadMisc() {
   loadPluginUi();  // (m-pviews.js: the plugins' views, listed below)
@@ -82,6 +82,7 @@ function calAccepted(ev) {
 const calDayName = d0 => d0 === dayStart() ? "Today" : d0 === dayStart(1) ? "Tomorrow" : dayLabel(d0);
 function calendarPage() {
   const page = makePage({ title: "Calendar", right: navBtn("refresh", I("refresh", 20), "Refresh") });
+  page.misc = true;
   page.acts.refresh = () => { page.body.innerHTML = loadingHtml(); loadCal(true); };
   page.refresh = () => {
     const c = CAL.data, now = Date.now() / 1000;
@@ -178,6 +179,7 @@ function lastLine(it) {
 }
 function schedulesPage() {
   const page = makePage({ title: "Schedules" });
+  page.misc = true;
   page.refresh = () => {
     const xs = S.schedules;
     if (xs == null) { page.body.innerHTML = loadingHtml(); return; }

@@ -8,6 +8,11 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- "Sessions" is "Groups" now (the left panel's tab on the Mac, the phone's first tab): a group holds its sessions and
+  its other tabs. Under its sessions each group lists its file tabs (files, notes, plugin views, Schedules, Calendar),
+  one quieter line each, in the tab row's order, icon and name under the sessions'; the filter finds them too. On the
+  Mac a click opens it in that group, ⌘W or its menu closes it (on every screen); on the phone a tap opens it over the
+  list (Back comes back), Calendar and Schedules with their data.
 - The tab layout is the server's too (`orbit/desk/layout.py`): each group's file tabs (files, notes, plugin views,
   Schedules, Calendar), the tab row's order, and a file tab's side tabs; every page shows the same (`GET/POST
   /api/layout`, a `layout` event). A page writes it whole from the revision it had; one that is behind (409) puts

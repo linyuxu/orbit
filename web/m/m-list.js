@@ -56,6 +56,44 @@ function rowHtml(s) {
     `${unread ? '<span class="udot" aria-label="New answer"></span>' : ""}<span class="tm">${esc(lastMoved(s))}</span></span>` +
     `<span class="l2${pv.dim ? " dim" : ""}">${esc(pv.text)}</span></button>`;
 }
+/* ---- the tab layout every screen shares (orbit/desk/layout.py): a group's file tabs (files, notes, a plugin's views,
+   Schedules, Calendar), in its tab row's order, under its sessions; a tap opens one where the app keeps that kind. */
+async function loadLayoutTabs() {
+  try { S.layout = await api("GET", "/api/layout"); renderList(); } catch {}
+}
+function groupTabs(gid) {
+  const L = S.layout && S.layout.layout; if (!L) return [];
+  const ord = ((L.order || {})[gid]) || [], pos = p => { const k = ord.indexOf("f:" + p); return k < 0 ? 1e9 : k; };
+  return [...(((L.ftabs || {})[gid]) || [])].filter(t => t && t.path).sort((a, b) => pos(a.path) - pos(b.path));
+}
+const parsePluginTab = p => { const m = /^plugin:([a-z0-9_-]+)\/(~doc|~list|[a-z0-9_-]+)\/(.*)$/.exec(p || ""); try { return m && { plugin: m[1], kind: m[2], key: decodeURIComponent(m[3]) }; } catch { return null; } };
+function ftabInfo(t) {
+  const p = t.path;
+  if (p === "orbit:calendar") return { icon: "calendar", title: "Calendar", sub: "" };
+  if (p === "orbit:schedules") return { icon: "clock", title: "Schedules", sub: "" };
+  const pv = parsePluginTab(p);
+  if (pv) return { icon: "plug", title: t.title || pv.key || pv.kind, sub: pv.plugin };
+  const m = /^\/@([\w-]+)(\/.*)$/.exec(p);
+  return { icon: isNotePath(p) ? "note" : "file", title: basename(p), sub: m ? `${m[1]}: ${tilde(dirname(m[2]))}` : tilde(dirname(p)) };
+}
+function ftabRow(t) {  // (one quiet line: the sessions are what the list is for)
+  const f = ftabInfo(t);
+  return `<button class="frow" data-ftab="${esc(t.path)}"><span class="fi">${I(f.icon, 15)}</span><span class="nm">${esc(f.title)}</span>` +
+    (f.sub ? `<span class="wh">${esc(f.sub)}</span>` : "") + `</button>`;
+}
+function openFtab(path) {
+  const t = Object.values((S.layout && S.layout.layout.ftabs) || {}).flat().find(x => x && x.path === path) || { path };
+  const go = (area, page) => { pushPage(page, "sessions"); if (page.refresh) page.refresh(); };  // (here, over the list: Back comes back to it)
+  if (path === "orbit:calendar") { go("misc", calendarPage()); loadMisc(); return; }
+  if (path === "orbit:schedules") { go("misc", schedulesPage()); loadMisc(); return; }
+  const pv = parsePluginTab(path);
+  if (pv) {
+    go("misc", pv.kind === "~doc" ? pdocPage(pv.plugin, pv.key, t.title) : pv.kind === "~list" ? plistPage({ plugin: pv.plugin, source: pv.key, title: t.title || pv.key })
+      : pthreadPage(pv.plugin, pv.kind, pv.key, t.title));
+    return;
+  }
+  if (isNotePath(path)) go("notes", notePage(path)); else go("files", filePage(path));
+}
 function workingStripHtml() {
   const ws = [...S.sessions.values()].filter(s => isMoving(s) || s.attention);
   if (!ws.length) return "";
@@ -77,7 +115,7 @@ function renderList() {
     return `<section class="grp${shut ? " shut" : ""}"><button class="shead" data-fold="${esc(v.gid)}" aria-expanded="${!shut}">` +
       `${v.star ? `<span class="gstar">${I("star", 12)}</span>` : v.fleet ? `<span class="gstar">${I("zap", 12)}</span>` : ""}<span class="gn">${esc(v.name)}</span>` +
       `<span class="chev">${I("chevd", 12)}</span><span class="cnt">${working ? `${working}/` : ""}${v.ss.length}</span></button>` +
-      (shut ? "" : `<div class="rows">${v.ss.map(rowHtml).join("")}</div>`) + `</section>`;
+      (shut ? "" : `<div class="rows">${v.ss.map(rowHtml).join("")}${groupTabs(v.gid).map(ftabRow).join("")}</div>`) + `</section>`;
   }).join("") + (none ? `<div class="empty"><h2>No session yet</h2>Start one with <b>+</b> above: pick a folder, an agent and what to ask.</div>` : "");
   updateTitleBar();
   renderTabbar();  // (its count of answers not seen yet)
@@ -105,7 +143,9 @@ $("#slist").addEventListener("click", e => {
   const f = e.target.closest("[data-fold]");
   if (f) { const g = f.dataset.fold; S.folded.has(g) ? S.folded.delete(g) : S.folded.add(g); LS.set("folded", [...S.folded]); renderList(); return; }
   const o = e.target.closest("[data-open]");
-  if (o) openSession(o.dataset.open);
+  if (o) { openSession(o.dataset.open); return; }
+  const ft = e.target.closest("[data-ftab]");
+  if (ft) openFtab(ft.dataset.ftab);
 });
 
 /* ===================================================================== pull to refresh

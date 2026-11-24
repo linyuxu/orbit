@@ -6,7 +6,7 @@
    the conversation and the editors ("cover" pages) slide over it. A tap on the area already shown goes to its root
    (at its root: to the top), as in iOS. The bar hides while the keyboard is up. */
 const TABS = [
-  { id: "sessions", label: "Sessions", icon: "chat" },
+  { id: "sessions", label: "Groups", icon: "chat" },
   { id: "files", label: "Files", icon: "folder" },
   { id: "notes", label: "Notes", icon: "note" },
   { id: "misc", label: "Misc", icon: "grid" },

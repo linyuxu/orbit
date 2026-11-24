@@ -46,7 +46,7 @@ The **orbit server** (`orbit serve`) is the backend: it owns the agents, their q
 A server can also reach other servers. Their sessions then show in it as its own, with live answers, in your own groups:
 a group is what the work is about, the machine is where it runs. Each session from another machine carries a small tag
 (`gpu-box`; struck through while gpu-box is unreachable), any session can go in any group (where you put gpu-box's sessions is
-kept here, not on gpu-box), and the Sessions panel's chips (All · This Mac · gpu-box) show one machine at a time. New session
+kept here, not on gpu-box), and the Groups panel's chips (All · This Mac · gpu-box) show one machine at a time. New session
 (⌘N) has a Machine field; sending, steering, renaming and closing a gpu-box session all happen over there. So the app
 connected to this Mac's server sees and drives every machine's agents, and so do the agents (`gpu-box/trainer`).
 
@@ -181,7 +181,7 @@ saves over a file that has content: auto-save skips it and ⌘S asks.
 - **Plan usage** in the status bar: `Used  Claude ▬ 94% 12h 25m · 86% Fable  Codex ▬ 40% 5d 8h  Antigravity ▬ 1% 6d
   OpenAI $5.54` (Claude and Antigravity from their `/usage`, no model call; Codex from its last turn's rate limits;
   every 5 min, Refresh in the popover; OpenAI: what Orbit's voice calls cost this month, or the balance left).
-- **Resume any other session**: ⌘O → Other sessions (or + in the Sessions panel → Resume another session…) lists
+- **Resume any other session**: ⌘O → Other sessions (or + in the Groups panel → Resume another session…) lists
   everything that can be resumed and is not in the Sessions tab, newest first: closed unnamed Orbit sessions, and
   Claude Code and Codex conversations that are no Orbit session (a terminal, an IDE, anywhere), on every connected
   machine (tagged with its name). A conversation named there (Claude Code's /rename, a Codex thread name) shows and is
@@ -190,8 +190,8 @@ saves over a file that has content: auto-save skips it and ⌘S asks.
   It opens at once: the server keeps an index of them (a file is read again only when it changed; a plugin agent's
   list comes in the background), and a typed query searches all of them, not only the newest.
 - **Fleet**: the helper sessions (⌘K quick asks, meeting Prep, `--fleet` schedules, `orbit-agent ask`) are listed
-  under **Fleet** at the bottom of the Sessions panel, with what each did last; one opens beside, in the side pane.
-- **Groups**: a fresh Orbit has Main, Projects, Personal; "New group…" sits under the groups in the Sessions panel
+  under **Fleet** at the bottom of the Groups panel, with what each did last; one opens beside, in the side pane.
+- **Groups**: a fresh Orbit has Main, Projects, Personal; "New group…" sits under the groups in the Groups panel
   (also the + button, the group chip, and a group's right-click menu: rename, move, delete).
 - **While a request runs** the card streams the text as it is written and the model's thinking, and its steps stay
   open (Claude Code, `--include-partial-messages`); they fold when it ends.

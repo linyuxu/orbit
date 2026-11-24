@@ -15,7 +15,7 @@ const S = {
   closedFiles: LS.get("closedFiles", []),  // [{path, t, gid}] for ⌘⇧T
   openSteps: new Set(),
   machines: [],                  // other machines: [{name, ok, error}] (Settings → Machines)
-  machine: LS.get("machine", ""), // the Sessions panel shows every machine ("") or one ("local", NAME)
+  machine: LS.get("machine", ""), // the Groups panel shows every machine ("") or one ("local", NAME)
   closedSteps: new Set(),         // running cards whose steps the user folded
   atEnd: true,
   pendingScroll: null,
@@ -50,7 +50,7 @@ const harnessLabel = id => (S.harnesses.find(h => h.id === id) || { label: id })
 const ACTIVE = new Set(["thinking", "running"]);
 const groupName = gid => gid === FAV ? "Favorites" : (S.groups.find(g => g.id === gid) || { name: "?" }).name;
 /* Other machines (from the server): their sessions carry "remote": NAME and sit in this server's groups. The
-   Sessions panel can show one machine only (S.machine: "" every machine, "local" this one, or NAME). */
+   Groups panel can show one machine only (S.machine: "" every machine, "local" this one, or NAME). */
 const machineOk = s => !S.machine || (S.machine === "local" ? !s.remote : s.remote === S.machine);
 const machineUp = name => !(S.machines || []).some(m => m.name === name && !m.ok);
 const machineTag = s => s && s.remote ? `<span class="mtag${machineUp(s.remote) ? "" : " off"}" title="${machineUp(s.remote) ? `On ${esc(s.remote)}` : `${esc(s.remote)} is unreachable`}">${esc(s.remote)}</span>` : "";

@@ -71,7 +71,7 @@ function revealFile(path) {
 
 /* ===================================================================== left panel: Sessions · Files · Notes · Misc */
 const plist = $("#plist");
-const PTABS = [["sessions", "Sessions", 10], ["files", "Files", 20], ["notes", "Notes", 30], ["misc", "Misc", 40]];
+const PTABS = [["sessions", "Groups", 10], ["files", "Files", 20], ["notes", "Notes", 30], ["misc", "Misc", 40]];
 const ptabs = () => [...PTABS, ...PUI.sidebars.map(x => [`p:${x.plugin}:${x.id}`, x.title, x.order])].sort((a, b) => a[2] - b[2]);
 const panelFocused = () => !EMBED && !$("#left").hidden && $("#left").contains(document.activeElement);
 function applyLeft() {
@@ -130,13 +130,16 @@ function sessionRows() {
   for (const v of views) {
     const ss = [...S.sessions.values()].filter(s => inView(s, v.gid) && machineOk(s));
     const scored = ss.map(s => ({ s, sc: q ? Math.max(fuzzy(q, s.name), fuzzy(q, tilde(s.cwd)) - 1, fuzzy(q, v.name) - 2) : 0 })).filter(x => x.sc >= 0);
-    if (q && !scored.length) continue;
+    // its other tabs (files, notes, views; the server's layout, every screen's), smaller, after its sessions, in the tab row's order
+    const tabs = groupFileTabs(v.gid).filter(t => !q || fuzzy(q, ftabTitle(t.path)) >= 0 || fuzzy(q, tilde(t.path)) - 1 >= 0);
+    if (q && !scored.length && !tabs.length) continue;
     const working = ss.filter(s => s.state === "working" || s.agents > 0).length;  // (subagents at work count)
     const shut = !q && FOLDED.has(v.gid);
-    rows.push({ kind: "group", gid: v.gid, name: v.name, ix: v.ix, key: v.key, count: `${working}/${ss.length}`, k: "g:" + v.gid, shut, fold: ss.length > 0 });
+    rows.push({ kind: "group", gid: v.gid, name: v.name, ix: v.ix, key: v.key, count: `${working}/${ss.length}`, k: "g:" + v.gid, shut, fold: ss.length + tabs.length > 0 });
     if (shut) continue;
     if (q) scored.sort((a, b) => b.sc - a.sc);
     for (const { s } of scored) rows.push({ kind: "session", gid: v.gid, sid: s.id, k: `s:${v.gid}:${s.id}` });
+    for (const t of tabs) rows.push({ kind: "ftab", gid: v.gid, path: t.path, k: `f:${v.gid}:${t.path}` });
   }
   // The Fleet: helpers (⌘K quick asks, Prep, `--fleet` schedules, orbit-agent ask). No tab: one opens in the side pane.
   const fleet = [...S.sessions.values()].filter(s => s.fleet && machineOk(s))
@@ -151,6 +154,12 @@ function sessionRows() {
   if (!q) rows.push({ kind: "newgroup", k: "newgroup" });  // always in sight: ⏎ or a click makes a group
   return rows;
 }
+/* A group's file tabs (not sessions) in its tab row's order. */
+function groupFileTabs(gid) {
+  const ord = S.tabOrder[gid] || [], pos = p => { const k = ord.indexOf("f:" + p); return k < 0 ? 1e9 : k; };
+  return [...(S.ftabs[gid] || [])].sort((a, b) => pos(a.path) - pos(b.path));
+}
+const ftabTitle = p => isView(p) ? viewInfo(p).title : isNote(p) ? noteTitle(p) : basename(p);
 let PROWS = [];
 /* A session's title in lists: its name, and · a short key when another open session has the same name. */
 function sessionTitle(s) {
@@ -174,8 +183,8 @@ function renderLeft() {
   $("#followbtn").classList.toggle("on", S.follow);
   $("#paddbtn").innerHTML = I("plus", 14);
   $("#paddbtn").title = tab === "files" ? "New file" : tab === "notes" ? "New note" : tab === "misc" ? "New schedule" : "New session (⌘N)";
-  const ph = { sessions: "Filter sessions", files: "Filter files", notes: "Filter notes", misc: "Filter schedules" }[tab] || `Filter ${plt.title}`;
-  $("#pfbox").title = { sessions: "Type to filter sessions (fuzzy: name, folder, group)", files: "Type to filter files (fuzzy path)", notes: "Type to filter notes (fuzzy)", misc: "Type to filter schedules and meetings" }[tab]
+  const ph = { sessions: "Filter groups", files: "Filter files", notes: "Filter notes", misc: "Filter schedules" }[tab] || `Filter ${plt.title}`;
+  $("#pfbox").title = { sessions: "Type to filter sessions and tabs (fuzzy: name, folder, group)", files: "Type to filter files (fuzzy path)", notes: "Type to filter notes (fuzzy)", misc: "Type to filter schedules and meetings" }[tab]
     || `Type to filter ${plt.title} (fuzzy: what it says, then its details)`;
   $("#pfbox").classList.toggle("has", !!S.filter);
   const fp = filterPos();
@@ -203,6 +212,13 @@ function renderLeft() {
     if (r.kind === "fleetgrp") return `<div class="prow grp fleetgrp${kc}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" title="Fleet helpers: quick asks (⌘K), meeting Prep, --fleet schedules. One opens beside, in the side pane"><span class="ix">${I("zap", 11)}</span><span class="nm">Fleet</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     if (r.kind === "group") {
       return `<div class="prow grp${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" title="${esc(r.key)}"><span class="ix${r.gid === FAV ? " star" : r.ix ? " num" : ""}">${r.gid === FAV ? I("star", 11) : esc(r.ix)}</span><span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
+    }
+    if (r.kind === "ftab") {
+      const isCur = S.file === r.path && r.gid === S.group, m = /^\/@([\w-]+)(\/.*)$/.exec(r.path);
+      const where = isView(r.path) ? "" : m ? `${m[1]}: ${tilde(dirname(m[2]))}` : tilde(dirname(r.path));
+      return `<div class="prow ftab${kc}${isCur ? " cur" : ""}" data-k="${esc(r.k)}" data-tip="${esc(isView(r.path) ? ftabTitle(r.path) : tilde(r.path))}">` +
+        `<span class="ic">${isView(r.path) ? I(viewInfo(r.path).icon, 12) : fileIcon(r.path)}</span><span class="nm">${esc(ftabTitle(r.path))}</span>` +
+        `<span class="wh">${esc(where)}</span></div>`;
     }
     const s = S.sessions.get(r.sid);
     const isCur = r.sid === S.current && r.gid === S.group && !S.file;
@@ -363,7 +379,20 @@ function openRow(r, { focus = true, pinned = false } = {}) {
   if (byMouse && S.filter) { FILTER_LATER.pending = true; FILTER_LATER.value = S.filter; }  // a click: the list stays as it is under the pointer (cleared once it leaves)
   else S.filter = "";
   fromList = true;
-  try { switchTo(r.sid, { group: r.gid, focus }); } finally { fromList = false; }
+  try {
+    if (r.kind === "ftab") {  // a group's file tab: that group, that tab
+      if (r.gid !== S.group) switchGroup(r.gid, { focus: false, quiet: true });
+      openFile(r.path, { pinned: true, focus });
+    } else switchTo(r.sid, { group: r.gid, focus });
+  } finally { fromList = false; }
+}
+/* A file tab closed from the Groups panel (its group, on every screen): the open one through closeFile (unsaved edits
+   asked about); another group's straight from the layout. */
+function closeGroupTab(r) {
+  if (r.gid === S.group) return closeFile(r.path);
+  S.ftabs[r.gid] = (S.ftabs[r.gid] || []).filter(t => t.path !== r.path);
+  closeAllSides("f:" + r.path);
+  saveUi(); renderTabs(); renderLeft();
 }
 function toggleDir(rel, open) {
   const root = panelRoot(), set = expandedSet(root);
@@ -386,6 +415,10 @@ function rowMenu(r, where) {
     return r.kind === "dir" ? folderMenu(root + "/" + r.rel, where) : fileMenu(root + "/" + r.rel, where);
   }
   if (r.kind === "session") return tabMenu(r.sid, where);
+  if (r.kind === "ftab") return menu([
+    { label: "Open", run: () => openRow(r) },
+    { label: "Close the tab", key: "⌘W", run: () => closeGroupTab(r) },
+  ], where);
   if (r.kind === "newgroup") return newGroup();
   if (r.gid === FAV) return menu([{ label: "Show Favorites", key: "⌘1", run: () => switchGroup(FAV) }], where);
   groupMenu(r.gid, where);
@@ -452,7 +485,7 @@ async function deleteGroup(gid) {
 /* Keys while the left panel has the keyboard (interaction.md §6). */
 function panelKey(e, combo) {
   if (combo === "MS:BracketLeft" || combo === "MS:BracketRight") { panelTab(combo.endsWith("Left") ? -1 : 1); return true; }
-  // ⌥⇧[ ⌥⇧]: the sub-tabs here, the machine filter of the Sessions tab (elsewhere they switch side tabs)
+  // ⌥⇧[ ⌥⇧]: the sub-tabs here, the machine filter of the Groups tab (elsewhere they switch side tabs)
   if ((combo === "AS:BracketLeft" || combo === "AS:BracketRight") && S.left.tab === "sessions" && (S.machines || []).length) {
     cycleMachine(combo.endsWith("Left") ? -1 : 1); return true;
   }
@@ -497,6 +530,7 @@ function panelKey(e, combo) {
       return true;
     }
     if (combo === "M:KeyW" && r && r.kind === "session") { closeOrUnfavorite(r.sid, r.gid); return true; }  // (a Favorites row: off the favorites)
+    if (combo === "M:KeyW" && r && r.kind === "ftab") { closeGroupTab(r); return true; }
   }
   if (LINE_KEYS.has(combo) || combo === "Backspace") {  // the filter is a line: the editors' Emacs keys move and edit in it
     const r = lineEdit(S.filter, filterPos(), combo);

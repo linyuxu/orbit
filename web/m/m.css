@@ -755,3 +755,11 @@ body.vcall #toast { bottom:calc(268px + var(--sab)); }  /* (over the call view, 
 #sideview .sframe { flex:1; width:100%; min-height:0; border:0; background:#fff; }
 #sideview .sfile { padding:10px 14px 30px; }
 #sideview .sfpath { color:var(--ink-3, #8a8a8e); font-size:12px; margin-bottom:8px; word-break:break-all; }
+
+/* A group's other tabs (m-list.js): one quiet line each under its sessions, its folder at the right */
+#slist .frow { display:flex; align-items:center; gap:0; width:100%; min-height:40px; padding:0 var(--pad, 16px) 0 calc(var(--pad, 16px) + 22px);
+  border:0; background:transparent; color:var(--ink-2); font:inherit; font-size:15px; text-align:left; }
+#slist .frow .fi { flex:none; width:24px; display:flex; justify-content:center; color:var(--ink-3); }  /* (the sessions' icon column, and their names') */
+#slist .frow .nm { flex:none; max-width:62%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#slist .frow .wh { margin-left:auto; padding-left:10px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; font-size:13px; color:var(--ink-3); }
+#slist .frow:active { background:var(--hover, rgba(0,0,0,.05)); }
