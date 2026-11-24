@@ -7,7 +7,7 @@
    made, errors); the data channel gives a quicker copy of the captions. Here: that state (VOICE), the phase, the
    captions, the sound level (METER), the gyroscope's drawing, start and hang-up. The page fills in VOICE_UI (how it
    draws and speaks) and provides api(method, path, body, {keepalive}). Nothing here touches the page at load. */
-const VOICE = { call: null, sid: null, phase: "idle", starting: false, pc: null, mic: null, dc: null, caps: new Map(), endTm: 0, spTm: 0, typing: false };
+const VOICE = { call: null, sid: null, phase: "idle", starting: false, pc: null, mic: null, dc: null, caps: new Map(), endTm: 0, spTm: 0, typing: false, muted: false };
 const VOICE_WORD = { connecting: "Connecting…", listening: "Listening", speaking: "Speaking", standby: "Standby", ended: "Call ended" };
 const VOICE_UI = {
   render() {},           // the phase, the captions or the microphone changed: draw the call
@@ -203,7 +203,7 @@ function iceGathered(pc, ms = 10000) {
 async function startCall(sid) {
   if (!sid || VOICE.starting) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection) { VOICE_UI.failed({ name: "NoWebRTC" }); return; }
-  VOICE.starting = true; VOICE.sid = sid; VOICE.call = null; VOICE.caps.clear(); VOICE.typing = false;
+  VOICE.starting = true; VOICE.sid = sid; VOICE.call = null; VOICE.caps.clear(); VOICE.typing = false; VOICE.muted = false;
   try { METER.ctx = new AudioContext(); if (METER.ctx.state === "suspended") METER.ctx.resume().catch(() => {}); } catch { METER.ctx = null; }  // (made in the click: Safari lets it play)
   voiceAudio.play().catch(() => {});  // (an empty play in the gesture: the element may play the voice later, iOS)
   setVoicePhase("connecting");
@@ -242,6 +242,14 @@ async function startCall(sid) {
     VOICE.starting = false;
     VOICE_UI.render();
   }
+}
+/* Mute: the microphone's track sends silence (the call goes on; GPT Live hears nothing, and may rest in standby). */
+const voiceLive = () => VOICE.phase !== "idle" && VOICE.phase !== "ended";
+function voiceMute(on = !VOICE.muted) {
+  if (!voiceLive()) return;
+  VOICE.muted = !!on;
+  if (VOICE.mic) for (const t of VOICE.mic.getAudioTracks()) t.enabled = !VOICE.muted;
+  VOICE_UI.render();
 }
 /* Hang up: the microphone goes quiet at once; the server closes the call (session.close, then session.closed) and
    keeps its transcript as a note card; then the connection closes. */

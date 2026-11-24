@@ -17,6 +17,9 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - The voice button: five bars in a circle where Send is while the input is empty; in a call they follow the sound.
 - Voice: after each request the voice is told what became of it (running, queued behind another, joined to the
   waiting one), so it says "queued" instead of guessing; "via Voice" on a card explains what the agent got.
+- A voice call shows wherever you are: a pill first in the status bar (its state and session; red when muted); a
+  click: mute or unmute, go to its session (or show the voice again), hang up. From anywhere in the window (a dialog,
+  a menu, an editor, the terminal) ⌘⇧A mutes or unmutes and ⌘⇧V hangs up. Mute is shared with the phone's.
 - Settings → Appearance → Text weight: Thin · Light · Regular · Medium · Bold. Every weight moves together (`--wd`;
   the built-in fonts are variable), so bold stays as much bolder; Thin and Light draw thinner antialiased strokes.
 - Settings → Voice → Usage: what Orbit's calls cost this month (from GPT Live's own active and standby seconds, by the

@@ -9,7 +9,7 @@
    await); coming back from the background resumes them (iOS may have ended the microphone: one tap brings it back),
    and the event stream's hello re-syncs the call with the server (voiceResync). The OpenAI key and the voice's
    settings stay on the Mac. */
-const VC = { muted: false, micLost: false, blocked: false, mic: null };
+const VC = { micLost: false, blocked: false, mic: null };  // (muted: VOICE.muted, voice-core.js)
 $("#callbtn").innerHTML = waveSvg();
 $("#callbar").innerHTML = `<button type="button" class="vcgo">${waveSvg()}<span class="vct"></span></button>` +
   `<button type="button" class="vchang" aria-label="Hang up"><span class="disc">${I("hangup", 18)}</span></button>`;
@@ -56,16 +56,16 @@ function renderVoice() {
   $("#callview .vcst").innerHTML = !view ? "" : !live ? esc(word)
     : VC.micLost ? `<span>Microphone off</span><span class="sub"> · iOS stopped it; tap Mic</span>`
     : VC.blocked ? `<span>${esc(word)}</span><span class="sub"> · tap to hear the voice</span>`
-    : `<span>${esc(word)}</span>${VC.muted ? `<span class="sub"> · muted</span>` : VOICE.phase === "standby" ? `<span class="sub"> · speak to wake it</span>` : ""}`;
+    : `<span>${esc(word)}</span>${VOICE.muted ? `<span class="sub"> · muted</span>` : VOICE.phase === "standby" ? `<span class="sub"> · speak to wake it</span>` : ""}`;
   $("#vcend").disabled = !live;
-  const m = $("#vcmute"), off = VC.muted || VC.micLost;
+  const m = $("#vcmute"), off = VOICE.muted || VC.micLost;
   m.disabled = !live || !VOICE.mic && !VC.micLost;
-  m.classList.toggle("on", VC.muted);
+  m.classList.toggle("on", VOICE.muted);
   m.classList.toggle("lost", VC.micLost);
   m.querySelector(".disc").innerHTML = I(off ? "micoff" : "mic", 24);
-  m.querySelector(".lbl").textContent = VC.micLost ? "Mic" : VC.muted ? "Unmute" : "Mute";
-  m.setAttribute("aria-label", VC.micLost ? "Turn the microphone back on" : VC.muted ? "Unmute the microphone" : "Mute the microphone");
-  m.setAttribute("aria-pressed", String(VC.muted));
+  m.querySelector(".lbl").textContent = VC.micLost ? "Mic" : VOICE.muted ? "Unmute" : "Mute";
+  m.setAttribute("aria-label", VC.micLost ? "Turn the microphone back on" : VOICE.muted ? "Unmute the microphone" : "Mute the microphone");
+  m.setAttribute("aria-pressed", String(VOICE.muted));
   /* The bar: a call the call view does not show. In the conversation it sits on the input; elsewhere above the tab bar. */
   const bar = $("#callbar"), showBar = on && !view;
   bar.hidden = !showBar;
@@ -107,7 +107,7 @@ $("#livecaps").addEventListener("click", e => {
 
 /* ===================================================================== taps */
 function callHere(sid) {  // (inside the tap: startCall asks for the microphone before its first await)
-  VC.muted = VC.micLost = VC.blocked = false;
+  VC.micLost = VC.blocked = false;
   startCall(sid);
 }
 $("#callbtn").addEventListener("pointerdown", e => { if (document.activeElement === ta) e.preventDefault(); });  // (the keyboard stays until the call shows)
@@ -134,9 +134,7 @@ $("#vcend").addEventListener("click", () => hangUp());
 $("#vcmute").addEventListener("click", () => {
   if (VC.micLost) { micAgain(); return; }
   if (!VOICE.mic) return;
-  VC.muted = !VC.muted;
-  for (const t of VOICE.mic.getAudioTracks()) t.enabled = !VC.muted;
-  renderVoice();
+  voiceMute();
 });
 $("#callbar .vcgo").addEventListener("click", () => {
   VOICE.typing = false;
@@ -172,7 +170,7 @@ async function micAgain() {
     if (VOICE.mic) for (const t of VOICE.mic.getTracks()) t.stop();
     VOICE.mic = m;
     meterTap(m);
-    VC.micLost = VC.muted = false;
+    VC.micLost = false; VOICE.muted = false;
     renderVoice();
   } catch (e) { toast(micWhy(e), 6000); }
 }

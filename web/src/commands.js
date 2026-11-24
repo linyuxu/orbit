@@ -253,7 +253,8 @@ const SHORTCUTS = [
     ["↑↓ PgUp PgDn ⌃V ⌥V", "Scroll the focused conversation"],
     ["Home End ⌥⇧, ⌥⇧.", "Top / end of the conversation (End sticks to the end again)"],
     ["⌘L", "Scroll to the latest answer", "M:KeyL", scrollLatest],
-    ["⌘⇧V", "Voice call with the current session (GPT Live): talk, and it does the work; again: hang up (its settings and the OpenAI key: Settings → Voice)", "MS:KeyV", () => toggleCall()],
+    ["⌘⇧V", "Voice call with the current session (GPT Live): talk, and it does the work; in a call, from anywhere: hang up (its settings and the OpenAI key: Settings → Voice)", "MS:KeyV", () => toggleCall()],
+    ["⌘⇧A", "In a voice call, from anywhere: mute / unmute the microphone", "MS:KeyA", () => voiceMute()],
   ]],
   ["Panels", [
     ["⌘`", "Left panel (three-state toggle)", "M:Backquote", toggleLeft],

@@ -35,6 +35,10 @@ function onKey(e) {
   if (["Meta", "Control", "Alt", "Shift"].includes(e.key)) return;
   const combo = comboOf(e);
   const consume = () => { e.preventDefault(); e.stopPropagation(); };
+  // A voice call's keys work anywhere (a dialog, a menu, an editor, the terminal): ⌘⇧A mutes, ⌘⇧V hangs up.
+  if (!EMBED && typeof voiceLive === "function" && voiceLive() && (combo === "MS:KeyA" || combo === "MS:KeyV")) {
+    consume(); if (combo === "MS:KeyA") voiceMute(); else hangUp(); return;
+  }
   if (document.activeElement === findq && !modal) {
     if (combo === "Enter" || combo === "S:Enter") { consume(); findStep(combo === "Enter" ? 1 : -1); return; }
     // ⌃S / ⌃R (Emacs isearch): next / previous match; on an empty query, the last search again.

@@ -96,6 +96,7 @@ const ICONS = {
   server: '<rect x="2" y="2.5" width="12" height="4.5" rx="1.2"/><rect x="2" y="9" width="12" height="4.5" rx="1.2"/><path d="M4.6 4.75h.01M4.6 11.25h.01"/>',
   info: '<circle cx="8" cy="8" r="6"/><path d="M8 7.3V11M8 5h.01"/>',
   quote: '<path d="M3 9.5h3v3.5H2.5V9c0-2.5 1-4 3-5M9.5 9.5h3v3.5H9V9c0-2.5 1-4 3-5"/>',
+  micoff: '<rect x="6" y="1.75" width="4" height="7.75" rx="2"/><path d="M3.75 7.75a4.25 4.25 0 0 0 8.5 0M8 12v2.25M2.5 2.5l11 11"/>',
   mic: '<rect x="6" y="1.75" width="4" height="7.75" rx="2"/><path d="M3.75 7.75a4.25 4.25 0 0 0 8.5 0M8 12v2.25"/>',
 };
 function I(name, size = 16) {

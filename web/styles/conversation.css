@@ -313,3 +313,5 @@ body.embed #callbtn, body.embed .callst { display:none; }
 #voiceorb.call-standby .vorbst, #voiceorb.call-ended .vorbst { color:var(--ink-3); }
 #voiceorb .vtype { position:absolute; top:6px; right:4px; }
 .callst.back { cursor:default; text-decoration:underline dotted; text-underline-offset:3px; }
+#voiceorb.muted .vorb { filter:saturate(.2) opacity(.7); }
+#voiceorb.muted .vorbst { color:var(--err); }

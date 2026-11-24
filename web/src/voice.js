@@ -7,7 +7,8 @@
 /* The button: five blue bars (a voice), as big as Send's arrow; in a call the bars follow the sound (the microphone
    while you talk, the voice while it speaks), and a hover shows the stop. */
 $("#callbtn").innerHTML = waveSvg() + `<svg class="hang" width="16" height="16" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="currentColor"/></svg>`;
-VOICE_UI.bars = [...$("#callbtn").querySelectorAll(".wb")];
+$("#callpill").innerHTML = waveSvg("pwave") + `<span class="cpw"></span><span class="cpn"></span>`;
+VOICE_UI.bars = [...$("#callbtn").querySelectorAll(".wb"), ...$("#callpill").querySelectorAll(".wb")];
 VOICE_UI.render = renderCaps;
 const GYRO = makeGyro($("#voiceorb .vorb"));  // (the orb in a call: voice-core.js draws it)
 VOICE_UI.toast = msg => toast(msg);
@@ -28,7 +29,7 @@ function renderCallBtn() {
   const on = VOICE.phase !== "idle", here = on && VOICE.sid === S.current;
   const name = VOICE.sid && S.sessions.get(VOICE.sid) ? S.sessions.get(VOICE.sid).name : "";
   b.disabled = !on && (!s || VOICE.starting);
-  b.className = `ibtn sm${on ? " call-" + VOICE.phase : ""}${VOICE.mic && on && VOICE.phase !== "ended" ? " mic-open" : ""}`;
+  b.className = `ibtn sm${on ? " call-" + VOICE.phase : ""}${VOICE.mic && on && VOICE.phase !== "ended" && !VOICE.muted ? " mic-open" : ""}`;
   b.setAttribute("aria-pressed", String(on && VOICE.phase !== "ended"));
   b.title = on ? `${VOICE_WORD[VOICE.phase]}${name ? ` with ${name}` : ""}${VOICE.phase === "ended" ? "" : " · click or ⌘⇧V to hang up"}`
     : "Voice call with this session (⌘⇧V): talk, and it does the work";
@@ -38,12 +39,36 @@ function renderCallBtn() {
   GYRO.run(orb);
   ob.className = on ? "call-" + VOICE.phase : "";
   $("#inputhost").style.display = orb ? "none" : "";
-  ob.querySelector(".vorbst").textContent = orb ? VOICE_WORD[VOICE.phase] + (VOICE.phase === "standby" ? " · speak to wake it" : "") : "";
+  ob.querySelector(".vorbst").textContent = orb ? VOICE_WORD[VOICE.phase] + (VOICE.muted && voiceLive() ? " · muted (⌘⇧A)" : VOICE.phase === "standby" ? " · speak to wake it" : "") : "";
+  ob.classList.toggle("muted", VOICE.muted);
+  renderCallPill(name);
   st.hidden = !on || orb;
   st.textContent = on ? (here || !name ? VOICE_WORD[VOICE.phase] : `${VOICE_WORD[VOICE.phase]} · ${name}`) : "";
   st.className = `callst${on ? " call-" + VOICE.phase : ""}${on && here && VOICE.typing ? " back" : ""}`;
   st.title = on && here && VOICE.typing ? "Show the voice again" : "";
 }
+/* The call wherever you are (the status bar, every tab): its state and session; a click: mute, go to it, hang up. */
+function renderCallPill(name) {
+  const p = $("#callpill"), on = VOICE.phase !== "idle";
+  p.hidden = !on;
+  if (!on) return;
+  p.className = `callpill call-${VOICE.phase}${VOICE.muted ? " muted" : ""}`;
+  p.querySelector(".cpw").innerHTML = VOICE.muted && voiceLive() ? `${I("micoff", 12)}Muted` : esc(VOICE_WORD[VOICE.phase]);
+  p.querySelector(".cpn").textContent = name ? `· ${name}` : "";
+  p.title = `Voice call${name ? ` with ${name}` : ""}: click for mute, the session, hang up · ⌘⇧A mute · ⌘⇧V hang up`;
+}
+$("#callpill").addEventListener("mousedown", e => e.preventDefault());
+$("#callpill").addEventListener("click", () => {
+  if (!voiceLive()) return;
+  const s = S.sessions.get(VOICE.sid), here = VOICE.sid === S.current && !S.file;
+  menu([
+    { label: VOICE.muted ? "Unmute the microphone" : "Mute the microphone", key: "⌘⇧A", run: () => voiceMute() },
+    ...(here && !VOICE.typing ? [] : [{ label: here ? "Show the voice" : `Go to ${s ? s.name : "the call's session"}`, run: () => {
+      VOICE.typing = false; if (!here) switchTo(VOICE.sid); else renderCallBtn(); } }]),
+    { sep: true },
+    { label: "Hang up", key: "⌘⇧V", danger: true, run: () => hangUp() },
+  ], { anchor: $("#callpill") });
+});
 $("#voiceorb .vtype").innerHTML = I("keyboard", 15);
 $("#voiceorb .vtype").addEventListener("click", () => { VOICE.typing = true; renderCallBtn(); input.focus(); });
 $("#callst").addEventListener("click", () => { if (VOICE.typing && VOICE.phase !== "idle") { VOICE.typing = false; renderCallBtn(); } });

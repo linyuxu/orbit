@@ -210,3 +210,20 @@ body.dragsort, body.dragsort * { cursor:grabbing !important; }
 .prow.dragpeer { transition:transform .15s ease; }
 .prow.dragging { position:relative; z-index:5; transition:none; background:var(--surface); box-shadow:0 2px 10px rgba(0,0,0,.12); }
 .prow.settling { transition:transform .16s ease; }
+
+/* A voice call, wherever you are: the first thing in the status bar, blue while it is live (voice.js). */
+#statusbar .callpill { flex:none; display:inline-flex; align-items:center; gap:6px; height:20px; padding:0 9px 0 7px; margin:0 10px 0 -4px;
+  border:0; border-radius:10px; background:color-mix(in srgb, var(--voice-2) 13%, transparent); color:var(--voice-2);
+  font:inherit; font-size:calc(11.5px * var(--ui-k)); font-weight:calc(500 + var(--wd)); cursor:default; white-space:nowrap; max-width:40vw; }
+#statusbar .callpill[hidden] { display:none; }
+#statusbar .callpill:hover { background:color-mix(in srgb, var(--voice-2) 22%, transparent); }
+#statusbar .callpill .pwave { width:14px; height:14px; flex:none; }
+#statusbar .callpill .wb { transform-box:fill-box; transform-origin:center; transition:transform .06s linear; }
+#statusbar .callpill .cpw { display:inline-flex; align-items:center; gap:4px; }
+#statusbar .callpill .cpn { color:var(--ink-2); font-weight:calc(400 + var(--wd)); overflow:hidden; text-overflow:ellipsis; min-width:0; }
+#statusbar .callpill.call-standby, #statusbar .callpill.call-ended { background:var(--btn-hover); color:var(--ink-2); }
+#statusbar .callpill.call-standby .wb, #statusbar .callpill.call-ended .wb { transform:scaleY(.18) !important; }
+#statusbar .callpill.muted { background:color-mix(in srgb, var(--err) 12%, transparent); color:var(--err); }
+#statusbar .callpill.muted .pwave { display:none; }
+#statusbar .callpill + .seg { padding-left:0; }
+#statusbar .callpill + .seg::before { display:none; }
