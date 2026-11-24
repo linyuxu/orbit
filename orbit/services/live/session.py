@@ -685,21 +685,27 @@ class Call:
     def _status(self, did: str, c: dict, how: str) -> None:
         """What became of the request, as silent context: the voice knows the facts (sent, queued behind another,
         joined to a waiting one) instead of guessing how Orbit handles it."""
+        # A card is "queued" for a moment even in an idle session (until its agent takes it): it waits only when
+        # another request runs, or waits ahead of it.
         try:
-            run = next((x for x in self.target.cards() if x["state"] in ACTIVE and x["id"] != c["id"]), None)
+            cards = self.target.cards()
         except (RuntimeError, KeyError):
-            run = None
-        busy = f'the agent is busy with request #{run["id"]}' if run else "another request runs first"
+            cards = []
+        run = next((x for x in cards if x["state"] in ACTIVE and x["id"] != c["id"]), None)
+        ahead = [x for x in cards if x["state"] == "queued" and x["id"] < c["id"]]
+        now = next((x for x in cards if x["id"] == c["id"]), c)
+        busy = (f'the agent is busy with request #{run["id"]}' if run else
+                f'request #{ahead[0]["id"]} waits before it' if ahead else "")
         if how == "edit":
-            fact = (f"Orbit added these words to request #{c['id']}, which has not started: {busy}. It is one request, "
-                    "not several. Its answer comes when the agent gets to it.")
+            fact = (f"Orbit added these words to request #{c['id']}, which has not started" + (f": {busy}" if busy else "")
+                    + ". It is one request, not several. Its answer comes when the agent gets to it.")
         elif how == "steer":
             fact = f"Orbit added these words to request #{c['id']} while the agent works on it."
-        elif c["state"] == "queued":
+        elif now["state"] == "queued" and busy:
             fact = (f"Orbit sent this as request #{c['id']}; it waits: {busy}. Tell the user in a few words that it "
                     "is queued; its answer comes when the agent gets to it.")
         else:
-            fact = f"Orbit sent this as request #{c['id']}; the agent is working on it."
+            fact = f"Orbit sent this as request #{c['id']}; the agent is working on it now (nothing else runs before it)."
         ev = {"type": "session.thinking.append", "event_id": f"status_{did}", "delegation_id": did, "content": fact}
         wait = ACK_DELAY_MS / 1000 + 0.3 - (time.time() - self.dels[did]["at"]) if self.cfg["live_ack"] else 0
         if wait > 0:  # (any append cancels the spoken acknowledgement the user asked for: after its moment)

@@ -290,6 +290,15 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertTrue(c2["text"].startswith("Also, retry that\n\n(Context, not an instruction: the voice had just said: "
                                               '"The build failed on step two.")'), c2["text"])
 
+    def test_status_in_an_idle_session(self):
+        """A request in an idle session is "queued" only for the moment before its agent takes it: the voice is told it
+        runs now, never that it waits (a real call said "it is queued behind another request" with nothing running)."""
+        s, r = self.start_call("Idle")
+        self.fake.emit(t_in("check the logs", 500, 1500, "i1"), delegation("del_i", 1600, "di"))
+        st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_i"])
+        self.assertIn("the agent is working on it now", st[0]["content"])
+        self.assertNotIn("waits", st[0]["content"])
+
     def test_status_while_the_agent_is_busy(self):
         """A request that waits behind another: the voice is told (silently) that it is queued and why; more words
         while it waits join it, and the voice is told it is one request, not several."""
