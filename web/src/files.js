@@ -382,6 +382,24 @@ async function openExternal(path, how, line = how === "editor" ? cursorLine(path
     if (r && r.orbit) { openFile(path); toast(r.why); }  // another machine's file: Orbit's editor
   }).catch(e => toast(e.message));
 }
+/* A file or view tab to another group (its menu's Move to, a drag in the Groups panel): out of this group's tab row,
+   at the end of that one's; the tabs' layout is the server's, so every screen follows. Its side tabs go with it (they
+   are the file's). Moved from the group in front while shown: the group shows its session. */
+function moveFileTab(path, from, to) {
+  if (!to || to === from || to === FAV) return;
+  const src = S.ftabs[from] || [], t = src.find(x => x.path === path); if (!t) return;
+  S.ftabs[from] = src.filter(x => x !== t);
+  const dst = fileTabs(to); if (!dst.some(x => x.path === path)) dst.push({ ...t, pinned: true });
+  for (const [g, add] of [[from, false], [to, true]]) {
+    const ord = S.tabOrder[g]; if (!ord) continue;
+    const k = "f:" + path, i = ord.indexOf(k); if (i >= 0) ord.splice(i, 1); if (add) ord.push(k);
+  }
+  if (S.lastTab[from] === "f:" + path) S.lastTab[from] = null;
+  if (from === S.group && S.file === path) { S.file = null; showCurrent(false); }
+  saveUi(); renderTabs(); renderLeft();
+  toast(`Moved to ${groupPath(to)}`);
+}
+const moveTabItems = (path, from) => groupMenuItems(gid => moveFileTab(path, from, gid), { current: from });
 function fileMenu(path, where) {
   if (isPluginTab(path)) return pluginTabMenu(path, where);
   const t = fileTabs().find(x => x.path === path);
@@ -405,6 +423,7 @@ function fileMenu(path, where) {
     { sep: true },
     { label: "Rename…", run: () => renamePath(path) },
     { label: "Delete…", danger: true, run: () => trashPath(path) },
+    t && !EMBED && S.group !== FAV ? { label: "Move to", sub: () => moveTabItems(path, S.group) } : null,
     t && !EMBED ? { label: "Close", key: "⌘W", run: () => closeFile(path) } : null,
   ].filter(Boolean), where || { anchor: document.querySelector(`.tab[data-file="${CSS.escape(path)}"]`) || $("#fhead") });
 }

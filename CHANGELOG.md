@@ -8,6 +8,11 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- File and view tabs move to another group too, like sessions: a drag in the Groups panel (under the other group's
+  head, or among its rows), or the tab's menu → Move to (the tab row, the panel). Its side tabs go with it.
+- ⌘O has a Notes tab (after Files): every note by its title and folder, filtered as you type; for 2+ characters the
+  notes whose text has it come below ("Search in Notes", with the line). ⌘O in a note starts there; ⌘⇧F still opens
+  History.
 - Quote from a file or note goes to the session beside it: with a session open in the side panel, the quote
   (`path:line`) goes to the end of its input and the side panel gets the keyboard; with none, a menu of sessions, and
   the chosen one opens beside with the quote in its input (⌘E → "Quote beside: …" / "Quote into a session beside").

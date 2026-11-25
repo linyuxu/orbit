@@ -339,6 +339,60 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             finally:
                 ctx.close()
 
+    def test_a_file_tab_moves_to_another_group(self):
+        a, b = self.group("Tabs A"), self.group("Tabs B")
+        self.session_in(a, "in A")
+        self.session_in(b, "in B")
+        f = os.path.join(self.work, "moved.txt")
+        Path(f).write_text("hello\n")
+        tabs = lambda page, g: page.evaluate(f"(S.ftabs[{json.dumps(g)}] || []).map(t => t.path)")
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"switchGroup({json.dumps(a)}); openFile({json.dumps(f)}, {{pinned: true}})")
+            page.wait_for_timeout(800)
+            page.evaluate(f"moveFileTab({json.dumps(f)}, {json.dumps(a)}, {json.dumps(b)})")  # (its menu's Move to)
+            page.wait_for_timeout(300)
+            self.assertEqual((tabs(page, a), tabs(page, b)), ([], [f]), name)
+            self.assertNotEqual(page.evaluate("S.file"), f)  # (it left the group in front)
+            # by a drag in the Groups panel: its row under the other group's head
+            page.evaluate("S.left.shown = true; applyLeft(); setPanelTab('sessions'); focusPanel()")
+            page.wait_for_timeout(300)
+            row = page.locator(f"#plist .prow[data-k={json.dumps('f:' + b + ':' + f)}]")
+            head = page.locator(f"#plist .prow[data-k={json.dumps('g:' + a)}]")
+            rb, hb = row.bounding_box(), head.bounding_box()
+            page.mouse.move(rb["x"] + 60, rb["y"] + rb["height"] / 2)
+            page.mouse.down()
+            ty = hb["y"] + hb["height"] * 0.9
+            for i in range(1, 16):
+                page.mouse.move(rb["x"] + 60, rb["y"] + rb["height"] / 2 + (ty - rb["y"] - rb["height"] / 2) * i / 15)
+                page.wait_for_timeout(15)
+            page.mouse.up()
+            page.wait_for_timeout(600)
+            self.assertEqual((tabs(page, a), tabs(page, b)), ([f], []), name)
+            page.evaluate(f"closeGroupTab({{gid: {json.dumps(a)}, path: {json.dumps(f)}}})")  # (the next browser starts as this one did)
+
+    def test_open_finds_notes_by_title_and_text(self):
+        code, n = self.req("POST", "/api/notes/create", {"name": "Projects/Quarterly plan"})
+        self.assertEqual(code, 200, n)
+        self.req("POST", "/api/file", {"path": n["path"], "text": "# Quarterly plan\n\nShip the zebra migration first.\n", "force": True})
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate("openFinder(2)")  # (the Notes tab)
+            page.wait_for_selector(".finder .ptab.cur")
+            self.assertEqual(page.inner_text(".finder .ptab.cur"), "Notes")
+            page.fill(".finder .fq", "quarterly")
+            page.wait_for_timeout(300)
+            self.assertIn("Quarterly plan", page.inner_text(".finder .flist .frow"), name)
+            page.fill(".finder .fq", "zebra")  # (in its text only: the server's search)
+            page.wait_for_timeout(900)
+            self.assertIn("Search in Notes", page.inner_text(".finder .flist"))
+            self.assertIn("zebra", page.inner_text(".finder .flist").lower())
+            page.press(".finder .fq", "Escape")
+            page.evaluate("BINDINGS.get('MS:KeyF')()")
+            page.wait_for_selector(".finder .ptab.cur")
+            self.assertEqual(page.inner_text(".finder .ptab.cur"), "History")  # (⌘⇧F still opens History)
+            page.press(".finder .fq", "Escape")
+
     def test_space_folds_a_group_in_the_left_panel(self):
         gid = self.group("Foldme")
         sid = self.session_in(gid, "inside")

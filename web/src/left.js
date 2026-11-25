@@ -457,8 +457,9 @@ function rowMenu(r, where) {
   if (r.kind === "session") return tabMenu(r.sid, where);
   if (r.kind === "ftab") return menu([
     { label: "Open", run: () => openRow(r) },
+    r.gid !== FAV ? { label: "Move to", sub: () => moveTabItems(r.path, r.gid) } : null,
     { label: "Close the tab", key: "⌘W", run: () => closeGroupTab(r) },
-  ], where);
+  ].filter(Boolean), where);
   if (r.kind === "newgroup") return newGroup();
   if (r.gid === FAV) return menu([{ label: "Show Favorites", key: "⌘1", run: () => switchGroup(FAV) }], where);
   groupMenu(r.gid, where);
@@ -782,14 +783,16 @@ const groupBlock = head => {
 };
 const parentOf = gid => (groupOf(gid) || {}).parent || "";
 dragSort({
-  box: plist, item: ".prow.ss, .prow.grp", axis: "y",
+  box: plist, item: ".prow.ss, .prow.ftab, .prow.grp", axis: "y",
   keyOf: el => el.dataset.k, byKey: k => [...plist.querySelectorAll(".prow[data-k]")].find(x => x.dataset.k === k),
-  canDrag: el => { const r = prowOf(el); return S.left.tab === "sessions" && !S.filter && !!r && ((r.kind === "session" && r.gid !== "fleet") || (r.kind === "group" && r.gid !== FAV)); },
+  canDrag: el => { const r = prowOf(el); return S.left.tab === "sessions" && !S.filter && !!r && ((r.kind === "session" && r.gid !== "fleet") || (r.kind === "ftab" && r.gid !== FAV) || (r.kind === "group" && r.gid !== FAV)); },
   unit: el => prowOf(el).kind === "group" ? groupBlock(el) : [el],
   peers: el => {
     const src = prowOf(el), rows = [...plist.querySelectorAll(".prow[data-k]")].filter(x => x !== el);
     if (src.kind === "group") return rows.filter(x => { const r = prowOf(x); return r && r.kind === "group" && r.gid !== FAV && parentOf(r.gid) === parentOf(src.gid); })  // (among its siblings: Tab, ⇧Tab and Move into nest)
       .map(groupBlock);
+    if (src.kind === "ftab")  // (a file or view tab: among the rows of the groups, it lands in the group it is put under)
+      return rows.filter(x => { const r = prowOf(x); return r && r.gid !== FAV && r.gid !== "fleet" && ["session", "ftab", "group"].includes(r.kind); }).map(x => [x]);
     const fav = src.gid === FAV;
     return rows.filter(x => { const r = prowOf(x); return r && ((r.kind === "session" && r.gid !== "fleet" && (r.gid === FAV) === fav) || (!fav && r.kind === "group" && r.gid !== FAV)); }).map(x => [x]);
   },
@@ -798,6 +801,11 @@ dragSort({
     const src = PROWS.find(x => x.k === key), pr = prowOf(prev), nr = prowOf(next);
     if (!src) return renderLeft();
     if (src.kind === "group") return nr ? dropOn(key, next, false) : pr ? dropOn(key, prev, true) : renderLeft();
+    if (src.kind === "ftab") {  // the group of the row above it (a group's head: that group), else of the row below
+      const gid = pr ? pr.gid : nr && nr.gid;
+      if (gid && gid !== src.gid) moveFileTab(src.path, src.gid, gid); else renderLeft();
+      return;
+    }
     if (pr && pr.kind === "session") return dropOn(key, prev, true);
     if (pr && pr.kind === "group") return nr && nr.kind === "session" && nr.gid === pr.gid ? dropOn(key, next, false) : dropOn(key, prev, true);
     if (nr && nr.kind === "session") return dropOn(key, next, false);

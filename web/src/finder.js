@@ -162,10 +162,30 @@ async function fileItems(side) {
     menu: where => fileMenu(root + "/" + f, where),
   }));
 }
+/* The Notes tab: every note of the vault by its title (and folder), filtered as you type; for 2+ characters, the
+   notes whose text has it too ("Search in Notes": the server's search, with the line it is on). */
+async function noteItems(side) {
+  if (!S.vault) return [];
+  await refreshTree(S.vault);
+  const t = S.trees.get(S.vault);
+  return (t && t.files || []).filter(f => /\.md$/i.test(f)).map(f => {
+    const path = S.vault + "/" + f;
+    return { label: noteTitle(path), detail: f.includes("/") ? dirname(f) : "", match: f, icon: "file", dedup: path,
+             run: () => openFile(path, { side }), alt: () => openFile(path, { pinned: true, side }), menu: where => fileMenu(path, where) };
+  });
+}
+async function noteSearch(text, signal, side) {
+  const r = await fetch("/api/search?q=" + encodeURIComponent(text), { signal });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  const terms = text.toLowerCase().split(/\s+/).filter(Boolean);
+  return (d.notes || []).map(n => ({ label: n.title, icon: "file", tag: "text", detail: n.snippet, hl: terms, key: ago(n.time), dedup: n.path,
+    run: () => side ? openFile(n.path, { side: true }) : openNoteAt(n.path, n.line_text), menu: where => fileMenu(n.path, where) }));
+}
 function openFinder(start, { side = false, opener } = {}) {
   opener = opener || (side ? "MC:KeyO" : "M:KeyO");
   if (modal && modal.kind === "finder" && modal.opener === opener) { closeModal(); return; }
-  if (start == null) start = S.file ? 1 : 0;  // starts on Files in a file tab
+  if (start == null) start = S.file && isNote(S.file) ? 2 : S.file ? 1 : 0;  // starts on Files in a file tab, on Notes in a note
   finder({ opener, start, tabs: [
     { name: "Sessions", empty: "No sessions. ⌘N starts one.", items: async () => {
       const all = (await api("GET", "/api/sessions?closed=1")).sessions;
@@ -174,6 +194,7 @@ function openFinder(start, { side = false, opener } = {}) {
       return [...open, ...closed].map(s => sessionItem(s, { side }));
     } },
     { name: "Files", empty: ctxRoot() ? "No files." : "Open a session to list its folder.", items: () => fileItems(side) },
+    { name: "Notes", empty: S.vault ? "No notes yet: ⌘⇧D opens this week's." : "No vault: Settings → Notes.", items: () => noteItems(side), live: (t, signal) => noteSearch(t, signal, side) },
     { name: "History", empty: "Type to search every session's requests and answers, and the notes.", search: t => historyItems(t, side) },
     OTHER_TAB,
     ...(PUI.palette || []).map(src => paletteTab(src, side)),
