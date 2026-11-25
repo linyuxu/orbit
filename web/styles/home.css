@@ -98,6 +98,11 @@ img.gicon { border-radius:4px; object-fit:cover; }
 #grouppill .gcaret { display:grid; place-items:center; width:calc(18px * var(--ui-k)); height:calc(20px * var(--ui-k)); border-radius:4px; color:var(--ink-3); flex:none; }
 #grouppill .gcaret:hover { background:var(--hover); color:var(--ink); }
 
+/* a coloured group's other tabs: the same tint at the top of the page as its home's head, fading out; over the
+   page (the mouse goes through it), so it shows above whatever the tab draws */
+#pane.gtint::after { content:""; position:absolute; left:0; right:0; top:0; height:150px; z-index:3; pointer-events:none;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--gc) 16%, transparent), transparent); }
+
 /* a coloured group in the left panel: a short bar of its colour at the row's start */
 .prow.grp.hued { position:relative; }
 .prow.grp.hued::before { content:""; position:absolute; left:calc(2px + var(--d, 0) * 18px); top:8px; bottom:8px; width:3px; border-radius:2px; background:var(--gc); }

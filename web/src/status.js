@@ -12,6 +12,10 @@ function renderTabs() {
     `<span class="gcaret" title="Another group">${I("caret", 12)}</span>`;
   gp.classList.toggle("active", S.file === HOME);  // (the group's home is in front: the pill is the tab)
   gp.style.setProperty("--gc", gs.color || "");
+  // every tab of a coloured group wears its home's tint at the top of the page (the home draws its own)
+  const pane = $("#pane");
+  pane.classList.toggle("gtint", !!gs.color && S.file !== HOME);
+  pane.style.setProperty("--gc", gs.color || "");
   const html = key => {
     if (key.startsWith("f:")) return fileTabHtml(fileTabs().find(t => t.path === key.slice(2)));
     const id = key.slice(2);
