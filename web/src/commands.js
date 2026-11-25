@@ -237,6 +237,7 @@ const SHORTCUTS = [
     ["⌘W", "Close what has the keyboard: the side tab, else the file tab, else the session tab", "M:KeyW", closeWhatHasKeyboard],
     ["⌘⇧T", "Reopen the last closed tab, in its group (again: the one before)", "MS:KeyT", reopenLast],
     ["⌃D", "In the Groups panel: close the row's session or tab, or delete its group (asked first)"],
+    ["Space · ← →", "In the Groups panel: fold / unfold the group (on a row in it: its group folds)"],
     ["Tab · ⇧Tab", "In the Groups panel on a group: into the group above it (a subgroup) · out a level. Groups nest 3 deep"],
     ["⌘1 · ⌘2…⌘9", "Favorites · the groups in left-panel order",
       ["M:Digit1", "M:Digit2", "M:Digit3", "M:Digit4", "M:Digit5", "M:Digit6", "M:Digit7", "M:Digit8", "M:Digit9"],

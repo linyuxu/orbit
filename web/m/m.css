@@ -795,3 +795,7 @@ body.vcall #toast { bottom:calc(268px + var(--sab)); }  /* (over the call view, 
 img.gicon { border-radius:4px; object-fit:cover; }
 #slist .shead .gicon { margin-right:6px; }
 .frow.grow { box-shadow:inset 3px 0 0 var(--gc, transparent); }
+/* a session of a coloured group: its colour's tint at the top of the conversation, fading out (as on the Mac);
+   over the bar and the cards, the finger goes through it */
+#vconv.gtint::after { content:""; position:absolute; left:0; right:0; top:0; height:calc(var(--navh) + var(--sat) + 90px); z-index:4;
+  pointer-events:none; background:linear-gradient(180deg, color-mix(in srgb, var(--gc) 10%, transparent), transparent); }

@@ -173,6 +173,7 @@ function widgetCount(gid, w) {
 /* ---------- drawing it */
 function renderHome() {
   if (!homeOn()) return;
+  if (DRAG.active) { DRAG.pending.add(renderHome); return; }  // (a widget is being dragged: drawn after it, or it would let go of it)
   const gid = S.group, g = groupStyleOf(gid), name = gid === FAV ? "Favorites" : (groupOf(gid) || {}).name || "?";
   $("#xview").classList.add("home");
   const crumbs = [];

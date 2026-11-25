@@ -53,6 +53,9 @@ function renderNav() {
   bits.push(harnessLabel(s.harness));
   bits.push(modeShort(s.mode));
   if (s.remote) bits.push("on " + s.remote);
+  const g = !s.fleet && (S.groups || []).find(x => x.id === s.group), vc = $("#vconv");  // (a coloured group: its tint at the top, as on its home)
+  vc.classList.toggle("gtint", !!(g && g.color));
+  if (g && g.color) vc.style.setProperty("--gc", g.color); else vc.style.removeProperty("--gc");
   $("#cname").textContent = s.name;
   $("#csub").innerHTML = `${stateMark(s, 12)}<span class="w ${st.cls}">${esc(bits[0])}</span><span>${esc(bits.slice(1).join(" · "))}</span>`;
 }

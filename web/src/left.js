@@ -220,7 +220,7 @@ function renderLeft() {
   plist.innerHTML = PROWS.map(r => {
     const kc = r.k === S.pcursor ? " kc" : "";
     if (r.kind === "newgroup") return `<div class="prow newgrp${kc}" data-k="newgroup" title="New group (also: right-click a group, or the group chip)"><span class="ix">${I("plus", 11)}</span><span class="nm">New group…</span></div>`;
-    const fold = r => r.fold ? `<span class="fold" title="${r.shut ? "Unfold" : "Fold"} (→ ←)">${I("chev", 10)}</span>` : `<span class="fold" style="visibility:hidden"></span>`;
+    const fold = r => r.fold ? `<span class="fold" title="${r.shut ? "Unfold" : "Fold"} (Space, → ←)">${I("chev", 10)}</span>` : `<span class="fold" style="visibility:hidden"></span>`;
     if (r.kind === "fleetgrp") return `<div class="prow grp fleetgrp${kc}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" title="Fleet helpers: quick asks (⌘K), meeting Prep, --fleet schedules. One opens beside, in the side pane"><span class="ix">${I("zap", 11)}</span><span class="nm">Fleet</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     if (r.kind === "group") {
       const gc = r.gid !== FAV && (groupOf(r.gid) || {}).color;
@@ -602,6 +602,12 @@ function panelKey(e, combo) {
       else if (!grp && r.gid) { S.pcursor = "g:" + r.gid; renderLeft(); }
     }
     else if (grp && r.shut) setFolded(r.gid, false); else movePanel(1);
+    return true;
+  }
+  if (tab === "sessions" && combo === "Space" && r && !S.filter) {  // Space: the group folds / unfolds (on a row in it: its group folds, the cursor on it)
+    const grp = r.kind === "group" || r.kind === "fleetgrp";
+    if (grp) { if (r.fold) setFolded(r.gid, !r.shut); }
+    else if (r.gid && r.kind !== "newgroup") setFolded(r.gid, true);  // (it puts the cursor on the group)
     return true;
   }
   if (tab === "sessions") {

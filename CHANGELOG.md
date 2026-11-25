@@ -8,6 +8,13 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The page is tested in real browsers: `tests/test_ui_smoke.py` (Chromium and WebKit, skipped without Playwright:
+  `uv run --with playwright python -m unittest discover -s tests -p test_ui_smoke.py`) checks a group's home after a
+  reload, ⌘- back across groups, the icon search, dragging a home widget, Space folding a group, the phone's tint.
+  It found a bug: a home widget being dragged was let go of when the page redrew under it (an agent of the group
+  working); the home now waits for the drag, as the tabs and the left panel do.
+- The Groups panel: Space folds / unfolds the group (on a row in it: its group folds, the cursor on it).
+- The phone: a session of a coloured group wears its tint at the top of the conversation, as on the Mac.
 - A group's icon is picked from all of Unicode's emoji (about 1,600, loaded when the picker opens): a search box
   (English names and common Chinese words: 火箭, 股票, 猫, 工具…; Enter takes the first match), category chips,
   a Suggested row of the usual project icons; any short text or a picture still works.
