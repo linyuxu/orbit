@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The Groups panel: ⌃D on a row closes its session or tab, or deletes its group, always asked first (a tab closed
+  there reopens with ⌘⇧T); ⌘R renames the row: a group, a session, or a file tab's file. In the filter ⌃D still deletes
+  a character, except at its end. ⌘⇧T reopens a file tab in its own group.
 - Fixed ⌘- / ⌘= (back / forward through visited tabs) across groups: a file tab (a file, a note, the Calendar, a plugin
   view) is remembered with its group, so back returns to that group's tab instead of opening the file in the group in
   front; switching groups records the tab it lands on; closed tabs are skipped. 200 entries, a tab once.

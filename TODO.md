@@ -46,5 +46,3 @@ Tests:
 
 
 ## To Do (from User)
-* Integrate GPT Live 支持实时语音
-* Enhance the orbit cross-agent collabration, should be able to know the position, info of orbit managed agent

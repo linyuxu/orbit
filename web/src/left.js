@@ -392,7 +392,34 @@ function closeGroupTab(r) {
   if (r.gid === S.group) return closeFile(r.path);
   S.ftabs[r.gid] = (S.ftabs[r.gid] || []).filter(t => t.path !== r.path);
   closeAllSides("f:" + r.path);
+  S.closedFiles = [{ path: r.path, t: Date.now() / 1000, gid: r.gid }, ...S.closedFiles.filter(f => f.path !== r.path)].slice(0, 30);  // (⌘⇧T)
   saveUi(); renderTabs(); renderLeft();
+}
+/* ⌃D on a row of the Groups panel: close or delete what it is, always asked first. A group: delete it (its sessions
+   move); a session: close it (its conversation is kept); a file tab: close it (in its group, on every screen). */
+async function deleteRow(r) {
+  if (!r) return;
+  if (r.kind === "group" && r.gid !== FAV) {
+    if (S.groups.length < 2) { toast("The last group cannot be deleted"); return; }
+    return deleteGroup(r.gid);
+  }
+  if (r.kind === "session") return closeSession(r.sid);  // (asks; from Favorites too: it closes, ⌘W only unstars)
+  if (r.kind === "ftab") {
+    const ok = await confirmDialog({ title: `Close “${ftabTitle(r.path)}”?`, ok: "Close",
+      body: `The tab closes in ${groupName(r.gid)}, on every screen. ${/^(orbit|plugin):/.test(r.path) ? "" : "The file stays on disk. "}⌘⇧T reopens it.` });
+    if (ok) closeGroupTab(r);
+    return;
+  }
+  toast(r.kind === "group" ? "Favorites is not a group to delete: ⌘⌃P unstars a session" : r.kind === "fleetgrp" ? "The Fleet is Orbit's own: close its helpers one by one" : "Nothing to close here");
+}
+/* ⌘R on a row: rename it. A group, a session, a file tab's file (a view, the Calendar, a plugin's tab has no name to
+   change). */
+function renameRow(r) {
+  if (!r) return;
+  if (r.kind === "group" && r.gid !== FAV) return renameGroup(r.gid);
+  if (r.kind === "session") return renameSession(r.sid);
+  if (r.kind === "ftab" && !/^(orbit|plugin):/.test(r.path)) return renamePath(r.path);
+  toast(r.kind === "ftab" ? "A view has no name to change" : "This one cannot be renamed");
 }
 function toggleDir(rel, open) {
   const root = panelRoot(), set = expandedSet(root);
@@ -522,7 +549,10 @@ function panelKey(e, combo) {
     return true;
   }
   if (tab === "sessions") {
-    if (combo === "M:KeyR" && r && r.kind === "group" && r.gid !== FAV) { renameGroup(r.gid); return true; }
+    if (combo === "M:KeyR" && r && r.kind !== "newgroup") { renameRow(r); return true; }
+    // ⌃D: close / delete the row (asked first). In the filter it still deletes a character, except at its end (where
+    // it has none to delete) or with no filter.
+    if (combo === "C:KeyD" && r && r.kind !== "newgroup" && (!S.filter || filterPos() >= S.filter.length)) { deleteRow(r); return true; }
     if ((combo === "MC:KeyH" || combo === "MC:KeyL") && r) {
       const d = combo === "MC:KeyH" ? -1 : 1;
       if (r.kind === "group" && r.gid !== FAV) api("POST", `/api/groups/${r.gid}/move`, { delta: d }).catch(err => toast(err.message));

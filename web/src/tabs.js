@@ -194,6 +194,7 @@ async function reopenLast() {
   const f = S.closedFiles[0];
   if (f && (!closed.length || f.t >= (closed[0].closed_at || 0))) {
     S.closedFiles.shift();
+    if (f.gid && f.gid !== S.group && (f.gid === FAV || S.groups.some(g => g.id === f.gid))) { saveDraft(); S.group = f.gid; }  // (back in its own group)
     openFile(f.path, { pinned: true });
     return;
   }
