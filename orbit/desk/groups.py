@@ -27,6 +27,7 @@ DEFAULT_HOME = [{"id": "sessions", "kind": "sessions", "span": 6}, {"id": "group
                 {"id": "tabs", "kind": "tabs", "span": 3}, {"id": "schedules", "kind": "schedules", "span": 3},
                 {"id": "activity", "kind": "activity", "span": 6}]
 HOME_MAX = 40  # widgets
+WIDGET_H = (60, 2000)  # a widget's body height, when set (px)
 COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -72,8 +73,22 @@ def check_home(widgets: object) -> list[dict]:
             if not isinstance(path, str) or not path.startswith("/") or len(path) > 1000:
                 raise ValueError("a Markdown widget names its note (an absolute path)")
             x["path"] = path
-            if isinstance(w.get("title"), str) and w["title"].strip():
-                x["title"] = " ".join(w["title"].split())[:80]
+        h = w.get("h")  # its body's height in px (resized with the mouse); none: as tall as what it shows
+        if h not in (None, 0, ""):
+            if not isinstance(h, (int, float)) or isinstance(h, bool) or not WIDGET_H[0] <= h <= WIDGET_H[1]:
+                raise ValueError(f"widget {wid}: h is {WIDGET_H[0]}–{WIDGET_H[1]} (px)")
+            x["h"] = int(round(h))
+        if isinstance(w.get("title"), str) and w["title"].strip():  # (its own title, any kind)
+            x["title"] = " ".join(w["title"].split())[:80]
+        # Its own look: an icon (as a group's), a colour that tints the card, a background picture.
+        for key, as_ in (("icon", "icon"), ("color", "color"), ("bg", "cover")):
+            if w.get(key):
+                try:
+                    v = check_style(as_, w[key])
+                except ValueError as e:
+                    raise ValueError(f"widget {wid}: {str(e).replace('cover', 'bg', 1)}") from None
+                if v:
+                    x[key] = v
         out.append(x)
     return out
 

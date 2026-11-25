@@ -39,11 +39,12 @@ function homeSoon() {
 /* ---------- a group's look */
 const groupStyleOf = gid => gid === FAV ? { icon: "", color: "", cover: "" } : (groupOf(gid) || {});
 /* Its icon: an emoji (or a few letters), or a picture; "" when it has none. */
-function groupIconHtml(gid, size = 16) {
-  const g = groupStyleOf(gid);
-  if (!g.icon) return "";
-  if (g.icon.startsWith("img:")) return `<img class="gicon" src="${esc(rawUrl(g.icon.slice(4)))}" alt="" style="width:${size}px;height:${size}px">`;
-  return `<span class="gicon" style="font-size:${Math.round(size * 0.9)}px">${esc(g.icon)}</span>`;
+function groupIconHtml(gid, size = 16) { return iconHtml(groupStyleOf(gid).icon, size); }
+/* An icon (a group's, a widget's): an emoji or a few letters, or img:<path> of a picture. */
+function iconHtml(icon, size = 16) {
+  if (!icon) return "";
+  if (icon.startsWith("img:")) return `<img class="gicon" src="${esc(rawUrl(icon.slice(4)))}" alt="" style="width:${size}px;height:${size}px">`;
+  return `<span class="gicon" style="font-size:${Math.round(size * 0.9)}px">${esc(icon)}</span>`;
 }
 
 /* ---------- the layout */
@@ -162,7 +163,7 @@ function widgetBody(gid, w) {
   }
   return "";
 }
-function widgetTitle(w) { return w.kind === "md" ? (w.title || basename(w.path).replace(/\.md$/i, "")) : WIDGET_TITLE[w.kind] || w.kind; }
+function widgetTitle(w) { return w.title || (w.kind === "md" ? basename(w.path).replace(/\.md$/i, "") : WIDGET_TITLE[w.kind] || w.kind); }
 function widgetCount(gid, w) {
   if (w.kind === "sessions") return groupSessions(gid).length || "";
   if (w.kind === "groups") return gid === FAV ? "" : groupKids(gid).length || "";
@@ -184,11 +185,14 @@ function renderHome() {
     `<div class="hsum">${esc(homeSummary(gid))}</div></div>` +
     (gid === FAV ? "" : `<div class="hacts"><button class="btn sm" data-hact="style">${I("pencil", 12)} Look</button><button class="btn sm" data-hact="add">${I("plus", 12)} Widget</button></div>`) + `</div>`;
   const ws = homeWidgets(gid).filter(w => !w.hidden && !(w.kind === "groups" && !groupKids(gid).length && gid === FAV));
-  const grid = ws.map(w => `<section class="hw${w.kind === "md" ? " mdw" : ""}${H.editing && H.editing.id === w.id ? " editing" : ""}" data-w="${esc(w.id)}" style="--span:${w.span || 6}">` +
-    `<header title="Drag to move"><span class="grip">⋮⋮</span><span class="t">${esc(widgetTitle(w))}</span><span class="cnt">${widgetCount(gid, w)}</span>` +
+  const grid = ws.map(w => `<section class="hw${w.kind === "md" ? " mdw" : ""}${w.h ? " sized" : ""}${w.color ? " wtint" : ""}${w.bg ? " wpic" : ""}${H.editing && H.editing.id === w.id ? " editing" : ""}" data-w="${esc(w.id)}" ` +
+    `style="--span:${w.span || 6}${w.h ? `;--wh:${w.h}px` : ""}${w.color ? `;--wc:${esc(w.color)}` : ""}${w.bg ? `;--wbg:url('${esc(rawUrl(w.bg))}')` : ""}">` +
+    `<header title="Drag to move"><span class="grip">⋮⋮</span>${iconHtml(w.icon, 15)}<span class="t">${esc(widgetTitle(w))}</span><span class="cnt">${widgetCount(gid, w)}</span>` +
     (w.kind === "md" ? `<button class="btn sm quiet" data-hedit="${esc(w.id)}">${H.editing && H.editing.id === w.id ? "Done" : "Edit"}</button>` : "") +
-    (gid === FAV ? "" : `<button class="ibtn sm" data-wmenu="${esc(w.id)}" title="Width, hide, remove">${I("more", 13)}</button>`) + `</header>` +
-    `<div class="wb">${widgetBody(gid, w)}</div></section>`).join("");
+    (gid === FAV ? "" : `<button class="ibtn sm" data-wmenu="${esc(w.id)}" title="Width, icon and background, hide, remove">${I("more", 13)}</button>`) + `</header>` +
+    `<div class="wb">${widgetBody(gid, w)}</div>` +
+    (gid === FAV ? "" : `<span class="hrz x" data-rz="x" title="Drag: its width"></span><span class="hrz y" data-rz="y" title="Drag: its height (double-click: as tall as what it shows)"></span><span class="hrz xy" data-rz="xy"></span>`) +
+    `</section>`).join("");
   $("#xhead").innerHTML = ""; $("#xfoot").textContent = "";
   $("#xbody").innerHTML = head + `<div class="hgrid">${grid}</div>`;
   if (H.editing) mountHomeEditor();
@@ -270,9 +274,11 @@ function widgetMenu(wid, where) {
   const i = ws.indexOf(w), move = d => { const j = i + d; if (j < 0 || j >= ws.length) return; const a = [...ws]; [a[i], a[j]] = [a[j], a[i]]; saveHome(S.group, a); };
   menu([
     { label: "Width", sub: () => [2, 3, 4, 6].map(n => ({ label: SPAN_LABEL[n], key: (w.span || 6) === n ? "now" : "", run: () => set({ span: n }) })) },
+    w.h ? { label: "Height: as tall as what it shows", run: () => set({ h: 0 }) } : null,
     { label: "Move earlier", disabled: i <= 0, run: () => move(-1) }, { label: "Move later", disabled: i >= ws.length - 1, run: () => move(1) },
     w.kind === "md" ? { label: "Open the note as a file", run: () => openFile(w.path, { pinned: true }) } : null,
-    w.kind === "md" ? { label: "Rename…", run: async () => { const v = await dialog({ title: "Widget title", fields: [{ key: "t", label: "Title", value: widgetTitle(w) }] }); if (v && v.t.trim()) set({ title: v.t.trim() }); } } : null,
+    { label: "Icon and background…", run: () => widgetLookDialog(wid) },
+    { label: "Rename…", run: async () => { const v = await dialog({ title: "Widget title", fields: [{ key: "t", label: "Title (empty: its usual one)", value: w.title || "" }] }); if (v) set({ title: v.t.trim() }); } },
     { sep: true },
     w.kind === "md" ? { label: "Remove from the home page (the note stays)", run: () => saveHome(S.group, ws.filter(x => x.id !== wid)) }
                     : { label: "Hide", run: () => set({ hidden: true }) },
@@ -369,26 +375,52 @@ async function groupLookDialog(gid = S.group) {
       box.innerHTML = `<div class="field"><label>Icon</label><div class="lk-icon"></div></div>` +
         `<div class="field"><label>Colour</label><div class="lk-colors"></div></div>` +
         `<div class="field"><label>Cover (over the home page)</label><div class="lk-row lk-coverrow"></div></div>`;
-      const colors = box.querySelector(".lk-colors"), cover = box.querySelector(".lk-coverrow");
-      const drawColors = () => {
-        colors.innerHTML = `<button class="lk-c none${!st.color ? " on" : ""}" data-c="" title="None"></button>${GROUP_COLORS.map(c => `<button class="lk-c${st.color === c ? " on" : ""}" data-c="${c}" style="background:${c}"></button>`).join("")}` +
-          `<input type="color" class="lk-pick" value="${esc(st.color || "#2a78d6")}" title="Any colour">`;
-      };
-      const drawCover = () => {
-        cover.innerHTML = `<button class="btn sm" data-cv="pick">A picture…</button>${st.cover ? `<button class="btn sm quiet" data-cv="none">No cover</button><span class="lk-cover" style="background-image:url('${esc(rawUrl(st.cover))}')"></span>` : ""}`;
-      };
       iconPicker(box.querySelector(".lk-icon"), st, () => {});
-      drawColors(); drawCover();
-      colors.addEventListener("click", e => { const c = e.target.closest("[data-c]"); if (c) { st.color = c.dataset.c; drawColors(); } });
-      colors.addEventListener("input", e => { if (e.target.matches(".lk-pick")) { st.color = e.target.value; colors.querySelectorAll(".lk-c").forEach(x => x.classList.remove("on")); } });
-      cover.addEventListener("click", async e => {
-        const b = e.target.closest("[data-cv]"); if (!b) return;
-        try { if (b.dataset.cv === "pick") { const pth = await uploadPicture(); if (pth) st.cover = pth; } else st.cover = ""; } catch (err) { toast(err.message); }
-        drawCover();
-      });
+      colorField(box.querySelector(".lk-colors"), st);
+      pictureField(box.querySelector(".lk-coverrow"), st, "cover", "No cover");
     } });
   if (!v) return;
   try { await api("POST", `/api/groups/${gid}/style`, st); } catch (e) { toast(e.message); }
+}
+/* The colour swatches (none, the palette, any colour): st.color. */
+function colorField(box, st) {
+  const draw = () => {
+    box.innerHTML = `<button class="lk-c none${!st.color ? " on" : ""}" data-c="" title="None"></button>${GROUP_COLORS.map(c => `<button class="lk-c${st.color === c ? " on" : ""}" data-c="${c}" style="background:${c}"></button>`).join("")}` +
+      `<input type="color" class="lk-pick" value="${esc(st.color || "#2a78d6")}" title="Any colour">`;
+  };
+  draw();
+  box.addEventListener("click", e => { const c = e.target.closest("[data-c]"); if (c) { st.color = c.dataset.c; draw(); } });
+  box.addEventListener("input", e => { if (e.target.matches(".lk-pick")) { st.color = e.target.value; box.querySelectorAll(".lk-c").forEach(x => x.classList.remove("on")); } });
+}
+/* A picture (uploaded), with its preview and a way to take it off: st[key]. */
+function pictureField(box, st, key, noneLabel) {
+  const draw = () => {
+    box.innerHTML = `<button class="btn sm" data-cv="pick">A picture…</button>${st[key] ? `<button class="btn sm quiet" data-cv="none">${esc(noneLabel)}</button><span class="lk-cover" style="background-image:url('${esc(rawUrl(st[key]))}')"></span>` : ""}`;
+  };
+  draw();
+  box.addEventListener("click", async e => {
+    const b = e.target.closest("[data-cv]"); if (!b) return;
+    try { if (b.dataset.cv === "pick") { const pth = await uploadPicture(); if (pth) st[key] = pth; } else st[key] = ""; } catch (err) { toast(err.message); }
+    draw();
+  });
+}
+/* A widget's own look: its icon (before its title), a colour that tints the card, a picture behind it (washed out
+   under the text so it stays readable). */
+async function widgetLookDialog(wid, gid = S.group) {
+  const ws = homeWidgets(gid), w = ws.find(x => x.id === wid); if (!w || gid === FAV) return;
+  const st = { icon: w.icon || "", color: w.color || "", bg: w.bg || "" };
+  const v = await dialog({ title: `“${widgetTitle(w)}”: icon and background`, ok: "Save", wide: true, focus: "",
+    render: box => {
+      box.innerHTML = `<div class="field"><label>Icon</label><div class="lk-icon"></div></div>` +
+        `<div class="field"><label>Colour (tints the card)</label><div class="lk-colors"></div></div>` +
+        `<div class="field"><label>Background picture</label><div class="lk-row lk-coverrow"></div></div>`;
+      iconPicker(box.querySelector(".lk-icon"), st, () => {});
+      colorField(box.querySelector(".lk-colors"), st);
+      pictureField(box.querySelector(".lk-coverrow"), st, "bg", "No picture");
+    } });
+  if (!v) return;
+  const strip = x => Object.fromEntries(Object.entries(x).filter(([k, val]) => !(["icon", "color", "bg"].includes(k) && !val)));
+  saveHome(gid, homeWidgets(gid).map(x => x.id === wid ? strip({ ...x, ...st }) : x));
 }
 
 /* ---------- pins */
@@ -433,6 +465,45 @@ function homeKey(e, combo) {
   if (combo === "Enter") { const w = homeWidgets(S.group).find(x => x.kind === "md" && !x.hidden); if (w) editHomeMd(w.id); return true; }
   return false;
 }
+/* Resizing a widget with the mouse: its right edge sets its width (snapped to a third, a half, two thirds, the row),
+   its bottom edge its height (what it shows then scrolls inside), the corner both; a double-click on the bottom edge
+   gives it back its natural height. The page is not redrawn meanwhile (DRAG.active), and the size is saved at the end. */
+$("#xbody").addEventListener("mousedown", e => {
+  const rz = e.target.closest(".hrz"); if (!rz || e.button !== 0 || !homeOn() || S.group === FAV || H.editing) return;
+  e.preventDefault(); e.stopPropagation();
+  const el = rz.closest(".hw"), grid = el.parentNode, wid = el.dataset.w, how = rz.dataset.rz, body = el.querySelector(".wb");
+  const k = typeof rectScale === "function" ? rectScale() : 1;
+  const gap = parseFloat(getComputedStyle(grid).columnGap) || 0, col = (grid.clientWidth - 5 * gap) / 6;
+  const w0 = el.offsetWidth, h0 = body.offsetHeight, x0 = e.clientX, y0 = e.clientY;
+  const w = homeWidgets(S.group).find(x => x.id === wid); if (!w) return;
+  let span = w.span || 6, h = w.h || 0;
+  DRAG.active = true; document.body.classList.add("dragsort", "rz-" + how); el.classList.add("resizing");
+  const move = ev => {
+    if (how !== "y") {
+      const cols = (w0 + (ev.clientX - x0) / k + gap) / (col + gap);
+      span = [2, 3, 4, 6].reduce((a, b) => Math.abs(b - cols) < Math.abs(a - cols) ? b : a);
+      el.style.setProperty("--span", span); el.dataset.size = SPAN_LABEL[span];
+    }
+    if (how !== "x") {
+      h = Math.max(60, Math.min(2000, Math.round(h0 + (ev.clientY - y0) / k)));
+      el.classList.add("sized"); el.style.setProperty("--wh", h + "px");
+    }
+  };
+  const up = () => {
+    document.removeEventListener("mousemove", move, true); document.removeEventListener("mouseup", up, true);
+    document.body.classList.remove("dragsort", "rz-" + how); el.classList.remove("resizing"); delete el.dataset.size;
+    DRAG.active = false;
+    const changed = span !== (w.span || 6) || (how !== "x" && h !== (w.h || 0));
+    if (changed) saveHome(S.group, homeWidgets(S.group).map(x => x.id === wid ? { ...x, span, ...(how !== "x" ? { h } : {}) } : x));
+    const redraw = [...DRAG.pending]; DRAG.pending.clear(); if (!changed) redraw.forEach(f => f());
+  };
+  document.addEventListener("mousemove", move, true); document.addEventListener("mouseup", up, true);
+}, true);
+$("#xbody").addEventListener("dblclick", e => {
+  const rz = e.target.closest(".hrz.y, .hrz.xy"); if (!rz || !homeOn() || S.group === FAV) return;
+  const wid = rz.closest(".hw").dataset.w;
+  saveHome(S.group, homeWidgets(S.group).map(x => x.id === wid ? { ...x, h: 0 } : x));
+});
 /* Dragging a widget by its head (its title bar, not its buttons): the others slide aside; the new order is saved. */
 $("#xbody").addEventListener("mousedown", e => {
   H.press = homeOn() && !!e.target.closest(".hw > header") && !e.target.closest("button, a, input");

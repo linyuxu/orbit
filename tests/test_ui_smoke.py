@@ -12,6 +12,7 @@ ORBIT_UI_BROWSERS=chromium (or webkit) runs one of them.
 import json
 import os
 import unittest
+from pathlib import Path
 
 import test_skeleton
 
@@ -20,6 +21,7 @@ try:
 except ImportError:  # (the suite runs without it: these are skipped)
     sync_playwright = None
 
+ED = "#fbody .host:not([hidden]) .cm-content"  # (the file in front's editor; the composer has one too)
 READY = "() => typeof S !== 'undefined' && S.groups && S.groups.length > 0 && S.sessions.size > 0"
 
 
@@ -174,6 +176,69 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             order = [w["id"] for w in self.groups()[gid]["home"]["widgets"]]
             self.assertEqual(order, ["activity", "sessions", "pins"], name)
 
+    def test_a_card_gets_its_own_look(self):
+        gid = self.group("Looks")
+        self.session_in(gid, "a session")
+        start = [{"id": "sessions", "kind": "sessions", "span": 3}, {"id": "pins", "kind": "pins", "span": 3, "icon": "📌", "color": "#1baf7a"}]
+        for name, page in self.each():
+            self.req("POST", f"/api/groups/{gid}/home", {"widgets": start})
+            self.open(page)
+            page.evaluate(f"openHome({json.dumps(gid)})")
+            page.wait_for_timeout(500)
+            pins = '#xbody .hw[data-w="pins"]'
+            self.assertIn("wtint", page.get_attribute(pins, "class"))
+            self.assertEqual(page.inner_text(f"{pins} header .gicon"), "📌")
+            page.click('#xbody .hw[data-w="sessions"] [data-wmenu]')
+            page.click("text=Icon and background…")
+            page.wait_for_selector(".ej", timeout=10000)
+            page.fill(".ej-q", "火箭")
+            page.wait_for_timeout(250)
+            page.press(".ej-q", "Enter")
+            page.click('.dialog .lk-c[data-c="#eb6834"]')
+            page.click(".dialog [data-ok]")
+            page.wait_for_timeout(700)
+            w = next(x for x in self.groups()[gid]["home"]["widgets"] if x["id"] == "sessions")
+            self.assertEqual((w.get("icon"), w.get("color")), ("🚀", "#eb6834"), name)
+            self.assertEqual(page.inner_text('#xbody .hw[data-w="sessions"] header .gicon'), "🚀")
+
+    def test_a_card_resizes_with_the_mouse(self):
+        gid = self.group("Resized")
+        self.session_in(gid, "a session")
+        start = [{"id": "sessions", "kind": "sessions", "span": 3}, {"id": "pins", "kind": "pins", "span": 3}]
+        card = '#xbody .hw[data-w="sessions"]'
+        widget = lambda: next(x for x in self.groups()[gid]["home"]["widgets"] if x["id"] == "sessions")
+        for name, page in self.each():
+            self.req("POST", f"/api/groups/{gid}/home", {"widgets": start})
+            self.open(page)
+            page.evaluate(f"openHome({json.dumps(gid)})")
+            page.wait_for_timeout(500)
+            b = page.locator(card).bounding_box()
+            x, y = b["x"] + b["width"] - 1, b["y"] + b["height"] / 2  # (its right edge, to the row's end)
+            page.mouse.move(x, y)
+            page.mouse.down()
+            for i in range(1, 16):
+                page.mouse.move(x + 560 * i / 15, y + (i % 3) * 5)
+                page.wait_for_timeout(10)
+            self.assertEqual(page.evaluate(f"document.querySelector('{card}').dataset.size"), "The whole row")
+            self.assertEqual(page.evaluate("String(getSelection())"), "")
+            page.mouse.up()
+            page.wait_for_timeout(600)
+            self.assertEqual(widget()["span"], 6, name)
+            b = page.locator(card).bounding_box()
+            x, y = b["x"] + b["width"] / 2, b["y"] + b["height"] - 1  # (its bottom edge, down 150px)
+            h0 = page.evaluate(f"document.querySelector('{card} .wb').offsetHeight")
+            page.mouse.move(x, y)
+            page.mouse.down()
+            for i in range(1, 11):
+                page.mouse.move(x, y + 150 * i / 10)
+                page.wait_for_timeout(10)
+            page.mouse.up()
+            page.wait_for_timeout(600)
+            self.assertAlmostEqual(widget()["h"], h0 + 150, delta=3)
+            page.dblclick(f"{card} .hrz.y")  # (its natural height again)
+            page.wait_for_timeout(600)
+            self.assertNotIn("h", widget())
+
     def test_space_folds_a_group_in_the_left_panel(self):
         gid = self.group("Foldme")
         sid = self.session_in(gid, "inside")
@@ -217,6 +282,72 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
                     self.assertFalse(page.evaluate("document.querySelector('#vconv').classList.contains('gtint')"))
                 finally:
                     ctx.close()
+
+    def test_a_script_that_fails_to_load_says_so(self):
+        """(#31) A page script that cannot be fetched, or dies at its top level (a duplicate top-level const), shows
+        a notice on the page: once per script."""
+        self.new_session("guarded")
+        for name, b in self.browsers.items():  # (its own pages: the errors here are on purpose)
+            ctx = b.new_context(viewport={"width": 1280, "height": 860})
+            page = ctx.new_page()
+            try:
+                page.route("**/src/dupe-test.js", lambda r: r.fulfill(status=200, content_type="text/javascript", body="const S = 1;"))
+                self.open(page)
+                page.evaluate("""() => { for (const src of ['/src/missing-test.js', '/src/dupe-test.js', '/src/dupe-test.js']) {
+                    const sc = document.createElement('script'); sc.src = src; document.head.appendChild(sc); } }""")
+                page.wait_for_selector("#scripterr .scripterr-line:nth-child(2)", timeout=5000)
+                page.wait_for_timeout(300)
+                lines = page.evaluate("[...document.querySelectorAll('#scripterr .scripterr-line')].map(x => x.textContent)")
+                self.assertEqual(len(lines), 2, (name, lines))  # (the same script twice: one notice)
+                self.assertTrue(any(x.startswith("missing-test.js did not load (it could not be fetched)") for x in lines), lines)
+                self.assertTrue(any(x.startswith("dupe-test.js did not load") for x in lines), lines)
+                page.click("#scripterr .scripterr-line button")
+                self.assertEqual(page.evaluate("document.querySelectorAll('#scripterr .scripterr-line').length"), 1)
+                page.wait_for_timeout(1600)  # (the page has run a while: its errors are no load failures)
+                page.evaluate("setTimeout(() => { throw new Error('later') }, 0)")
+                page.wait_for_timeout(200)
+                self.assertEqual(page.evaluate("document.querySelectorAll('#scripterr .scripterr-line').length"), 1)
+            finally:
+                ctx.close()
+
+    def test_file_links_in_a_note_open(self):
+        """(#31) A note's links to files: beside it (relative), ~/… and file:// open; text in Orbit, anything else in its
+        default app; a link's context menu."""
+        import os
+        root = os.path.join(self.work, "notes")
+        os.makedirs(os.path.join(root, "sub"), exist_ok=True)
+        os.makedirs(os.path.join(root, "Attachments"), exist_ok=True)
+        other, pdf = os.path.join(root, "sub", "other note.md"), os.path.join(root, "Attachments", "paper.pdf")
+        Path(other).write_text("# Other\n")
+        Path(pdf).write_bytes(b"%PDF-1.4\n%\xe2\xe3\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n")
+        note = os.path.join(root, "index.md")
+        Path(note).write_text(f"# Index\n\n[the other](sub/other%20note.md) and [the paper](Attachments/paper.pdf#page=2)\n\n"
+                              f"[absolute](file://{other}) and [web](https://example.com/x)\n")
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate("window.__ext = []; openExternal = (p, how) => { window.__ext.push([p, how]); }; 0")  # (a function's value: Playwright would call it)
+            page.evaluate(f"openFile({json.dumps(note)}, {{ pinned: true }})")
+            page.wait_for_selector(ED, timeout=10000)
+            page.wait_for_timeout(500)
+            page.click(ED + " >> text=the other")  # (a plain click on a link in a note opens it)
+            page.wait_for_function(f"() => S.file === {json.dumps(other)}", timeout=5000)
+            page.evaluate(f"openFile({json.dumps(note)}, {{ pinned: true }})")
+            page.wait_for_timeout(300)
+            page.evaluate(f"openDocLink('Attachments/paper.pdf#page=2', {json.dumps(note)})")
+            page.wait_for_function("() => window.__ext.length > 0", timeout=5000)
+            self.assertEqual(page.evaluate("window.__ext[0]"), [pdf, "default"])  # (not text: its default app)
+            page.evaluate(f"openDocLink({json.dumps('file://' + other)}, {json.dumps(note)})")
+            page.wait_for_function(f"() => S.file === {json.dumps(other)}", timeout=5000)
+            self.assertEqual(page.evaluate(f"linkPath('../x.md', {json.dumps(note)})"), os.path.join(self.work, "x.md"))
+            self.assertEqual(page.evaluate(f"linkPath('~/a b.md', {json.dumps(note)})"), "~/a b.md")
+            page.evaluate(f"openFile({json.dumps(note)}, {{ pinned: true }})")
+            page.wait_for_timeout(400)
+            page.click(ED + " >> text=the paper", button="right")  # (its own menu)
+            page.wait_for_timeout(200)
+            text = page.evaluate("document.body.innerText")
+            for item in ("Open in Orbit", "Reveal in Finder", "Copy path"):
+                self.assertIn(item, text)
+            page.keyboard.press("Escape")
 
 
 def load_tests(loader, tests, pattern):  # (its own tests only: not the skeleton's again, which it builds on)

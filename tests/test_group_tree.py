@@ -116,6 +116,18 @@ class GroupTreeTest(test_skeleton.SkeletonTest):
         self.assertEqual(g["home"]["widgets"][2], {"id": "pins", "kind": "pins", "span": 6, "hidden": True})  # (an odd width: the row)
         for bad in ([{"id": "x", "kind": "nope"}], [{"id": "a", "kind": "md"}], [{"id": "a", "kind": "tabs"}, {"id": "a", "kind": "pins"}]):
             self.assertEqual(self.req("POST", f"/api/groups/{work}/home", {"widgets": bad})[0], 400, bad)
+        looked = [{"id": "sessions", "kind": "sessions", "span": 3, "icon": "🚀", "color": "#2A78D6", "bg": "/tmp/b.png", "title": " Now "},
+                  {"id": "pins", "kind": "pins", "icon": "img:/tmp/i.png", "color": "", "bg": ""}]
+        code, g = self.req("POST", f"/api/groups/{work}/home", {"widgets": looked})  # (a card's own icon, tint, picture, title)
+        self.assertEqual(code, 200, g)
+        self.assertEqual(g["home"]["widgets"], [{"id": "sessions", "kind": "sessions", "span": 3, "icon": "🚀", "color": "#2a78d6", "bg": "/tmp/b.png", "title": "Now"},
+                                                {"id": "pins", "kind": "pins", "span": 6, "icon": "img:/tmp/i.png"}])
+        code, g = self.req("POST", f"/api/groups/{work}/home", {"widgets": [{"id": "a", "kind": "tabs", "h": 240.4}, {"id": "b", "kind": "pins", "h": 0}]})
+        self.assertEqual((code, g["home"]["widgets"][0].get("h"), "h" in g["home"]["widgets"][1]), (200, 240, False))  # (resized; 0: natural)
+        for bad in ({"icon": "<b>"}, {"color": "red"}, {"bg": "rel.png"}, {"h": 20}, {"h": "big"}, {"h": True}):
+            code, e = self.req("POST", f"/api/groups/{work}/home", {"widgets": [{"id": "a", "kind": "tabs", **bad}]})
+            self.assertEqual(code, 400, bad)
+            self.assertIn("widget a", e["error"])
         self.req("POST", f"/api/groups/{work}/home", {"widgets": None})
         self.assertNotIn("home", next(x for x in self.groups() if x["id"] == work))
         reloaded = tidy(self.groups())  # (kept as it is on load)

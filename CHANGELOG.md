@@ -8,6 +8,26 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Req room #31. Agents that outlive the server (pairs with `Driver.end()`): two optional driver classmethods,
+  `link_alive(link)` (at the server's start a session whose agent still runs is followed at once, its driver started
+  with resume: no new agent; a stopped one stays stopped) and `end_link(link)` (closing a session Orbit has no driver
+  for still ends its agent); `link` is the conversation id linked, else the session's id (harness-protocol.md; not
+  named `alive`, which is the instance's process). A page script that fails to load (not fetched, or dead at its top
+  level: a duplicate top-level `const` drops a whole file) now says so on the page, the Mac's and the phone's: one
+  notice per script (`web/src/scriptguard.js`, loaded first). File links in notes open: relative to the note's
+  folder, `~/…`, absolute or `file://`; a text file in Orbit, anything else in its default app (a PDF in Preview), a
+  folder in the Finder; a link's right-click menu: Open · Open in Orbit · Reveal in Finder · Copy path (a web link:
+  Open link · Copy link). `test_harnesses` no longer hard-codes the harnesses (a build may register its own).
+- A home page's cards: each its own icon (before its title), colour (tints the card) and background picture (under a
+  wash, so the text stays readable), and its own title: the card's ⋯ → "Icon and background…" / "Rename…" (`icon`,
+  `color`, `bg`, `title` on a widget); the phone draws them too. Cards resize with the mouse: the right edge sets the
+  width (snapped to a third, a half, two thirds, the row; the width shows while dragging), the bottom edge the height
+  (what it shows scrolls inside; `h`), the corner both; a double-click on the bottom edge, or ⋯ → "Height: as tall as
+  what it shows", gives back the natural height.
+- Voice calls from an Apple Watch, the server side (builddoc/gpt-live.md §12): `POST /api/live/watch/start`, PCM
+  uploads (`…/up`, kept-alive), a framed down stream of the voice's audio and the call's events (`…/down`), `…/stop`;
+  plain HTTP with the phone's token. The server holds the GPT Live session over its WebSocket transport; delegations,
+  results and the note card work as in a page's call (no standby on that transport). The watchOS app comes next.
 - The page is tested in real browsers: `tests/test_ui_smoke.py` (Chromium and WebKit, skipped without Playwright:
   `uv run --with playwright python -m unittest discover -s tests -p test_ui_smoke.py`) checks a group's home after a
   reload, ⌘- back across groups, the icon search, dragging a home widget, Space folding a group, the phone's tint.

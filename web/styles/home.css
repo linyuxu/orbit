@@ -41,6 +41,29 @@
 .hw.settling { transition:transform .16s ease; }
 .hw .ibtn { opacity:.55; } .hw:hover .ibtn { opacity:1; }
 .hw .wb { padding:10px 12px 12px; min-width:0; }
+.hw.sized .wb { height:var(--wh); overflow:auto; box-sizing:border-box; }
+
+/* resizing with the mouse: the right edge (its width), the bottom edge (its height), the corner (both); the width it
+   would take shows while dragging */
+.hrz { position:absolute; z-index:2; }
+.hrz.x { top:8px; bottom:8px; right:-5px; width:10px; cursor:ew-resize; }
+.hrz.y { left:8px; right:8px; bottom:-5px; height:10px; cursor:ns-resize; }
+.hrz.xy { right:-5px; bottom:-5px; width:14px; height:14px; cursor:nwse-resize; }
+.hrz.xy::after { content:""; position:absolute; right:7px; bottom:7px; width:7px; height:7px; border-right:2px solid var(--ink-3); border-bottom:2px solid var(--ink-3);
+  border-bottom-right-radius:3px; opacity:0; transition:opacity .12s; }
+.hw:hover .hrz.xy::after, .hw.resizing .hrz.xy::after { opacity:.45; }
+.hw.resizing { box-shadow:0 0 0 2px color-mix(in srgb, var(--focus) 35%, transparent); transition:none; }
+.hw.resizing[data-size]::before { content:attr(data-size); position:absolute; right:10px; top:-24px; z-index:3; padding:2px 7px; border-radius:6px;
+  background:var(--ink); color:var(--bg); font-size:11px; font-weight:600; pointer-events:none; }
+body.rz-x, body.rz-x * { cursor:ew-resize !important; } body.rz-y, body.rz-y * { cursor:ns-resize !important; } body.rz-xy, body.rz-xy * { cursor:nwse-resize !important; }
+@container (max-width: 760px) { .hrz.x, .hrz.xy { display:none; } }
+/* a widget's own look: its icon before its title; a colour tints the card (and its head's rule); a picture lies behind
+   it under a wash of the surface, so what is read on it keeps its contrast */
+.hw > header .gicon { flex:none; }
+.hw.wtint { background:color-mix(in srgb, var(--wc) 7%, var(--surface)); border-color:color-mix(in srgb, var(--wc) 28%, var(--line)); }
+.hw.wtint > header { border-bottom-color:color-mix(in srgb, var(--wc) 22%, transparent); }
+.hw.wpic { background:linear-gradient(color-mix(in srgb, var(--surface) 80%, transparent), color-mix(in srgb, var(--surface) 88%, transparent)), var(--wbg) center / cover no-repeat; }
+.hw.wpic.wtint { background:linear-gradient(color-mix(in srgb, color-mix(in srgb, var(--wc) 10%, var(--surface)) 80%, transparent), color-mix(in srgb, var(--surface) 88%, transparent)), var(--wbg) center / cover no-repeat; }
 .hempty { color:var(--ink-3); font-size:calc(12.5px * var(--ui-k)); padding:4px 2px; }
 .hempty .btn { margin-left:6px; }
 

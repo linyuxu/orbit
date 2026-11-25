@@ -799,3 +799,9 @@ img.gicon { border-radius:4px; object-fit:cover; }
    over the bar and the cards, the finger goes through it */
 #vconv.gtint::after { content:""; position:absolute; left:0; right:0; top:0; height:calc(var(--navh) + var(--sat) + 90px); z-index:4;
   pointer-events:none; background:linear-gradient(180deg, color-mix(in srgb, var(--gc) 10%, transparent), transparent); }
+/* a home widget's own look (m-list.js mWidgetHtml): its colour's tint, a picture behind it under a wash */
+.hsec.wtint, .hsec.wpic { margin:14px var(--pad, 16px) 0; padding:8px 0 6px; border-radius:12px; }
+.hsec.wtint { background:color-mix(in srgb, var(--wc) 8%, var(--bg)); }
+.hsec.wpic { background:linear-gradient(color-mix(in srgb, var(--bg) 80%, transparent), color-mix(in srgb, var(--bg) 88%, transparent)), var(--wbg) center / cover no-repeat; }
+.hsec.wpic.wtint { background:linear-gradient(color-mix(in srgb, color-mix(in srgb, var(--wc) 10%, var(--bg)) 80%, transparent), color-mix(in srgb, var(--bg) 88%, transparent)), var(--wbg) center / cover no-repeat; }
+.hst .gicon { margin-right:5px; vertical-align:-1px; }

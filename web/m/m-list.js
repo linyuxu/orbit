@@ -80,7 +80,10 @@ function mParsePins(text) {
 function withTasksM(html) { let n = 0; return html.replace(/<li>(\s*<p>)?\[( |x|X)\]\s/g, (_, p, x) => `<li class="task">${p || ""}<input type="checkbox" data-task="${n++}"${x !== " " ? " checked" : ""}> `); }
 function mWidgetHtml(gid, w, page) {
   const ss = [...S.sessions.values()].filter(s => s.group === gid && !s.fleet);
-  const sec = (title, body) => body ? `<section class="hsec" data-w="${esc(w.id)}"><div class="hst">${esc(title)}</div><div class="rows glist">${body}</div></section>` : "";
+  // (a widget's own look, as on the Mac: its icon before its title, its colour's tint, a picture behind it)
+  const look = `${w.color ? " wtint" : ""}${w.bg ? " wpic" : ""}" style="${w.color ? `--wc:${esc(w.color)};` : ""}${w.bg ? `--wbg:url('${esc(withToken("/api/raw?path=" + encodeURIComponent(w.bg)))}')` : ""}`;
+  const head = title => `<div class="hst">${groupIcon(w.icon ? { icon: w.icon } : null, 14)}${esc(w.title || title)}</div>`;
+  const sec = (title, body) => body ? `<section class="hsec${look}" data-w="${esc(w.id)}">${head(title)}<div class="rows glist">${body}</div></section>` : "";
   if (w.kind === "sessions") return sec("Sessions", ss.map(rowHtml).join(""));
   if (w.kind === "groups") return sec("Subgroups", groupKids(gid).map(subRow).join(""));
   if (w.kind === "tabs") return sec("Files and views", groupTabs(gid).map(ftabRow).join(""));
@@ -100,12 +103,12 @@ function mWidgetHtml(gid, w, page) {
     const c = MD_FILES.get(path);
     if (!c) { loadMdFile(path, page); return ""; }
     const ps = c.error ? [] : mParsePins(c.text);
-    return ps.length ? `<section class="hsec"><div class="hst">Pinned</div>${ps.map(p => `<div class="hpin"><div class="ph">${esc(p.head)}${p.src ? ` · <a data-src="${esc(p.src)}">source</a>` : ""}</div><div class="pb md">${renderMd(p.body)}</div></div>`).join("")}</section>` : "";
+    return ps.length ? `<section class="hsec${look}">${head("Pinned")}${ps.map(p => `<div class="hpin"><div class="ph">${esc(p.head)}${p.src ? ` · <a data-src="${esc(p.src)}">source</a>` : ""}</div><div class="pb md">${renderMd(p.body)}</div></div>`).join("")}</section>` : "";
   }
   if (w.kind === "md") {
     const c = MD_FILES.get(w.path);
-    if (!c) { loadMdFile(w.path, page); return `<section class="hsec"><div class="hst">${esc(w.title || basename(w.path))}</div>${loadingHtml()}</section>`; }
-    return `<section class="hsec" data-md="${esc(w.path)}"><div class="hst">${esc(w.title || basename(w.path).replace(/\.md$/i, ""))}</div>` +
+    if (!c) { loadMdFile(w.path, page); return `<section class="hsec${look}">${head(basename(w.path))}${loadingHtml()}</section>`; }
+    return `<section class="hsec${look}" data-md="${esc(w.path)}">${head(basename(w.path).replace(/\.md$/i, ""))}` +
       (c.error ? `<div class="hmd dim">${esc(c.error)}</div>` : `<div class="hmd md">${withTasksM(renderMd(c.text))}</div>`) + `</section>`;
   }
   return "";
