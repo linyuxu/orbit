@@ -93,8 +93,14 @@ function ensureFrame(spec) {
   if (!fr) {
     fr = document.createElement("iframe");
     fr.title = "Side tab";
-    // A web page (orbit-agent show) runs sandboxed: scripts yes, but no access to Orbit's origin.
-    if (spec.kind === "web") fr.setAttribute("sandbox", "allow-scripts allow-popups allow-forms");
+    // An agent's page (orbit-agent show FILE.html: served here) runs sandboxed: scripts yes, Orbit's origin no. A site
+    // (orbit-agent show URL, ⌘O a URL) is another origin anyway: it keeps its own (its cookies, its sign-in), its
+    // links open new windows outside the sandbox, and it is told nothing of where Orbit is.
+    if (spec.kind === "web" && webExternal(spec)) {
+      fr.setAttribute("sandbox", "allow-scripts allow-popups allow-forms allow-same-origin allow-popups-to-escape-sandbox allow-downloads allow-modals");
+      fr.setAttribute("referrerpolicy", "no-referrer");
+      fr.setAttribute("allow", "clipboard-write; fullscreen");
+    } else if (spec.kind === "web") fr.setAttribute("sandbox", "allow-scripts allow-popups allow-forms");
     fr.addEventListener("focus", () => renderSide());
     fr.addEventListener("load", () => { fr.dataset.loaded = "1"; sideLoaded(spec, fr); });
     fr.setAttribute("src", src);
@@ -113,6 +119,38 @@ function ensureFrame(spec) {
     for (const [id] of old.slice(0, FRAMES.size - FRAME_POOL)) dropFrame(id);
   }
   return fr;
+}
+/* A site in a side tab: its bar (where it is, Reload, Copy link, Open in the browser). A site that refuses to be framed
+   (most sign-in pages, GitHub, Google) shows blank, and a page cannot tell: the bar is always there for it. */
+const webExternal = sp => !!sp && sp.kind === "web" && /^https?:\/\//i.test(sp.url || "");
+function renderSideWeb(sp) {
+  const bar = $("#sideweb"), on = webExternal(sp);
+  bar.hidden = !on;
+  if (!on) return;
+  let host = sp.url; try { host = new URL(sp.url).host; } catch {}
+  const mixed = location.protocol === "https:" && /^http:/i.test(sp.url);  // (an https page frames no http one)
+  const html = `<span class="sw-host" title="${esc(sp.url)}">${esc(host)}</span>` +
+    (mixed ? `<span class="sw-note">http: shown only in the browser</span>` : `<span class="sw-note" title="Some sites refuse to be shown inside another page: open those in the browser">blank? open it in the browser</span>`) +
+    `<button class="ibtn sm" data-sw="reload" title="Reload">${I("refresh", 12)}</button>` +
+    `<button class="ibtn sm" data-sw="copy" title="Copy link">${I("copy", 12)}</button>` +
+    `<button class="btn sm quiet" data-sw="open" title="Open in the browser">Open in browser</button>`;
+  if (bar.innerHTML !== html) bar.innerHTML = html;
+}
+$("#sideweb").addEventListener("click", e => {
+  const b = e.target.closest("[data-sw]"), sp = S.side; if (!b || !webExternal(sp)) return;
+  if (b.dataset.sw === "open") openUrl(sp.url);
+  else if (b.dataset.sw === "copy") copyText(sp.url);
+  else if (b.dataset.sw === "reload") { const fr = FRAMES.get(sp.id); if (fr) { fr.dataset.loaded = ""; fr.setAttribute("src", sp.url); } }
+});
+/* A web address typed in a finder (⌘O, ⌘⌃O): "Open beside" first. */
+function urlLead(q) {
+  q = q.trim();
+  if (EMBED || !q || /\s/.test(q)) return [];
+  const url = /^https?:\/\//i.test(q) ? q : /^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?([/?#]\S*)?$/i.test(q) && !/^[\w.-]+\.(md|txt|js|py|json|html?|css|ts|rs|go|sh|ya?ml|toml)$/i.test(q) ? "https://" + q : "";
+  if (!url) return [];
+  let host = url; try { host = new URL(url).host; } catch { return []; }
+  return [{ label: "Open beside", detail: url, icon: "panel", tag: "web", run: () => openSide({ kind: "web", url, title: host }) },
+          { label: "Open in the browser", detail: url, icon: "external", run: () => openUrl(url) }];
 }
 function dropFrame(id) { const fr = FRAMES.get(id); if (fr) { fr.remove(); FRAMES.delete(id); } }
 const eachFrame = fn => { for (const fr of FRAMES.values()) { try { fn(fr.contentWindow); } catch {} } };
@@ -133,6 +171,7 @@ function renderSide() {
     const a = tabs.querySelector(".stab.active"); if (a) a.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
   $("#revbadge").classList.toggle("on", !!sp && sp.kind === "review");
+  renderSideWeb(sp);
   const peek = $("#sidepeek"), off = !!e && !!e.hidden;  // hidden side tabs: a handle at the right edge brings them back
   peek.hidden = !off;
   if (off) { peek.innerHTML = `${I("panel", 13)}<span>${e.list.length}</span>`; peek.title = `Show the side panel: ${e.list.map(sideTitle).join(", ")} (⌘\\)`; }

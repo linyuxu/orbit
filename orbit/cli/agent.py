@@ -187,8 +187,12 @@ def cmd_open(a: argparse.Namespace) -> None:
 def cmd_show(a: argparse.Namespace) -> None:
     target = a.target
     if re.match(r"(?i)^https?://", target):
-        call("POST", "/api/open-url", {"url": target})
-        print(f"opened {target} in the browser")
+        if a.browser:
+            call("POST", "/api/open-url", {"url": target})
+            print(f"opened {target} in the browser")
+            return
+        r = call("POST", "/api/show", {"url": target, "title": a.title, "by": me()})
+        print(f"showing {target} in the side tab (a site that refuses to be framed shows blank: its bar opens it in the browser; --browser opens it there)")
         return
     if target == "-":
         html = sys.stdin.read()
@@ -633,6 +637,7 @@ def main(argv: list[str] | None = None) -> None:
     sh = sub.add_parser("show", help="show an HTML page beside the conversation")
     sh.add_argument("target", help="FILE.html, - (HTML on stdin), another file, or a URL")
     sh.add_argument("--title", default="")
+    sh.add_argument("--browser", action="store_true", help="a URL: open it in the browser, not beside")
     sh.set_defaults(func=cmd_show)
 
     ss = sub.add_parser("sessions", help="list the open sessions (here and on every remote: NAME/session)")

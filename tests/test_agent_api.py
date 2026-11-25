@@ -113,6 +113,23 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         th.join(5)
         self.assertTrue(got[0]["side"])
 
+    def test_show_a_url_beside(self):
+        """orbit-agent show URL: the site in the session's side tab (--browser: the browser, as before); only http(s)
+        addresses are web side tabs (never javascript: or file:)."""
+        s = self.new_session("browser")
+        got, th = self.listen({"show"})
+        r = self.agent("show", "https://example.com/docs?x=1", session=s["id"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("in the side tab", r.stdout)
+        th.join(5)
+        self.assertEqual((got[0]["url"], got[0]["title"], got[0]["sid"]), ("https://example.com/docs?x=1", "example.com", s["id"]))
+        items = self.req("GET", f"/api/sessions/{s['id']}/side")[1]["items"]
+        self.assertEqual([(x["kind"], x["url"]) for x in items], [("web", "https://example.com/docs?x=1")])
+        self.assertEqual(self.req("POST", "/api/show", {"url": "javascript:alert(1)"})[0], 400)
+        for bad in ("javascript:alert(1)", "file:///etc/passwd", "/etc/passwd"):
+            code, e = self.req("POST", f"/api/sessions/{s['id']}/side", {"op": "open", "spec": {"kind": "web", "url": bad}})
+            self.assertEqual(code, 400, bad)
+
     def test_a_sessions_side_panel_is_the_servers(self):
         """A session's side panel is kept by the server for every screen: an agent's page and a file it opens beside go
         in it (shown); a screen opens, selects and closes tabs there; each change goes to all as a side event; the same

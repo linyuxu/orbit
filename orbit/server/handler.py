@@ -954,6 +954,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 except KeyError:
                     return self._json({"error": "no such session"}, 404)
             if p == "/api/show":
+                if b.get("url"):  # a web address beside the conversation
+                    return self._json(self.desk.show_url(str(b["url"]), str(b.get("title", "")), str(b.get("by", ""))))
                 html = b.get("html")
                 if html is None and b.get("path"):
                     html = files._abs(str(b["path"])).read_text(encoding="utf-8", errors="replace")

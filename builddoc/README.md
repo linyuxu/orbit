@@ -33,7 +33,7 @@ exceptions.
 | Many agent sessions in tabs and groups; send, read rendered answers, follow progress | Harnesses with no machine-readable stream (those go in as plugins) |
 | Files (git-aware tree, CodeMirror editor), ± Review of uncommitted changes (a side tab), an Obsidian-compatible notes vault | Chat and team tools (they go in as plugins) |
 | Search: find in tab, history across sessions and notes | Multi-user access, and anything public: other machines are the same user's, on a private network (§3) |
-| Agent-facing CLI and Orbit-for-agents context | Plugin system, graph view, mobile, an in-app browser pane (links open in the system browser; `orbit-agent show` pages open as a side tab) |
+| Agent-facing CLI and Orbit-for-agents context | Plugin system, graph view, mobile, an in-app browser pane (links open in the system browser; `orbit-agent show` pages and URLs open as a side tab) |
 | Schedule (agents that wake up), Calendar (read-only, optional) | Email, calendar write / sync |
 
 Decided (2026-11-17): **no right panel**: no in-app browser pane; ± Review (⌘⇧I) is a side tab kind. **Harnesses are Claude Code, Codex and agy**, each behind one harness-neutral driver contract (`driver.md`); a new harness is a new driver, never a change to the Desk or the page. (2026-11-23: OpenCode joins them, `opencode.md`.)
@@ -121,7 +121,7 @@ One term per concept; use these names in code, UI text and docs.
 | Desk | The server's harness-independent layer above the drivers: request queue, cards, groups, history, agent mail |
 | group | A named set of session tabs; ⌘1 is ★ Favorites, ⌘2… the groups in left-panel order |
 | main tab | What the main panel shows: a session, a file, a note, Calendar |
-| side tab | Another tab shown beside the main tab, inside the main panel (an embedded page). Kinds: session, file / note, review (± Review of a session's folder), web page (`orbit-agent show`), Calendar, Schedules |
+| side tab | Another tab shown beside the main tab, inside the main panel (an embedded page). Kinds: session, file / note, review (± Review of a session's folder), web page (`orbit-agent show`: an agent's page, or a website by its URL, also typed in ⌘O / ⌘⌃O), Calendar, Schedules |
 | embed | A page loaded inside a side tab (`/?embed=<session>`, `/?embedtab=<spec>`); never writes the main page's state |
 | left panel | Sessions · Files · Notes · Misc, toggled with ⌘\` |
 | preview tab / pinned tab | A file tab replaced by the next preview vs kept until closed |

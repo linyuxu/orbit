@@ -15,7 +15,7 @@ function boldTerms(text, terms) {
    one request in flight (a newer query aborts the older, so a late answer is never shown); its items come below the
    tab's own, under "Search in <name>", without those already shown (by `dedup`). `watch(ev)`: an event that changes
    the tab (live.js), which then redraws with the query and the selection kept. */
-function finder({ title, tabs, start = 0, opener }) {
+function finder({ title, tabs, start = 0, opener, lead }) {  // lead(q): items above every tab's (a web address: open it)
   const prev = document.activeElement;
   const back = document.createElement("div"); back.className = "backdrop";
   const box = document.createElement("div"); box.className = "dialog finder";
@@ -35,6 +35,7 @@ function finder({ title, tabs, start = 0, opener }) {
     const server = !!tabs[t].search;  // the server already matched these
     const shown = s && !server ? all.map(it => ({ it, sc: Math.max(idScore(s, it.ids), fuzzy(s, it.label), fuzzy(s, it.match || "") - 1) })).filter(x => x.sc >= 0)
       .sort((a, b) => b.sc - a.sc).slice(0, 400).map(x => x.it) : all.slice(0, 400);
+    if (lead && s) shown.unshift(...lead(s));
     const withLive = !!tabs[t].live && s.length >= 2;
     let extra = [];
     if (withLive && live.q === s) {
@@ -186,7 +187,7 @@ function openFinder(start, { side = false, opener } = {}) {
   opener = opener || (side ? "MC:KeyO" : "M:KeyO");
   if (modal && modal.kind === "finder" && modal.opener === opener) { closeModal(); return; }
   if (start == null) start = S.file && isNote(S.file) ? 2 : S.file ? 1 : 0;  // starts on Files in a file tab, on Notes in a note
-  finder({ opener, start, tabs: [
+  finder({ opener, start, lead: urlLead, tabs: [
     { name: "Sessions", empty: "No sessions. ⌘N starts one.", items: async () => {
       const all = (await api("GET", "/api/sessions?closed=1")).sessions;
       const open = all.filter(s => !s.closed);

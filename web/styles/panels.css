@@ -247,3 +247,10 @@ body.dragsort, body.dragsort * { cursor:grabbing !important; -webkit-user-select
 #statusbar .callpill.muted .pwave { display:none; }
 #statusbar .callpill + .seg { padding-left:0; }
 #statusbar .callpill + .seg::before { display:none; }
+/* a site in a side tab (side.js renderSideWeb): where it is, its note, Reload, Copy link, Open in the browser */
+#sideweb { display:flex; align-items:center; gap:4px; height:28px; padding:0 6px 0 10px; border-bottom:1px solid var(--line); background:var(--surface); flex:none;
+  font-size:calc(11.5px * var(--ui-k)); color:var(--ink-2); }
+#sideweb[hidden] { display:none; }
+#sideweb .sw-host { font-weight:calc(600 + var(--wd)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+#sideweb .sw-note { color:var(--ink-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
+#sideweb .btn { height:20px; }

@@ -5,10 +5,14 @@ from __future__ import annotations
 import hashlib
 import os
 import time
+import re
 import uuid
 from pathlib import Path
 
 from orbit.desk.session import mention_tag, Session
+
+
+WEB_URL = re.compile(r"(?i)^https?://[^\s<>\"']+$")  # a web side tab's address (sides.py: an Orbit page's too)
 
 
 class Agents:
@@ -51,6 +55,20 @@ class Agents:
               "sid": self._by_sid(by)}  # (sid: the side tab goes with that session's tab, not whichever is in front)
         if ev["sid"]:  # beside that session, on every screen (desk/sides.py)
             self.side_op(ev["sid"], "open", {"id": pid, "kind": "web", "url": ev["url"], "title": ev["title"]})
+        self.broadcast(ev)
+        return ev
+
+    def show_url(self, url: str, title: str = "", by: str = "") -> dict:
+        """Show a web address in a side tab (orbit-agent show URL): the page itself, framed; a site that refuses to be
+        framed shows blank there, and the tab's bar opens it in the browser."""
+        url = url.strip()
+        if not WEB_URL.match(url) or len(url) > 3000:
+            raise ValueError("a web address: http(s)://…")
+        host = re.sub(r"^https?://(?:[^@/]*@)?([^/:?#]+).*$", r"\1", url, flags=re.I)
+        pid = uuid.uuid4().hex[:12]
+        ev = {"t": "show", "id": pid, "url": url, "title": title.strip() or host, "by": self.by_name(by), "sid": self._by_sid(by)}
+        if ev["sid"]:
+            self.side_op(ev["sid"], "open", {"id": pid, "kind": "web", "url": url, "title": ev["title"]})
         self.broadcast(ev)
         return ev
 

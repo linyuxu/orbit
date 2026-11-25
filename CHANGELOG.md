@@ -8,6 +8,13 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A website in the side panel: `orbit-agent show URL` puts it beside the conversation (`--browser`: the browser, as
+  before), and a web address typed in ⌘O / ⌘⌃O offers "Open beside" (or in the browser). Its bar: the host, Reload,
+  Copy link, Open in browser; a site that refuses to be framed (most sign-in pages, GitHub, Google) shows blank, which
+  a page cannot detect, so the bar is always there. A site keeps its own origin in the frame (its cookies, its
+  sign-in; no referrer); an agent's own page keeps the strict sandbox. A web side tab's address is an agent's page or
+  http(s), never `javascript:` / `file:` (the server refuses others). From an https Orbit, an http site opens only in
+  the browser (the bar says so).
 - File and view tabs move to another group too, like sessions: a drag in the Groups panel (under the other group's
   head, or among its rows), or the tab's menu → Move to (the tab row, the panel). Its side tabs go with it.
 - ⌘O has a Notes tab (after Files): every note by its title and folder, filtered as you type; for 2+ characters the

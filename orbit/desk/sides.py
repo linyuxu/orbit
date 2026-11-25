@@ -46,6 +46,8 @@ def clean(spec: Any) -> dict:
     out = {k: v for k, v in spec.items() if isinstance(k, str) and (v is None or isinstance(v, (str, int, float, bool)))}
     if len(json.dumps(out)) > SPEC_MAX:
         raise ValueError("that side tab says too much")
+    if out["kind"] == "web" and not re.match(r"(?i)^/show/[0-9a-f]{6,32}$|^https?://[^\s<>\"']+$", str(out.get("url") or "")):
+        raise ValueError("a web side tab's url: an agent's page (/show/…) or http(s)://…")  # (never javascript: or file:)
     if not (isinstance(out.get("id"), str) and ID_RE.match(out["id"])):
         out["id"] = uuid.uuid4().hex[:10]
     return out

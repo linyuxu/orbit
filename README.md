@@ -253,6 +253,7 @@ for the session (a new or attached session, a restart), not with every request. 
 orbit-agent ctx                          # what the user is looking at: tab, file:line, selection, open files
 orbit-agent open src/app.py:42 [--side]  # open a file for the user (a tab, or the side tab); never takes the keyboard
 orbit-agent show report.html             # show a page in the side tab (sandboxed); `-` reads HTML from stdin
+orbit-agent show https://docs.example    # a website in the side tab (its bar: Open in browser); --browser opens it there
 orbit-agent sessions                     # the open sessions
 orbit-agent send helper "check the migration" --wait   # ask another session; prints its answer
 orbit-agent steer helper "skip the slow tests"           # add to the request it is running now (no new turn)
