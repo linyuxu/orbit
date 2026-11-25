@@ -125,3 +125,19 @@ img.gicon { border-radius:4px; object-fit:cover; }
 .hacts .btn { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
 .dialog input.lk-pick { width:34px; height:28px; flex:none; padding:2px; border-radius:6px; }
 .dialog .lk-icons input.lk-own { flex:1; width:auto; }
+
+/* the icon picker (the look dialog): a search, the groups as chips, a grid that scrolls */
+.ej-top { display:flex; align-items:center; gap:8px; }
+.dialog .ej-top input.ej-q { flex:1; width:auto; }
+.ej-cur { width:34px; height:34px; flex:none; display:grid; place-items:center; font-size:22px; border-radius:8px; background:var(--hover); }
+.ej-cur:empty { background:repeating-linear-gradient(135deg, var(--surface) 0 4px, var(--hover) 4px 8px); }
+.ej-chips { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0 4px; }
+.ej-chip { border:0; background:var(--hover); color:var(--ink-2); font:inherit; font-size:calc(11.5px * var(--ui-k)); padding:2px 8px; border-radius:10px; cursor:pointer; }
+.ej-chip:hover { background:var(--sel); color:var(--ink); }
+.ej-body { position:relative; height:230px; overflow:auto; border:1px solid var(--line); border-radius:var(--r-s); padding:0 6px 6px; margin-top:4px; background:var(--surface); }
+.ej-h { position:sticky; top:0; z-index:1; padding:6px 2px 4px; font-size:calc(11px * var(--ui-k)); font-weight:calc(600 + var(--wd)); color:var(--ink-3); background:var(--surface); }
+.ej-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(34px, 1fr)); gap:2px; }
+.ej { height:34px; border:1px solid transparent; border-radius:7px; background:none; font-size:20px; line-height:1; cursor:pointer; padding:0; }
+.ej:hover { background:var(--hover); }
+.ej.on { border-color:var(--ink-3); background:var(--hover); }
+.ej-body .hempty { padding:14px 6px; }

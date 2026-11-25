@@ -280,7 +280,80 @@ function widgetMenu(wid, where) {
 
 /* ---------- a group's look: icon, colour, cover */
 const GROUP_COLORS = ["#2a78d6", "#1baf7a", "#eb6834", "#eda100", "#e87ba4", "#6250d6", "#008300", "#52514e"];
-const ICON_IDEAS = ["🚀", "🧪", "📈", "🛠️", "📚", "🎯", "💡", "🧭", "🌱", "🏠", "💼", "🎨"];
+const EMOJI_LABEL = { "Suggested": "Suggested", "Objects": "Objects", "Activities": "Activities", "Travel & Places": "Places", "Animals & Nature": "Nature", "Food & Drink": "Food",
+                      "Symbols": "Symbols", "Smileys & Emotion": "Faces", "People & Body": "People", "Flags": "Flags" };
+const EMOJI_SUGGESTED = ["🚀", "💼", "🛠️", "💻", "🤖", "🧠", "📈", "📊", "💰", "🏦", "🧪", "🔬", "📚", "📝", "📅", "🎯", "💡", "🧭",
+  "🌱", "🏠", "🎨", "🎮", "🎵", "⚽", "✈️", "🌍", "☕", "🔥", "⭐", "❤️", "🔒", "📦", "🏗️", "⚙️", "🗂️", "📣"];
+let EMOJI_LOADING = null;
+function loadEmoji() {  // (emoji-data.js: 1 600 emoji with their names, fetched the first time the picker opens)
+  if (typeof EMOJI_GROUPS !== "undefined") return Promise.resolve();
+  return EMOJI_LOADING || (EMOJI_LOADING = new Promise((ok, bad) => {
+    const sc = document.createElement("script"); sc.src = "/src/emoji-data.js";
+    sc.onload = ok; sc.onerror = () => { EMOJI_LOADING = null; bad(new Error("cannot load the emoji list")); };
+    document.head.appendChild(sc);
+  }));
+}
+/* The emoji a query finds: every word of it in an emoji's name (English), or a Chinese word's English ones (EMOJI_ZH). */
+function emojiFind(q) {
+  q = q.trim().toLowerCase();
+  const groups = EMOJI_GROUPS.map(([g, list]) => [g, list.split("|").map(x => { const k = x.indexOf(" "); return [x.slice(0, k), x.slice(k + 1)]; })]);
+  if (!q) {  // (nothing asked: a row of the usual project icons first)
+    const named = new Map(groups.flatMap(([, xs]) => xs));
+    return [["Suggested", EMOJI_SUGGESTED.filter(e => named.has(e)).map(e => [e, named.get(e)])], ...groups];
+  }
+  const terms = q.split(/\s+/);
+  const keys = Object.keys(EMOJI_ZH);
+  const alts = terms.map(t => {  // a Chinese word: its own entry, else the entries that hold it, else the longest one it holds
+    if (!/[㐀-鿿]/.test(t)) return [t];
+    const holding = keys.filter(k => k.includes(t));
+    const pick = EMOJI_ZH[t] ? [t] : holding.length ? holding : keys.filter(k => t.includes(k)).sort((a, b) => b.length - a.length).slice(0, 1);
+    const en = pick.flatMap(k => EMOJI_ZH[k].split(","));
+    return en.length ? [...new Set(en)] : [t];
+  });
+  const reEsc = w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const res = alts.map(a => a.map(w => new RegExp(`(^|[^a-z])${reEsc(w)}`)));  // (at a word's start: "cat" is not in "application")
+  const hit = name => res.every(a => a.some(r => r.test(name)));
+  return groups.map(([g, xs]) => [g, xs.filter(([, n]) => hit(n))]).filter(([, xs]) => xs.length);
+}
+/* The icon picker: a search (English names, Chinese common words), the groups as chips, a grid; a query that finds
+   nothing can itself be the icon (an emoji not listed, or 1–2 letters). */
+function iconPicker(box, st, changed) {
+  box.innerHTML = `<div class="ej-top"><input class="ej-q" data-own-enter placeholder="Search: rocket, chart, 火箭, 股票…" spellcheck="false" autocomplete="off">` +
+    `<span class="ej-cur" title="Its icon now">${st.icon && !st.icon.startsWith("img:") ? esc(st.icon) : ""}</span></div>` +
+    `<div class="ej-chips"></div><div class="ej-body"><div class="hempty">Loading…</div></div>` +
+    `<div class="lk-row"><button class="btn sm" data-lk="iconpic">A picture…</button><button class="btn sm quiet" data-lk="noicon">No icon</button>` +
+    `${st.icon.startsWith("img:") ? `<img class="lk-prev" src="${esc(rawUrl(st.icon.slice(4)))}">` : ""}</div>`;
+  const q = box.querySelector(".ej-q"), body = box.querySelector(".ej-body"), chips = box.querySelector(".ej-chips");
+  const draw = () => {
+    const found = emojiFind(q.value), query = q.value.trim();
+    chips.hidden = !!query;
+    chips.innerHTML = found.map(([g]) => `<button class="ej-chip" data-jump="${esc(g)}">${esc(EMOJI_LABEL[g] || g)}</button>`).join("");
+    body.innerHTML = found.length ? found.map(([g, xs]) => `<div class="ej-sec" data-g="${esc(g)}"><div class="ej-h">${esc(EMOJI_LABEL[g] || g)}${query ? ` · ${xs.length}` : ""}</div>` +
+        `<div class="ej-grid">${xs.map(([e, n]) => `<button class="ej${st.icon === e ? " on" : ""}" data-ic="${esc(e)}" title="${esc(n)}">${e}</button>`).join("")}</div></div>`).join("")
+      : `<div class="hempty">No emoji named “${esc(query)}”.${[...query].length <= 2 || /\p{Extended_Pictographic}/u.test(query) ? ` <button class="btn sm" data-own="${esc(query)}">Use “${esc(query)}”</button>` : ""}</div>`;
+  };
+  loadEmoji().then(draw, e => { body.innerHTML = `<div class="hempty">${esc(e.message)}</div>`; });
+  q.addEventListener("input", () => { if (typeof EMOJI_GROUPS !== "undefined") draw(); });
+  q.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); const first = body.querySelector("[data-ic], [data-own]"); if (first) first.click(); } });
+  box.addEventListener("click", async e => {
+    const ic = e.target.closest("[data-ic], [data-own]"), j = e.target.closest("[data-jump]"), lk = e.target.closest("[data-lk]");
+    if (ic) {
+      st.icon = ic.dataset.ic || ic.dataset.own;
+      body.querySelectorAll(".ej.on").forEach(x => x.classList.remove("on")); ic.classList.add("on");
+      box.querySelector(".ej-cur").textContent = st.icon; box.querySelector(".lk-prev") && box.querySelector(".lk-prev").remove();
+      changed();
+    } else if (j) {
+      const sec = body.querySelector(`.ej-sec[data-g="${CSS.escape(j.dataset.jump)}"]`); if (sec) body.scrollTop = sec.offsetTop - body.offsetTop;
+    } else if (lk) {
+      try {
+        if (lk.dataset.lk === "iconpic") { const pth = await uploadPicture(); if (pth) st.icon = "img:" + pth; }
+        else st.icon = "";
+      } catch (err) { toast(err.message); }
+      iconPicker(box, st, changed); changed();
+    }
+  });
+  setTimeout(() => q.focus(), 0);
+}
 async function uploadPicture() {
   const f = await new Promise(res => { const i = document.createElement("input"); i.type = "file"; i.accept = "image/*"; i.onchange = () => res(i.files[0] || null); i.click(); });
   if (!f) return null;
@@ -290,35 +363,27 @@ async function uploadPicture() {
 async function groupLookDialog(gid = S.group) {
   const g = groupOf(gid); if (!g) return;
   const st = { icon: g.icon || "", color: g.color || "", cover: g.cover || "" };
-  const draw = box => {
-    box.innerHTML = `<div class="field"><label>Icon</label><div class="lk-icons">${ICON_IDEAS.map(e => `<button class="lk-ic${st.icon === e ? " on" : ""}" data-ic="${e}">${e}</button>`).join("")}` +
-      `<input class="lk-own" placeholder="Your own: an emoji or 1–2 letters" maxlength="8" value="${esc(st.icon.startsWith("img:") ? "" : st.icon)}"></div>` +
-      `<div class="lk-row"><button class="btn sm" data-lk="iconpic">A picture…</button>${st.icon ? `<button class="btn sm quiet" data-lk="noicon">No icon</button>` : ""}${st.icon.startsWith("img:") ? `<img class="lk-prev" src="${esc(rawUrl(st.icon.slice(4)))}">` : ""}</div></div>` +
-      `<div class="field"><label>Colour</label><div class="lk-colors"><button class="lk-c none${!st.color ? " on" : ""}" data-c="" title="None"></button>${GROUP_COLORS.map(c => `<button class="lk-c${st.color === c ? " on" : ""}" data-c="${c}" style="background:${c}"></button>`).join("")}` +
-      `<input type="color" class="lk-pick" value="${esc(st.color || "#2a78d6")}" title="Any colour"></div></div>` +
-      `<div class="field"><label>Cover (over the home page)</label><div class="lk-row"><button class="btn sm" data-lk="cover">A picture…</button>${st.cover ? `<button class="btn sm quiet" data-lk="nocover">No cover</button><span class="lk-cover" style="background-image:url('${esc(rawUrl(st.cover))}')"></span>` : ""}</div></div>`;
-  };
-  const v = await dialog({ title: `The look of ${groupPath(gid)}`, ok: "Save", wide: true,
+  const v = await dialog({ title: `The look of ${groupPath(gid)}`, ok: "Save", wide: true, focus: "",
     render: box => {
-      draw(box);
-      box.addEventListener("click", async e => {
-        const ic = e.target.closest("[data-ic]"), c = e.target.closest("[data-c]"), lk = e.target.closest("[data-lk]");
-        if (ic) { st.icon = ic.dataset.ic; draw(box); }
-        else if (c) { st.color = c.dataset.c; draw(box); }
-        else if (lk) {
-          const a = lk.dataset.lk;
-          try {
-            if (a === "iconpic") { const p = await uploadPicture(); if (p) st.icon = "img:" + p; }
-            else if (a === "cover") { const p = await uploadPicture(); if (p) st.cover = p; }
-            else if (a === "noicon") st.icon = "";
-            else if (a === "nocover") st.cover = "";
-          } catch (err) { toast(err.message); }
-          draw(box);
-        }
-      });
-      box.addEventListener("input", e => {
-        if (e.target.matches(".lk-own")) st.icon = e.target.value.trim();
-        if (e.target.matches(".lk-pick")) { st.color = e.target.value; box.querySelectorAll(".lk-c").forEach(x => x.classList.remove("on")); }
+      box.innerHTML = `<div class="field"><label>Icon</label><div class="lk-icon"></div></div>` +
+        `<div class="field"><label>Colour</label><div class="lk-colors"></div></div>` +
+        `<div class="field"><label>Cover (over the home page)</label><div class="lk-row lk-coverrow"></div></div>`;
+      const colors = box.querySelector(".lk-colors"), cover = box.querySelector(".lk-coverrow");
+      const drawColors = () => {
+        colors.innerHTML = `<button class="lk-c none${!st.color ? " on" : ""}" data-c="" title="None"></button>${GROUP_COLORS.map(c => `<button class="lk-c${st.color === c ? " on" : ""}" data-c="${c}" style="background:${c}"></button>`).join("")}` +
+          `<input type="color" class="lk-pick" value="${esc(st.color || "#2a78d6")}" title="Any colour">`;
+      };
+      const drawCover = () => {
+        cover.innerHTML = `<button class="btn sm" data-cv="pick">A picture…</button>${st.cover ? `<button class="btn sm quiet" data-cv="none">No cover</button><span class="lk-cover" style="background-image:url('${esc(rawUrl(st.cover))}')"></span>` : ""}`;
+      };
+      iconPicker(box.querySelector(".lk-icon"), st, () => {});
+      drawColors(); drawCover();
+      colors.addEventListener("click", e => { const c = e.target.closest("[data-c]"); if (c) { st.color = c.dataset.c; drawColors(); } });
+      colors.addEventListener("input", e => { if (e.target.matches(".lk-pick")) { st.color = e.target.value; colors.querySelectorAll(".lk-c").forEach(x => x.classList.remove("on")); } });
+      cover.addEventListener("click", async e => {
+        const b = e.target.closest("[data-cv]"); if (!b) return;
+        try { if (b.dataset.cv === "pick") { const pth = await uploadPicture(); if (pth) st.cover = pth; } else st.cover = ""; } catch (err) { toast(err.message); }
+        drawCover();
       });
     } });
   if (!v) return;

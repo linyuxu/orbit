@@ -115,6 +115,7 @@ function dialog({ title, body = "", fields = [], ok = "OK", danger = false, wide
         if (combo === "Enter" || combo === "M:Enter") {
           if (document.activeElement && document.activeElement.matches("[data-cancel]")) finish(false);
           else if (document.activeElement && document.activeElement.classList.contains("dd") && combo === "Enter") return false;
+          else if (document.activeElement && document.activeElement.hasAttribute("data-own-enter") && combo === "Enter") return false;  // (a field whose ⏎ is its own: a search that picks)
           else finish(true);
           return true;
         }

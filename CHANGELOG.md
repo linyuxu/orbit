@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A group's icon is picked from all of Unicode's emoji (about 1,600, loaded when the picker opens): a search box
+  (English names and common Chinese words: 火箭, 股票, 猫, 工具…; Enter takes the first match), category chips,
+  a Suggested row of the usual project icons; any short text or a picture still works.
 - A group's home page, its first tab (the group pill; a click on the group in the left panel; its ⌘ digit pressed
   again): widgets on a grid of sixths: its sessions as cards (state, last answer), its subgroups (a click goes in), its
   files and views, the schedules that wake its sessions, what happened lately, what was pinned, and Markdown notes of
