@@ -23,6 +23,9 @@ ORBIT_SKILLS = ROOT / "plugin" / "skills"  # Orbit's own skills (also offered by
 
 SETTINGS: dict[str, Any] = {
     "calendar": False,     # D4: Calendar reads macOS Calendar only when turned on
+    "fleet_harness": "",   # the harness Fleet helpers (⌘K asks, Prep, `orbit-agent ask`) run: "" = claude
+    "fleet_model": "",     # and their model: "" = the harness's default
+    "week_template": "",   # a vault note whose text starts a new week note ({days}: the Mon–Fri headings); "" = built in
     "meeting_notes": "{vault}/Meetings/{date} {title}.md",  # where a meeting's note is (desk/meetings.py)
     "open_in": "default",  # where ↗ / "Open in …" open a file: default | jetbrains | vscode | side
     "serve_remote": False,  # other machines may reach this server (its Tailscale / LAN address, with the token)

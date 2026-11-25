@@ -8,6 +8,20 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Extension points, so a customized build needs no core patches (request #29):
+  - `Driver.end()`: closing a session calls it (default: `close()`); a server restart, a hand-off or a changed setting
+    still calls `close()`. A driver whose agent outlives it (in a terminal multiplexer) ends the agent only on `end()`.
+  - `$ORBIT_HOME`: Orbit's folder (default `~/.orbit`; state and data under it). The folder's old name is no longer
+    moved on its own (the server, the app): `orbit migrate-home` does it; the server says so when it would apply.
+  - `orbit-agent` and `orbit` without `$ORBIT_PORT` reach the server of their state folder (`$ORBIT_STATE_DIR`, else
+    `$ORBIT_HOME`, else `~/.orbit`: its `server.json`, while that server holds `server.lock`), else 8770.
+  - Settings → General → Fleet helpers / Fleet model (`fleet_harness`, `fleet_model`): the harness and model ⌘K
+    asks, Prep and `orbit-agent ask` run (default Claude Code). Helpers of another harness are not reused.
+  - `app/build-app.sh --name N --port P --state DIR [--home DIR]`: a second app (its own name, bundle id, port,
+    folder; the settings in its Info.plist's LSEnvironment as `ORBIT_APP_*`, which win over a terminal's
+    `ORBIT_PORT`). The app honours `$ORBIT_HOME`.
+  - Settings → General → Week note template (`week_template`): a note whose text starts each new week note
+    (`{days}` the Mon–Fri headings, `{monday}`, `{week}`).
 - The Calendar (request #27): the cursor's meeting's note is a pane pinned under the list (the list scrolls, the
   pane stays; its top edge drags its height): read-only while you move, ⏎ edits it (autosaved), Esc back to the list.
   Where a note is made is a setting, `meeting_notes` (Settings → General): `{vault}/` or `{data}/`, then a path with

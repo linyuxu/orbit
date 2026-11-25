@@ -46,8 +46,14 @@ fn root() -> PathBuf {
     p.canonicalize().unwrap_or(p)
 }
 
+/// A variant's own setting (build-app.sh: ORBIT_APP_PORT, ORBIT_APP_HOME, ORBIT_APP_STATE_DIR, from its Info.plist)
+/// wins over the general one (ORBIT_PORT …), which a terminal inside another Orbit may have exported.
+fn app_env(own: &str, general: &str) -> Option<String> {
+    std::env::var(own).or_else(|_| std::env::var(general)).ok().filter(|v| !v.trim().is_empty())
+}
+
 fn port() -> u16 {
-    std::env::var("ORBIT_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(8770)
+    app_env("ORBIT_APP_PORT", "ORBIT_PORT").and_then(|v| v.parse().ok()).unwrap_or(8770)
 }
 
 /// The server the window shows: where it is, its token (none for this Mac's), and whether it is this Mac's.
@@ -132,20 +138,22 @@ fn set_target(t: Target) {
     *TARGET.lock().unwrap() = Some(t);
 }
 
-/// ~/.aide (the folder's old name) moves to ~/.orbit once, leaving a link (the server does the same).
-fn migrate_home() {
-    let (new, old) = (home().join(".orbit"), home().join(concat!(".a", "ide")));
-    if !new.exists() && old.is_dir() && !old.is_symlink() && fs::rename(&old, &new).is_ok() {
-        let _ = std::os::unix::fs::symlink(&new, &old);
-    }
-}
-
 fn home() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()))
 }
 
+/// The server's state folder: $ORBIT_STATE_DIR, else $ORBIT_HOME, else ~/.orbit (as the server picks it). The folder's
+/// old name is moved only when asked (`orbit migrate-home`): a variant (another $ORBIT_HOME) must not touch it.
 fn state_dir() -> PathBuf {
-    std::env::var("ORBIT_STATE_DIR").map(PathBuf::from).unwrap_or_else(|_| home().join(".orbit"))
+    app_env("ORBIT_APP_STATE_DIR", "ORBIT_STATE_DIR")
+        .or_else(|| app_env("ORBIT_APP_HOME", "ORBIT_HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home().join(".orbit"))
+}
+
+/// The app's name: $ORBIT_APP_NAME (a variant built with `build-app.sh --name`), else Orbit.
+fn app_name() -> String {
+    std::env::var("ORBIT_APP_NAME").ok().filter(|v| !v.trim().is_empty()).unwrap_or_else(|| "Orbit".into())
 }
 
 fn log_path() -> PathBuf {
@@ -174,7 +182,7 @@ fn target_open() -> bool {
 }
 
 /// Settings the server reads from the environment; an app opened from Finder only sees them via the login shell.
-const PASS_ENV: [&str; 4] = ["ORBIT_DATA_ROOT", "ORBIT_VAULT", "ORBIT_STATE_DIR", "ORBIT_EDITOR"];
+const PASS_ENV: [&str; 5] = ["ORBIT_DATA_ROOT", "ORBIT_VAULT", "ORBIT_STATE_DIR", "ORBIT_HOME", "ORBIT_EDITOR"];
 
 /// The login shell's environment (PATH and Orbit's settings): launchd gives an app a bare one.
 fn login_env() -> Vec<(String, String)> {
@@ -247,6 +255,9 @@ fn spawn_server() -> Result<Child, String> {
         .current_dir(&root)
         .env("PATH", login_path(&env))
         .env("PYTHONUNBUFFERED", "1")
+        .envs(["ORBIT_HOME", "ORBIT_STATE_DIR"].iter().filter_map(|k| {  // a variant's folders, for its server
+            std::env::var(k.replace("ORBIT_", "ORBIT_APP_")).ok().map(|v| (k.to_string(), v))
+        }))
         .stdin(Stdio::null())
         .stdout(log)
         .stderr(log2)
@@ -598,12 +609,13 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let log = MenuItem::with_id(app, "log", "Show Server Log", true, None::<&str>)?;
     let connect = MenuItem::with_id(app, "connect", "Connect to Server…", true, None::<&str>)?;
     let sep = || PredefinedMenuItem::separator(app);
+    let name = app_name();
     let app_menu = Submenu::with_items(
         app,
-        "Orbit",
+        &name,
         true,
         &[
-            &PredefinedMenuItem::about(app, Some("About Orbit"), None)?,
+            &PredefinedMenuItem::about(app, Some(&format!("About {name}")), None)?,
             &sep()?,
             &settings,
             &connect,
@@ -680,14 +692,13 @@ fn drag_drop(window: &tauri::Window, e: &tauri::DragDropEvent) {
 }
 
 fn main() {
-    migrate_home();
     let app = tauri::Builder::default()
         .manage(Server(Mutex::new(None)))
         .setup(|app| {
             let handle = app.handle().clone();
             app.set_menu(build_menu(&handle)?)?;
             let mut win = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .title("Orbit")
+                .title(app_name())
                 .min_inner_size(480.0, 360.0);
             // No native title bar: the page's tab row is the title bar (ui.md: "the title bar holds only the tabs"),
             // with the window buttons over its left end (the page leaves room: body.app #titlebar).

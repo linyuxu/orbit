@@ -255,8 +255,15 @@ class Driver:
         raise NotImplementedError
 
     def close(self) -> None:
-        """End the process."""
+        """End the process: the server stops or hands off, the session's settings changed (a new process resumes the
+        conversation), or end() below."""
         raise NotImplementedError
+
+    def end(self) -> None:
+        """The user closed the session (Desk.close): its agent is done with, not restarted. Default: close(). A driver
+        whose agent outlives it (one running in a terminal multiplexer, which close() leaves running for the next
+        server to take over) ends the agent here."""
+        self.close()
 
     def alive(self) -> bool:
         raise NotImplementedError

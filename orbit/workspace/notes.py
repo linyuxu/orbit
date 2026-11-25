@@ -176,6 +176,7 @@ def monday(d: date) -> date:
 
 
 GUIDE = "Organization Guide.md"
+WEEK_TEMPLATE = ""  # the week_template setting (the Desk sets it): a note whose text starts each new week note
 GUIDE_SECTIONS = ["Focus", "Daily Work", "Projects in Flight", "Ideas", "Carry-overs", "Reflections"]
 
 
@@ -247,6 +248,23 @@ def _guide_template(guide: str, m: date) -> list[str]:
                 j += 1
             body[at + 1:j] = [""] + block
     return body
+
+
+def _setting_template(m: date, guided: bool) -> list[str] | None:
+    """The week_template setting's note (vault-relative, or ~/… / absolute), its {days} the Mon–Fri headings,
+    {monday} YYYY-MM-DD, {week} YYYYMMDD; None when unset or unreadable (then the guide's or the built-in one)."""
+    rel = WEEK_TEMPLATE.strip()
+    if not rel:
+        return None
+    p = Path(rel).expanduser()
+    p = p if p.is_absolute() else root() / (rel if rel.lower().endswith(".md") else rel + ".md")
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    days = "\n\n".join(day_heading(m + timedelta(days=i), guided) for i in range(5)) + "\n"
+    text = text.replace("{days}", days).replace("{monday}", f"{m:%Y-%m-%d}").replace("{week}", f"{m:%Y%m%d}")
+    return text.rstrip("\n").split("\n")
 
 
 def _sub(line: str, subs: dict[str, str]) -> str:
@@ -345,7 +363,10 @@ def week_note(d: date | None = None) -> dict[str, Any]:
     p = (_recent_week(d) if guide is not None else None) or week_path(d)
     if not p.exists():
         m = monday(d)
-        if guide is not None:
+        body = _setting_template(m, guide is not None)
+        if body is not None:
+            pass
+        elif guide is not None:
             body = _guide_template(guide, m)
         else:
             body = [f"# Week of {m:%Y-%m-%d}", ""]

@@ -183,6 +183,9 @@ as before. History rebuilds the same: Claude Code's transcript starts such a tur
 `orbit.drivers.base.Driver`: one instance per session; the Desk calls `start`, `send`, `steer`, `stop`, `close`,
 `alive`, `history`, and receives the events of §2 (stdout table, as `DriverEvent(kind, data)`) plus
 `state` (`starting` · `ready` · `not ready` · `stopped`, with `error`) and `info` (`model`, `commands`) through `emit`.
+`close` ends the process when the server stops or hands off, or a setting changed (a new process resumes the
+conversation); `end` (optional, default `close`) when the user closed the session: a driver whose agent outlives it
+(one in a terminal multiplexer, left running by `close` for the next server) ends the agent there.
 Class attributes and methods say what the harness offers:
 
 | | |

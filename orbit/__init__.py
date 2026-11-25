@@ -9,7 +9,7 @@
     workspace/  the user's files and notes: tree, read / save, ± Review, the vault, skills
     services/   beside the sessions: schedules, the calendar, plan usage, the ⌘J shells
     harness_server/  the agent processes, in a daemon that outlives a restart of the server (stdlib only)
-    home.py     ~/.orbit
+    home.py     $ORBIT_HOME, else ~/.orbit
 """
 
 from pathlib import Path

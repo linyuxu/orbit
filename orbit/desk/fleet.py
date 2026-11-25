@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import uuid
 
-from orbit.desk.session import ACTIVE, FLEET_GROUP, FLEET_MAX, Session
+from orbit.desk.session import ACTIVE, DRIVERS, FLEET_GROUP, FLEET_MAX, Session
 
 
 class Fleet:
@@ -19,8 +19,13 @@ class Fleet:
         cwd = os.path.realpath(os.path.expanduser(cwd or "~"))
         if not os.path.isdir(cwd):
             raise ValueError(f"no such folder: {cwd}")
-        with self.lock:
-            pool = [s for s in self.sessions.values() if s.fleet and not s.closed and s.cwd == cwd]
+        harness = str(self.settings.get("fleet_harness") or "") or "claude"  # (Settings → General: Fleet helpers)
+        model = str(self.settings.get("fleet_model") or "")
+        if harness not in DRIVERS:
+            raise ValueError(f"the Fleet harness {harness!r} is not available (Settings → General)")
+        with self.lock:  # helpers of this harness and model (a changed setting makes new ones; the old stay idle)
+            pool = [s for s in self.sessions.values() if s.fleet and not s.closed and s.cwd == cwd
+                    and s.harness == harness and (s.model or "") == model]
         busy = lambda s: sum(1 for c in s.cards if c["state"] == "queued" or c["state"] in ACTIVE)
         idle = [s for s in pool if busy(s) == 0 and s.state != "not ready"]
         if idle:
@@ -29,7 +34,7 @@ class Fleet:
             used = {x.name for x in self.sessions.values() if x.fleet}
             n = next(i for i in range(1, 1000) if f"Fleet {i}" not in used)
             s = Session({"id": str(uuid.uuid4()), "name": f"Fleet {n}", "cwd": cwd, "mode": "default",
-                         "group": FLEET_GROUP, "fleet": True, "named": True})
+                         "harness": harness, "model": model, "group": FLEET_GROUP, "fleet": True, "named": True})
             s.loaded = True
             with self.lock:
                 self.sessions[s.id] = s

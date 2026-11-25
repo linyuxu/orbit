@@ -103,7 +103,15 @@ encrypted (Tailscale is).
 
 ```sh
 app/build-app.sh        # builds dist/Orbit.app and installs ~/Applications/Orbit.app
+app/build-app.sh --name "Orbit Lab" --port 8780 --state ~/.orbit-lab   # a second app beside it (below)
 ```
+
+**A second instance** on the same Mac (to try a customized build without touching your sessions): `--name` gives the
+app its own name and bundle id, `--port` its server's port, `--state DIR` its folder (state, data, logs; `--home DIR`
+for the data alone). Outside the app the same is `$ORBIT_HOME` (Orbit's folder, default `~/.orbit`), `$ORBIT_PORT`
+and `$ORBIT_STATE_DIR`. `orbit` and `orbit-agent` without `$ORBIT_PORT` reach the server of their state folder (its
+`server.json`), else 8770. Orbit never moves a folder on its own: `orbit migrate-home` moves an older Orbit's folder
+(the folder's old name) to `~/.orbit`.
 
 Open **Orbit** from Spotlight, Launchpad or `~/Applications`. The app starts the server from this checkout
 (or reuses one already on port 8770). **The server is the backend: agents and schedules keep running when the
@@ -230,7 +238,8 @@ week's Monday (e.g. `Journal/202611/2026-11-16.md` for the week of the 16th), wi
 heading a day; ⌘⇧D, selected answer text and `orbit-agent note` add under today. Otherwise: with an `Organization Guide.md` at the
 vault root, `Journal/<YYYY>/Week of <YYYYMMDD>.md` (a week note from the last 6 days is reused; a new one comes from the
 guide's weekly template, else Focus · Daily Work with `### Mon 11/16`… · Projects in Flight · Ideas · Carry-overs ·
-Reflections); without a guide, `Weekly/Week of <Monday>.md`.
+Reflections); without a guide, `Weekly/Week of <Monday>.md`. Settings → General → Week note template names a note
+whose text starts each new week note instead (`{days}`: the Mon–Fri headings, `{monday}`: the date).
 
 ## `orbit-agent`: Orbit for agents
 

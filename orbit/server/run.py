@@ -90,7 +90,7 @@ def make_server(port: int, desk: Desk, schedules: Path | None = None, binds: lis
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="orbit", description="Orbit server")
     ap.add_argument("--port", type=int, default=int(os.environ.get("ORBIT_PORT", DEFAULT_PORT)))
-    ap.add_argument("--state-dir", help="UI state folder (default ~/.orbit, or $ORBIT_STATE_DIR)")
+    ap.add_argument("--state-dir", help="UI state folder (default $ORBIT_STATE_DIR, else $ORBIT_HOME, else ~/.orbit)")
     ap.add_argument("--data-root", help="personal data folder (default $ORBIT_DATA_ROOT)")
     ap.add_argument("--remote", action="store_true",
                     help="also serve other machines (every address; their requests need the token: orbit url)")
@@ -102,6 +102,10 @@ def main(argv: list[str] | None = None) -> None:
     cli = str(ROOT / "cli")
     os.environ["PATH"] = cli + os.pathsep + os.path.dirname(sys.executable) + os.pathsep + os.environ.get("PATH", "")
     os.environ["ORBIT_PORT"] = str(a.port)
+    from orbit import home as orbit_home
+    if orbit_home.needs_migration():  # (moved only when asked: a second instance must not move the first one's)
+        print(f"orbit: {orbit_home.legacy_home()} holds an older Orbit's folder: `orbit migrate-home` moves it to "
+              f"{orbit_home.home()}", flush=True)
     lock = take_server_lock(state_dir(a.state_dir))  # noqa: F841 - held until this process exits
     started = time.time()
     # Signals from here on: one during start-up (taking the hand-offs must not be cut in half) is acted on once the

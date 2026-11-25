@@ -43,7 +43,7 @@
     orbit-agent p [--stdin] [NAME ARGS…]     a plugin's command (its [cli]), with its secrets; no NAME: which plugins have one
 
 Agents started by Orbit have $ORBIT_SESSION set, so what they open, show or note names them. $ORBIT_PORT picks the
-server (default 8770).
+server; without it, the one running on $ORBIT_STATE_DIR (else $ORBIT_HOME, else ~/.orbit), else 8770.
 """
 
 from __future__ import annotations
@@ -65,7 +65,8 @@ FINAL = ("completed", "error", "cancelled", "paused")
 
 
 def call(method: str, path: str, body: dict | None = None, timeout: float = 15) -> dict:
-    port = int(os.environ.get("ORBIT_PORT", "8770"))
+    from orbit.home import server_port
+    port = server_port()  # $ORBIT_PORT, else the server of $ORBIT_STATE_DIR / $ORBIT_HOME / ~/.orbit, else 8770
     req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method=method,
                                  data=json.dumps(body).encode() if body is not None else None,
                                  headers={"Content-Type": "application/json"})

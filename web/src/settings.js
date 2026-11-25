@@ -225,6 +225,24 @@ async function apiKeyRow(pane, name, desc) {
   });
   draw();
 }
+/* A one-line text setting: saved on Enter or leaving the field (the server checks it; an error says why). */
+function textSetting(pane, label, key, desc, done, placeholder = "") {
+  const ctl = setRow(pane, label, desc, { stack: true });
+  ctl.innerHTML = `<input class="fin" spellcheck="false" autocomplete="off" style="width:100%">`;
+  const inp = ctl.querySelector("input");
+  inp.placeholder = placeholder;
+  inp.value = inp.defaultValue = (S.settings && S.settings[key]) || "";
+  const save = () => {
+    if (inp.value.trim() === inp.defaultValue) return;
+    api("POST", "/api/settings", { [key]: inp.value.trim() }).then(st => {
+      S.settings = st; inp.value = inp.defaultValue = st[key] || "";
+      if (done) done(st); else toast(`${label}: ${st[key] || "default"}`);
+    }).catch(e => toast(e.message));
+  };
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); save(); } });
+  inp.addEventListener("focusout", save);
+  return inp;
+}
 function settingsGeneral(pane, keys) {
   const dd = dropdown(setRow(pane, "Open files in", "Where a click on a file name in an answer, ↗ and “Open in …” open a file of this machine (with Default app, a click keeps it in Orbit's side tab; ⌘-click: an Orbit tab). Another machine's files always open in Orbit."), {
     value: (S.settings && S.settings.open_in) || "default", options: OPEN_IN_OPTIONS,
@@ -232,20 +250,15 @@ function settingsGeneral(pane, keys) {
   keys.push(dd);
   toggleSwitch(setRow(pane, "Calendar", "Read macOS Calendar (read-only): today's meetings in Misc and the status bar, ⌘⇧C to join."), {
     on: !!(S.settings && S.settings.calendar), label: "Calendar", onChange: on => setCalendar(on) });
-  const mn = setRow(pane, "Meeting notes", "Where a meeting's note is made: <code>{vault}/</code> (the notes) or <code>{data}/</code> (the data folder), then a path with <code>{date}</code> <code>{YYYY}</code> <code>{MM}</code> <code>{DD}</code> <code>{HH}</code> <code>{mm}</code> <code>{YYYYMM}</code> <code>{HHMM}</code> <code>{title}</code>, e.g. <code>{data}/calendar_notes/{YYYYMM}/{DD}_{HHMM}_{title}.md</code>. Enter saves.", { stack: true });
-  mn.innerHTML = `<input class="fin mnotes" spellcheck="false" autocomplete="off" style="width:100%">`;
-  const mi = mn.querySelector("input");
-  mi.value = mi.defaultValue = (S.settings && S.settings.meeting_notes) || "";
-  const saveMn = () => {
-    if (mi.value.trim() === mi.defaultValue) return;
-    api("POST", "/api/settings", { meeting_notes: mi.value.trim() }).then(st => {
-      S.settings = st; mi.value = mi.defaultValue = st.meeting_notes;
-      if (typeof XN !== "undefined") { XN.cache.clear(); XN.open = null; if (xKind() === "calendar") renderX(); }
-      toast("Meeting notes go to " + st.meeting_notes);
-    }).catch(e => toast(e.message));
-  };
-  mi.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); saveMn(); } });
-  mi.addEventListener("focusout", saveMn);
+  textSetting(pane, "Meeting notes", "meeting_notes", "Where a meeting's note is made: <code>{vault}/</code> (the notes) or <code>{data}/</code> (the data folder), then a path with <code>{date}</code> <code>{YYYY}</code> <code>{MM}</code> <code>{DD}</code> <code>{HH}</code> <code>{mm}</code> <code>{YYYYMM}</code> <code>{HHMM}</code> <code>{title}</code>, e.g. <code>{data}/calendar_notes/{YYYYMM}/{DD}_{HHMM}_{title}.md</code>. Enter saves.",
+    st => { if (typeof XN !== "undefined") { XN.cache.clear(); XN.open = null; if (xKind() === "calendar") renderX(); } toast("Meeting notes go to " + st.meeting_notes); });
+  const fh = dropdown(setRow(pane, "Fleet helpers", "The harness the helpers run: ⌘K quick asks, a meeting's Prep, <code>orbit-agent ask</code>. Without Claude Code, pick one you have."), {
+    value: (S.settings && S.settings.fleet_harness) || "",
+    options: [{ value: "", label: "Claude Code (default)" }, ...(S.harnesses || []).filter(h => h.id !== "claude").map(h => ({ value: h.id, label: h.label }))],
+    onChange: v => api("POST", "/api/settings", { fleet_harness: v }).then(st => { S.settings = st; }).catch(e => toast(e.message)) });
+  keys.push(fh);
+  textSetting(pane, "Fleet model", "fleet_model", "The helpers' model (as the harness names it); empty: the harness's default. Enter saves.", null, "Default");
+  textSetting(pane, "Week note template", "week_template", "A note whose text starts each new week note (a vault path like <code>Templates/Week</code>, or <code>~/…</code>); <code>{days}</code> becomes the Mon–Fri headings, <code>{monday}</code> the date. Empty: the built-in one. Enter saves.", null, "Built in");
   const kb = setRow(pane, "Keyboard shortcuts", "Every key Orbit uses, searchable (⌘/).");
   kb.innerHTML = `<button type="button" class="btn sm" data-act="keys">Show all</button>`;
   kb.querySelector("button").addEventListener("click", () => { closeModal(); deskKey("M:Slash"); });

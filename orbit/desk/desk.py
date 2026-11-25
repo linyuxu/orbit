@@ -31,6 +31,7 @@ from orbit.drivers.process import ProcessDriver
 from orbit.services.calendar import Calendar
 from orbit.services.live import config as live_config
 from orbit.services.shell import Shells
+from orbit.workspace import notes
 
 
 class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Handoff):
@@ -69,6 +70,7 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
             self.settings = {**SETTINGS, **json.loads(self.settings_path.read_text())}
         except (OSError, ValueError):
             self.settings = dict(SETTINGS)
+        notes.WEEK_TEMPLATE = str(self.settings.get("week_template") or "")  # (a new week note's text, if set)
         # The model each choice ran last ({"claude:": "claude-opus-5-5", "claude:opus": …}): the ⌘N dialog shows
         # what "Default" or an alias resolves to, learned from each process's start-up.
         self._soon: dict[tuple, threading.Timer] = {}  # cards with a streaming broadcast pending
@@ -254,8 +256,8 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
                     c["state"] = "cancelled"
                     self._card_changed(c)
         drv, s.driver = s.driver, None
-        if drv:
-            threading.Thread(target=drv.close, daemon=True).start()
+        if drv:  # the user closed it: end(), not close() (restarts and hand-offs call close())
+            threading.Thread(target=getattr(drv, "end", drv.close), daemon=True).start()
         threading.Thread(target=self.shells.close_key, args=(sid,), daemon=True).start()
         threading.Thread(target=self.shells.close_key, args=("term:" + sid,), daemon=True).start()  # (detaches only)
         s.state = "stopped"
@@ -362,6 +364,12 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
                 raise ValueError(f"open_in is one of {', '.join(OPEN_IN)}")
             if k.startswith("live_"):
                 live_config.check(k, v)
+            if k == "fleet_harness" and v and v not in DRIVERS:
+                raise ValueError(f"fleet_harness is one of {', '.join(sorted(DRIVERS))} (or \"\": Claude Code)")
+            if k in ("fleet_model", "week_template"):
+                b[k] = v = v.strip()
+                if len(v) > 300 or "\n" in v:
+                    raise ValueError(f"{k}: one line")
             if k == "meeting_notes":
                 from orbit.desk.meetings import check_note_pattern
                 b[k] = check_note_pattern(v)
@@ -370,6 +378,7 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
         with self.lock:
             self.settings.update(b)
             snap = dict(self.settings)
+        notes.WEEK_TEMPLATE = str(snap.get("week_template") or "")
         tmp = self.settings_path.with_name(f"{self.settings_path.stem}.{os.getpid()}.{threading.get_ident()}.tmp")
         tmp.write_text(json.dumps(snap, indent=1))
         os.replace(tmp, self.settings_path)

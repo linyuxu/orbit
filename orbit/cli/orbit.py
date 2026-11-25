@@ -21,6 +21,12 @@
     orbit harness-server restart  a new one (the code on disk): every agent process ends; their sessions stay and
                               a request at work goes on by itself
     orbit harness-server stop     stop it: every agent ends (their sessions resume on the next request)
+    orbit migrate-home        move the folder of an older Orbit (its old name) to ~/.orbit, a link left behind (never done on
+                              its own: $ORBIT_HOME, another instance's folder, is never touched)
+
+  Another instance on the same machine: its own $ORBIT_HOME (state and data under it, unless $ORBIT_STATE_DIR /
+  $ORBIT_DATA_ROOT say otherwise) and $ORBIT_PORT. `orbit` and `orbit-agent` reach the server of that state folder
+  (its server.json) when $ORBIT_PORT is not set.
 
   Remote (other machines on a private network: Tailscale, a LAN)
     orbit serve --remote [--bind ADDR]
@@ -105,7 +111,7 @@ def tools_install(dry: bool = False) -> int:
         print(f"\nnote: {bindir} is not on PATH; add it to your shell's startup file, e.g.\n"
               f"      export PATH=\"$HOME/.local/bin:$PATH\"")
     print("\nAgents started in a terminal now have `orbit-agent` and the orbit-agents skill; they reach the server on "
-          f"127.0.0.1:{os.environ.get('ORBIT_PORT', '8770')}.")
+          f"127.0.0.1:{_port()} (the server of {_state()}; $ORBIT_PORT overrides).")
     return 1 if problems else 0
 
 
@@ -139,7 +145,8 @@ def _state() -> Path:
 
 
 def _port() -> int:
-    return int(os.environ.get("ORBIT_PORT", "8770"))
+    from orbit.home import server_port
+    return server_port(_state())
 
 
 def cmd_url(host: str) -> int:
@@ -211,11 +218,11 @@ def cmd_remote(action: str, name: str, url: str) -> int:
 
 
 def _server(method: str, path: str, body: dict | None = None) -> dict | None:
-    """The running server's answer (None: no server on ORBIT_PORT / 8770)."""
+    """The running server's answer (None: no server on ORBIT_PORT / the state dir's server.json / 8770)."""
     import json
     import urllib.error
     import urllib.request
-    port = int(os.environ.get("ORBIT_PORT", "8770"))
+    port = _port()
     req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method=method,
                                  data=json.dumps(body).encode() if body is not None else None,
                                  headers={"Content-Type": "application/json"})
@@ -385,19 +392,8 @@ def cmd_harness_server(action: str) -> int:
 
 
 def _lock_held(state: Path) -> bool:
-    """Whether an Orbit Server holds <state>/server.lock (a non-blocking probe; released at once if not)."""
-    import fcntl
-    try:
-        fd = os.open(state / "server.lock", os.O_RDWR)
-    except OSError:
-        return False
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        return True
-    finally:
-        os.close(fd)  # (closing drops the lock if the probe took it)
-    return False
+    from orbit.home import lock_held
+    return lock_held(state)
 
 
 def cmd_stop(agents: bool, wait: float = 30.0) -> int:
@@ -465,7 +461,7 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="orbit", description="Run and manage Orbit (agents use `orbit-agent`).")
     from orbit import API_VERSION, __version__
     ap.add_argument("--version", action="version", version=f"orbit {__version__} (plugin API {API_VERSION[0]}.{API_VERSION[1]})")
-    ap.add_argument("--state-dir", dest="state_top", default=None, help="the server's state folder (default ~/.orbit)")
+    ap.add_argument("--state-dir", dest="state_top", default=None, help="the server's state folder (default $ORBIT_STATE_DIR, else $ORBIT_HOME, else ~/.orbit)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sv = sub.add_parser("serve", help="run the server (the backend)")
     sv.add_argument("--port", type=int, default=None)
@@ -498,6 +494,7 @@ def main(argv: list[str] | None = None) -> None:
     hv = sub.add_parser("harness-server", help="the Harness Server, which runs the agents: status, restart (every agent "
                         "process ends; their sessions stay), stop")
     hv.add_argument("action", choices=["status", "restart", "stop"])
+    sub.add_parser("migrate-home", help="move the folder of an older Orbit (its old name) to ~/.orbit, leaving a link")
     tl = sub.add_parser("tools", help="make Orbit's tools available to every harness")
     tl.add_argument("action", choices=["install", "uninstall", "status"])
     tl.add_argument("--dry-run", action="store_true", help="install: say what would change, change nothing")
@@ -532,6 +529,10 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(cmd_harness_server(a.action))
     if a.cmd == "stop":
         sys.exit(cmd_stop(a.agents))
+    if a.cmd == "migrate-home":
+        from orbit import home
+        print(home.migrate())
+        sys.exit(0)
     if a.action == "install":
         sys.exit(tools_install(a.dry_run))
     sys.exit(tools_uninstall() if a.action == "uninstall" else tools_status())
