@@ -106,11 +106,12 @@ function allTabKeys(gid = S.group) {
   return keys.map((k, i) => [k, pos.has(k) ? pos.get(k) : ord.length + i]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
 }
 function goKey(key, opts = {}) {
-  if (key.startsWith("s:")) switchTo(key.slice(2), opts);
+  if (key === "f:" + HOME) openHome(S.group, opts);  // (the group's home: its pill, not a file tab)
+  else if (key.startsWith("s:")) switchTo(key.slice(2), opts);
   else if (key.startsWith("f:")) openFile(key.slice(2), { ...opts, keepPreview: true });
 }
 function cycleTab(d) {
-  const keys = allTabKeys();
+  const keys = [...(EMBED ? [] : ["f:" + HOME]), ...allTabKeys()];  // the home first, as on screen (it never moves)
   if (keys.length < 2) return;
   const i = keys.indexOf(tabKey());
   goKey(keys[(i + d + keys.length) % keys.length]);

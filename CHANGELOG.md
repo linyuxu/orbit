@@ -19,6 +19,7 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   home"; agents run `orbit-agent pin TEXT|-|--file F [--group G]` (their [orbit] line says: decisions, conclusions,
   key facts, never progress); kept newest first in the group's `Pins.md` (`…/pin`, `…/unpin`). The phone: a group's
   name opens its home, one column, notes and pins included.
+- ⌘⇧[ ⌘⇧] go through the group's home too (first, as on screen).
 - Every tab of a coloured group (its sessions, files, views) wears the same tint at the top of the page as its home's
   head, fading out (over the page: clicks and selection go through it).
 - Dragging (tabs, the left panel, a home page's widgets) selects no text on the way: a press that may become a drag

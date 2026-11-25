@@ -241,7 +241,7 @@ const SHORTCUTS = [
     ["⌘1 · ⌘2…⌘9", "Favorites · the groups in left-panel order",
       ["M:Digit1", "M:Digit2", "M:Digit3", "M:Digit4", "M:Digit5", "M:Digit6", "M:Digit7", "M:Digit8", "M:Digit9"],
       [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => () => groupByIndex(n))],
-    ["⌘⇧[ ⌘⇧]", "Previous / next tab (in the left panel or a finder: its tabs)", ["MS:BracketLeft", "MS:BracketRight"], [() => cycleTab(-1), () => cycleTab(1)]],
+    ["⌘⇧[ ⌘⇧]", "Previous / next tab, the group's home first (in the left panel or a finder: its tabs)", ["MS:BracketLeft", "MS:BracketRight"], [() => cycleTab(-1), () => cycleTab(1)]],
     ["⌘⌃H ⌘⌃L", "Move the tab left / right, past any tab, session or file (in the Groups panel: move the group up / down)", ["MC:KeyH", "MC:KeyL"], [() => moveCurrentTab(-1), () => moveCurrentTab(1)]],
     ["⌘⌃P", "Toggle Favorite for the current session", "MC:KeyP", () => toggleFavorite()],
     ["⌘- ⌘=", "Back / forward through visited tabs", ["M:Minus", "M:Equal"], [() => histGo(-1), () => histGo(1)]],
