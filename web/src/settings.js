@@ -9,7 +9,7 @@
    that everyone should get drops the Appearance prefs saved before it, once. */
 const PREFS_V = 2;
 const PREFS_DEFAULT = { v: PREFS_V, weight: "regular", readSize: 14, noteFont: "Inconsolata", noteSize: 15, readWidth: "full",
-                        uiFont: "Inter", uiSize: 12, readFont: "Consolas", codeFont: "Inconsolata", codeSize: 14 };  // (Inconsolata 14 ≈ Consolas 13)
+                        uiFont: "Inter", uiSize: 12, readFont: "Consolas", codeFont: "Inconsolata", codeSize: 14, termFont: "iterm" };  // (Inconsolata 14 ≈ Consolas 13)
 /* (The conversation's Consolas is Microsoft's and cannot be shipped: where it is not installed, its stack falls to the
    built-in Inconsolata, a font made after it.) */
 /* A font missing on this machine (SF Pro and SF Mono are Apple's, Consolas Microsoft's: neither may be shipped) falls
@@ -64,11 +64,7 @@ function applyPrefs(p = readPrefs(), tell = true) {
   r.setProperty("--note-font", fontStack(p.noteFont));
   r.setProperty("--note-size", clampSize(p.noteSize) + "px");
   r.setProperty("--col", p.readWidth === "full" ? "min(100%, 2000px)" : "min(100%, 900px)");  // U8: a reading column (or the whole pane)
-  if (typeof SH !== "undefined" && SH.term) {  // the ⌘J terminal: the code font and size
-    SH.term.options.fontFamily = monoStack(p.codeFont);
-    SH.term.options.fontSize = clampSize(p.codeSize);
-    fitShell();
-  }
+  if (typeof SH !== "undefined" && SH.term) applyTermFont();  // the ⌘J terminal: iTerm's font, or the code font (shell.js)
   if (tell && !EMBED) eachFrame(w => w.postMessage({ orbit: "prefs", p }, location.origin));
 }
 function setPref(k, v) { const p = { ...readPrefs(), [k]: v }; LS.set("prefs", p); applyPrefs(p); }
@@ -478,8 +474,16 @@ function settingsAppearance(pane, keys) {
   sizeControl(setRow(pane, "Conversation size", "Answers and requests."), { value: p.readSize, dflt: PREFS_DEFAULT.readSize, onChange: v => setPref("readSize", v) });
   fontPicker(pane, keys, { label: "Note font", desc: "Notes and Markdown files.", key: "noteFont" });
   sizeControl(setRow(pane, "Note size", "Notes and Markdown files."), { value: p.noteSize, dflt: PREFS_DEFAULT.noteSize, onChange: v => setPref("noteSize", v) });
-  fontPicker(pane, keys, { label: "Code font", desc: "Code files, code in answers and notes, the terminal.", key: "codeFont", mono: true });
-  sizeControl(setRow(pane, "Code size", "Code files and the terminal."), { value: p.codeSize, dflt: PREFS_DEFAULT.codeSize, onChange: v => setPref("codeSize", v) });
+  fontPicker(pane, keys, { label: "Code font", desc: "Code files, code in answers and notes (and the terminal, when set below).", key: "codeFont", mono: true });
+  sizeControl(setRow(pane, "Code size", "Code files, and the terminal when it uses the code font."), { value: p.codeSize, dflt: PREFS_DEFAULT.codeSize, onChange: v => setPref("codeSize", v) });
+  const tf = setRow(pane, "Terminal font", "The ⌘J terminal: the font, size and spacing of iTerm's default profile (where that font is installed), or the code font.");
+  keys.push(dropdown(tf, { value: p.termFont === "code" ? "code" : "iterm",
+    options: [{ value: "iterm", label: "Like iTerm" }, { value: "code", label: "The code font" }], onChange: v => setPref("termFont", v) }));
+  itermFont().then(f => {  // which font that is, in the description
+    const d = tf.closest(".set-row").querySelector(".set-desc");
+    if (d) d.textContent = f ? `The ⌘J terminal: like iTerm's default profile (${f.profile ? f.profile + ": " : ""}${f.font} ${f.size}), or the code font.`
+      : "The ⌘J terminal: like iTerm's default profile (not found here: the code font), or the code font.";
+  });
   const reset = setRow(pane, "Defaults", "Every setting above back to Orbit's. Its fonts are built in (Inter, Inconsolata), except the conversation's Consolas (Microsoft's: it cannot be shipped); where it is not installed, Inconsolata, made after it, takes its place.");
   reset.innerHTML = `<button type="button" class="btn sm">Reset</button>`;
   reset.querySelector("button").addEventListener("click", () => {

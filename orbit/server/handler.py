@@ -634,6 +634,15 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             return self._json(live_usage.summary(self.desk.state_dir, self.desk.settings))
         if p == "/api/live":  # the voice call: phase, bound session, transcript so far (any client with the token: the phone)
             return self._json(self.desk.live.state())
+        if p == "/api/term-font":  # the font of iTerm's default profile, for the ⌘J terminal ({} without iTerm)
+            from orbit.services import termfont
+            return self._json(termfont.public(termfont.iterm_font()))
+        if p in ("/api/term-font/file/regular", "/api/term-font/file/bold"):  # its file (only the one found for it)
+            from orbit.services import termfont
+            f = termfont.font_file(p.rsplit("/", 1)[1])
+            if not f:
+                return self._json({"error": "no such font file"}, 404)
+            return self._file(f, cache=True, headers={"Content-Type": "font/otf" if f.suffix.lower() == ".otf" else "font/ttf"})
         if p == "/api/harnesses":
             return self._json({"harnesses": self.desk.harnesses()})
         if p == "/api/harness-server":  # whether the agents run in the Harness Server (or directly, and why)

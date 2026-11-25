@@ -8,6 +8,10 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The ⌘J terminal looks like iTerm: the font, size, line and letter spacing (and thin strokes) of iTerm's default
+  profile (Appearance → Terminal font: Like iTerm, the default, or the code font). The server finds that font's file
+  by its PostScript name in the font folders and serves it (`GET /api/term-font`, `…/file/regular|bold`): WebKit, the
+  app's engine, keeps fonts the user installed from pages. A variable font gives every weight from one file.
 - ⌥D kills the word after the cursor and ⌥⌫ the word before it in the editors (the input, code, Markdown), as in
   Emacs: into the kill ring (⌃Y yanks it back), presses in a row make one kill. (⌥D used to type “∂”.)
 - Extension points, so a customized build needs no core patches (request #29):

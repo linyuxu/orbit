@@ -86,6 +86,7 @@ body.app #titlebar { --bar:max(calc(30px * var(--ui-k)), calc(max(32px, 38px * v
 #term { flex:1; min-height:0; padding:6px 0 0 10px; }
 #term .xterm { height:100%; }
 #term .xterm-viewport { background:transparent !important; }
+#term.thin .xterm-rows { -webkit-font-smoothing:antialiased; }  /* iTerm's thin strokes (shell.js) */
 #pane { flex:1; min-width:48px; min-height:0; display:flex; flex-direction:column; position:relative; }
 #main { position:relative; }
 #sidepeek { position:absolute; right:0; top:50%; transform:translateY(-50%); z-index:5; display:flex; flex-direction:column; align-items:center; gap:3px;

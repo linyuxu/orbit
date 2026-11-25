@@ -19,15 +19,64 @@ function termTheme() {
   return { background: v("--note-bg"), foreground: v("--note-ink"), cursor: v("--ink"), cursorAccent: v("--note-bg"),
            selectionBackground: v("--sel-focus") };
 }
+/* The terminal's font: iTerm's default profile's (Appearance → Terminal font: Like iTerm, the default), asked for by its
+   PostScript name (it shows where it is installed: this Mac), at iTerm's size and spacing; else the code font. */
+const TERM_FAMILY = "Orbit Term";
+async function itermFont() {
+  if (SH.itf !== undefined) return SH.itf;
+  if (SH.itfP) return SH.itfP;
+  SH.itfP = (async () => {
+    let f = {};
+    try { f = await api("GET", "/api/term-font"); } catch {}
+    let ok = false;
+    if (f && f.font) {
+      /* The file the server found (WebKit keeps user-installed fonts from pages); else by name (a system font). A
+         variable font is one face for every weight; a missing bold is synthesized. */
+      const name = n => `local("${n.replace(/["\\]/g, "")}")`, base = f.font.split("_")[0].replace(/-[^-]*$/, "");
+      const faces = f.file ? [[`url(/api/term-font/file/regular?v=${f.file})`, f.variable ? "100 900" : "400"]].concat(
+                               f.bold ? [[`url(/api/term-font/file/bold?v=${f.file})`, "700"]] : [])
+                           : [[name(f.font), "400"], [name(base + "-Bold"), "700"]];
+      for (const [src, weight] of faces) {
+        try { const ff = await new FontFace(TERM_FAMILY, src, { weight }).load(); document.fonts.add(ff); ok = ok || weight !== "700"; } catch {}
+      }
+    }
+    SH.itf = ok ? f : null;
+    return SH.itf;
+  })();
+  return SH.itfP;
+}
+/* {fontFamily, fontSize, lineHeight, letterSpacing} for the terminal now, and whether iTerm's thin strokes apply. */
+async function termFontOptions() {
+  const p = readPrefs(), code = { fontFamily: monoStack(p.codeFont), fontSize: clampSize(p.codeSize), lineHeight: 1.2, letterSpacing: 0,
+                                  fontWeight: "normal", fontWeightBold: "bold", thin: false };
+  if (p.termFont === "code") return code;
+  const f = await itermFont();
+  if (!f) return code;
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches, retina = devicePixelRatio > 1;
+  const thin = f.thin === 3 || (f.thin === 4 && retina) || (f.thin === 2 && dark) || (f.thin === 1 && retina && dark);
+  const w = f.weight || 400;
+  return { fontFamily: `"${TERM_FAMILY}", ${monoStack(p.codeFont)}`, fontSize: f.size, lineHeight: Math.max(1, f.line),
+           letterSpacing: Math.round((f.letter - 1) * f.size), fontWeight: w, fontWeightBold: f.variable ? Math.min(900, w + 300) : "bold", thin };
+}
+async function applyTermFont() {
+  if (!SH.term) return;
+  const o = await termFontOptions();
+  Object.assign(SH.term.options, { fontFamily: o.fontFamily, fontSize: o.fontSize, lineHeight: o.lineHeight, letterSpacing: o.letterSpacing,
+                                   fontWeight: o.fontWeight, fontWeightBold: o.fontWeightBold });
+  $("#term").classList.toggle("thin", o.thin);
+  fitShell();
+}
 function b64bytes(s) { const bin = atob(s); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
 async function ensureTerm() {
   await loadXterm();
   if (SH.term) return SH.term;
-  const family = getComputedStyle(document.documentElement).getPropertyValue("--mono").trim() || "Menlo, monospace";
-  try { await document.fonts.load(`${clampSize(readPrefs().codeSize)}px ${family}`); } catch {}  // (a shipped font: loaded before the terminal measures it)
-  const t = new Terminal({ fontFamily: family,
-                           fontSize: clampSize(readPrefs().codeSize), lineHeight: 1.2, cursorBlink: true, scrollback: 5000, allowProposedApi: false,
-                           macOptionIsMeta: true, theme: termTheme() });
+  const fo = await termFontOptions();
+  try { await document.fonts.load(`${fo.fontSize}px ${fo.fontFamily}`); } catch {}  // (loaded before the terminal measures it)
+  if (SH.term) return SH.term;  // (made meanwhile)
+  const t = new Terminal({ fontFamily: fo.fontFamily, fontSize: fo.fontSize, lineHeight: fo.lineHeight, letterSpacing: fo.letterSpacing,
+                           fontWeight: fo.fontWeight, fontWeightBold: fo.fontWeightBold,
+                           cursorBlink: true, scrollback: 5000, allowProposedApi: false, macOptionIsMeta: true, theme: termTheme() });
+  $("#term").classList.toggle("thin", fo.thin);
   SH.fit = new FitAddon.FitAddon(); t.loadAddon(SH.fit);
   t.open($("#term"));
   t.onData(d => {
@@ -36,7 +85,7 @@ async function ensureTerm() {
   });
   t.onResize(({ cols, rows }) => { if (SH.id) api("POST", `/api/shell/${SH.id}/resize`, { cols, rows }).catch(() => {}); });
   new ResizeObserver(() => fitShell()).observe($("#term"));
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { t.options.theme = termTheme(); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { t.options.theme = termTheme(); applyTermFont(); });
   SH.term = t;
   return t;
 }
