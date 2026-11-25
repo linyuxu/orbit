@@ -105,6 +105,12 @@ On send:
 - Consecutive messages by one author within 5 minutes share one author line.
 - The same `.md` styles, code blocks with Copy, KaTeX, file links, images through the image viewer, `⌘F` find,
   scrolling keys, "Latest ↓" and the selection quote menu all work.
+- **Images open in the image viewer** (`openLightbox(src)`, `web/src/lightbox.js`): a click on a picture in any view
+  does it; code of a customized build should call `openLightbox` rather than `window.open(src)`, which does nothing
+  in the app's WebView (there, a picture's address given to `window.open` goes to the viewer anyway, any other to the
+  system). The viewer fits the picture first; a pinch (ctrl + wheel, or WebKit's gesture events, counted once) zooms
+  around the pointer, `+` `−` `0` too; two fingers or a drag pan while zoomed; a double-click toggles fit / 2.5×; a
+  click on the dark area or Esc closes. While it shows it has every key: a view's own key handler never sees Esc.
 
 **Context menu of a message:**
 - Copy, Copy as Markdown, Open at the source (`url`);

@@ -35,6 +35,8 @@ function onKey(e) {
   if (["Meta", "Control", "Alt", "Shift"].includes(e.key)) return;
   const combo = comboOf(e);
   const consume = () => { e.preventDefault(); e.stopPropagation(); };
+  // The image viewer first: every key stops there while it shows (a view with keys of its own never sees Esc).
+  if (typeof lbOn === "function" && lbOn()) { consume(); e.stopImmediatePropagation(); lightboxKey(combo); return; }
   // A voice call's keys work anywhere (a dialog, a menu, an editor, the terminal): ⌘⇧A mutes, ⌘⇧V hangs up.
   if (!EMBED && typeof voiceBusy === "function" && voiceBusy() && (combo === "MS:KeyA" || combo === "MS:KeyV")) {
     consume();
@@ -58,7 +60,6 @@ function onKey(e) {
   if (LINE_KEYS.has(combo) && isLineInput(document.activeElement) && lineEditInput(document.activeElement, combo)) { consume(); return; }
   // A review comment box owns ⌘⏎ (add) and Esc (cancel).
   if (EMBED_REVIEW && !modal && e.target.closest && e.target.closest(".cbox") && (combo === "M:Enter" || combo === "Escape")) return;
-  if ($("#lightbox").classList.contains("show")) { consume(); if (combo === "Escape") closeLightbox(); return; }
   if (MENTION.open && document.activeElement === input && !modal && mentionKey(combo)) { consume(); return; }
   if (combo === "ArrowUp" && document.activeElement === input && !input.value && !modal) { consume(); inputHistory(); return; }
   if (combo === "Escape" && document.activeElement === input && S.editing && !input.value && !modal) { consume(); stopEdit(); return; }

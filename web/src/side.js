@@ -96,6 +96,7 @@ function ensureFrame(spec) {
     // A web page (orbit-agent show) runs sandboxed: scripts yes, but no access to Orbit's origin.
     if (spec.kind === "web") fr.setAttribute("sandbox", "allow-scripts allow-popups allow-forms");
     fr.addEventListener("focus", () => renderSide());
+    fr.addEventListener("load", () => { fr.dataset.loaded = "1"; sideLoaded(spec, fr); });
     fr.setAttribute("src", src);
     $("#sideframes").appendChild(fr);
     FRAMES.set(spec.id, fr);
@@ -275,6 +276,7 @@ addEventListener("message", e => {
     else if (m.orbit === "zoom") setZoom(m.z, false);
     else if (m.orbit === "prefs") applyPrefs(m.p, false);
     else if (m.orbit === "reveal" && EMBED.kind === "file" && m.path === EMBED.path) { S.reveal = { path: m.path, line: m.line }; applyReveal(m.path); }
+    else if (m.orbit === "quote-in" && EMBED.kind === "session") quoteHere({ text: String(m.text || ""), ref: String(m.ref || "") });
     return;
   }
   const fromView = [...EDITORS.values()].some(ed => ed.frame && ed.frame.contentWindow === e.source);  // a main view tab
@@ -286,9 +288,22 @@ addEventListener("message", e => {
   else if (m.orbit === "open-note-at") openNoteAt(m.path, m.line);
   else if (m.orbit === "open-card") openUrl(`orbit://session/${m.sid}${m.cid ? "#" + m.cid : ""}`);
   else if (m.orbit === "review-count") { S.review.count = m.count; renderReviewBadge(); }
-  else if (m.orbit === "quote") quoteTo({ text: String(m.text || ""), ref: String(m.ref || "") });
+  else if (m.orbit === "quote") quoteTo({ text: String(m.text || ""), ref: String(m.ref || "") }, S.current);  // (from beside: the main session)
   else if (m.orbit === "open-ptab") openPluginTab(String(m.plugin || ""), String(m.kind || ""), String(m.key ?? ""), { title: m.title || "", focus: m.focus !== false });
 });
+/* A quote for a session beside (notes.js quoteBeside): sent once its frame has loaded. Kept by session, not by side
+   tab id: the server's state of a new side tab may come back with its own id, and a new frame. */
+const SIDE_QUOTES = new Map();  // session id → [quotes]
+function sideLoaded(spec, fr) {
+  const qs = spec.kind === "session" && SIDE_QUOTES.get(spec.sid); if (!qs) return;
+  SIDE_QUOTES.delete(spec.sid);
+  for (const q of qs) try { fr.contentWindow.postMessage({ orbit: "quote-in", text: q.text, ref: q.ref }, location.origin); } catch {}
+}
+function quoteToSide(q, spec) {
+  const fr = FRAMES.get(spec.id);
+  if (fr && fr.dataset.loaded) { try { fr.contentWindow.postMessage({ orbit: "quote-in", text: q.text, ref: q.ref }, location.origin); } catch {} }
+  else SIDE_QUOTES.set(spec.sid, [...(SIDE_QUOTES.get(spec.sid) || []), q]);
+}
 function runForwarded(combo) {
   if (combo === "M:KeyW") return closeSide();
   if (combo === "MS:KeyO") { focusMain(); renderSide(); return; }

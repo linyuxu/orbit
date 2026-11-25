@@ -8,6 +8,14 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Quote from a file or note goes to the session beside it: with a session open in the side panel, the quote
+  (`path:line`) goes to the end of its input and the side panel gets the keyboard; with none, a menu of sessions, and
+  the chosen one opens beside with the quote in its input (⌘E → "Quote beside: …" / "Quote into a session beside").
+- The image viewer zooms: fit first; a pinch zooms around the pointer (ctrl + wheel; WebKit's gesture events, counted
+  once), `+` `−` `0`; two fingers or a drag pan while zoomed; a double-click toggles fit / 2.5×; a click on the dark
+  area closes (zoomed or not), on the zoomed picture it does not; Esc always closes, before any view's own keys. One
+  transform, painted once a frame, no transition. A picture in any view opens in it; in the app, `window.open` of a
+  picture's address does too (`web/src/lightbox.js`).
 - Req room #31. Agents that outlive the server (pairs with `Driver.end()`): two optional driver classmethods,
   `link_alive(link)` (at the server's start a session whose agent still runs is followed at once, its driver started
   with resume: no new agent; a stopped one stays stopped) and `end_link(link)` (closing a session Orbit has no driver

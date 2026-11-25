@@ -22,7 +22,15 @@ except ImportError:  # (the suite runs without it: these are skipped)
     sync_playwright = None
 
 ED = "#fbody .host:not([hidden]) .cm-content"  # (the file in front's editor; the composer has one too)
-READY = "() => typeof S !== 'undefined' && S.groups && S.groups.length > 0 && S.sessions.size > 0"
+def png(path, w, h):
+    """A plain PNG of w×h (a gradient), for the image viewer."""
+    import struct, zlib
+    rows = b"".join(b"\x00" + b"".join(bytes([x * 255 // w, y * 255 // h, 160]) for x in range(w)) for y in range(h))
+    chunk = lambda k, d: struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d) & 0xffffffff)
+    Path(path).write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
+READY = "() => typeof S !== 'undefined' && S.groups && S.groups.length > 0"  # (the groups come with the sessions)
 
 
 @unittest.skipIf(sync_playwright is None, "Playwright is not installed (uv run --with playwright …)")
@@ -238,6 +246,98 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.dblclick(f"{card} .hrz.y")  # (its natural height again)
             page.wait_for_timeout(600)
             self.assertNotIn("h", widget())
+
+    def test_quote_from_a_file_goes_to_the_session_beside(self):
+        gid = self.group("Quoting")
+        main, beside = self.session_in(gid, "Main one"), self.session_in(gid, "Beside one")
+        f = os.path.join(self.work, "quoted.md")
+        Path(f).write_text("line one\nline two\nline three\n")
+        side_input = "(() => { const fr = sideFrame(); return fr ? fr.contentWindow.eval('typeof input === \\'undefined\\' ? null : input.value') : null; })()"
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"switchGroup({json.dumps(gid)}); openFile({json.dumps(f)}, {{pinned: true}})")
+            page.wait_for_timeout(1000)
+            page.evaluate("closeAllSides()")  # (the tabs' layout is shared: the other browser's side tabs are here too)
+            page.evaluate(f"openSide({{kind: 'session', sid: {json.dumps(beside)}}}, {{focus: false}})")
+            page.wait_for_timeout(2500)
+            page.evaluate(f"(() => {{ const v = EDITORS.get({json.dumps(f)}).ed.view; v.focus(); v.dispatch({{selection: {{anchor: 9, head: 17}}}}); }})()")
+            page.wait_for_timeout(400)
+            page.dispatch_event("#quotebtn", "mousedown")  # (the Quote button at the selection)
+            page.wait_for_timeout(1000)
+            self.assertEqual(page.evaluate(side_input), "> quoted.md:2\n> line two\n\n".replace("quoted.md", page.evaluate(f"agentPath({json.dumps(f)})")), name)
+            self.assertTrue(page.evaluate("sideFocused()"))
+            self.assertEqual(page.evaluate(f"S.drafts[{json.dumps(main)}] || ''"), "")  # (not the main session's)
+            page.evaluate("closeAllSides()")  # none beside: a menu; the chosen one opens beside with the quote
+            page.wait_for_timeout(400)
+            page.evaluate("quoteBeside({text: 'line three', ref: 'quoted.md:3', at: () => null, file: true})")
+            page.wait_for_timeout(300)
+            page.click(".menu >> text=Main one")
+            page.wait_for_timeout(3000)
+            self.assertEqual(page.evaluate("S.side && S.side.sid"), main)
+            self.assertEqual(page.evaluate(side_input), "> quoted.md:3\n> line three\n\n", name)
+
+    def test_lightbox_zooms_pans_and_closes(self):
+        pic = os.path.join(self.tmp.name, "wide.png")
+        png(pic, 1600, 400)  # (wide: zoomed in a little, dark above and below it)
+        state = "[+LB.s.toFixed(3), +LB.fit.toFixed(3), lbOn()]"
+        wheel = "LB.el.dispatchEvent(new WheelEvent('wheel', {deltaX: %s, deltaY: %s, ctrlKey: %s, clientX: 400, clientY: 300, bubbles: true, cancelable: true}))"
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"openLightbox(rawUrl({json.dumps(pic)}))")
+            page.wait_for_timeout(500)
+            s, fit, on = page.evaluate(state)
+            self.assertEqual((s, on), (fit, True))
+            page.evaluate(wheel % (0, -100, "true"))  # (a pinch: ctrl + wheel)
+            s2 = page.evaluate("LB.s")
+            self.assertGreater(s2, fit * 2)
+            x0 = page.evaluate("LB.x")
+            page.evaluate(wheel % (50, 0, "false"))  # (two fingers: a pan)
+            self.assertLess(page.evaluate("LB.x"), x0)
+            # WebKit's pinch: gesture events, and the ctrl + wheel twins ignored meanwhile (once, not twice)
+            ratio = page.evaluate("""(() => { const ev = n => { const e = new Event(n, {bubbles: true, cancelable: true});
+                Object.defineProperty(e, 'scale', {value: 1.5}); Object.defineProperty(e, 'clientX', {value: 300}); Object.defineProperty(e, 'clientY', {value: 200}); return e; };
+                const s0 = LB.s; LB.el.dispatchEvent(ev('gesturestart')); LB.el.dispatchEvent(ev('gesturechange'));
+                LB.el.dispatchEvent(new WheelEvent('wheel', {deltaY: -100, ctrlKey: true, clientX: 300, clientY: 200, bubbles: true, cancelable: true}));
+                LB.el.dispatchEvent(ev('gestureend')); return +(LB.s / s0).toFixed(3); })()""")
+            self.assertEqual(ratio, 1.5)
+            page.mouse.click(640, 430)  # (on the zoomed picture: it stays)
+            page.wait_for_timeout(400)
+            self.assertTrue(page.evaluate("lbOn()"))
+            page.keyboard.press("Digit0")
+            self.assertEqual(page.evaluate(state)[:2], [fit, fit])
+            page.keyboard.press("Equal")
+            self.assertGreater(page.evaluate("LB.s"), fit)
+            page.keyboard.press("Digit0")
+            page.mouse.dblclick(640, 430)  # (fit ↔ 2.5×)
+            page.wait_for_timeout(400)
+            self.assertAlmostEqual(page.evaluate("LB.s"), fit * 2.5, places=2)
+            page.keyboard.press("Minus")
+            page.keyboard.press("Minus")
+            page.keyboard.press("Minus")
+            page.wait_for_timeout(100)
+            page.mouse.click(3, 3)  # (the dark area: closes, zoomed or not)
+            page.wait_for_timeout(500)
+            self.assertFalse(page.evaluate("lbOn()"), name)
+            page.evaluate(f"openLightbox(rawUrl({json.dumps(pic)}))")
+            page.wait_for_timeout(300)
+            page.keyboard.press("Escape")
+            self.assertFalse(page.evaluate("lbOn()"))
+
+    def test_a_picture_window_open_in_the_app_shows_in_the_lightbox(self):
+        pic = os.path.join(self.tmp.name, "small.png")
+        png(pic, 200, 100)
+        for name, b in self.browsers.items():
+            ctx = b.new_context(viewport={"width": 1280, "height": 860})
+            ctx.add_init_script("window.__ORBIT_APP__ = true;")  # (as in the Mac app's WebView, where window.open does nothing)
+            page = ctx.new_page()
+            try:
+                self.open(page)
+                page.evaluate(f"window.open(rawUrl({json.dumps(pic)}))")
+                page.wait_for_timeout(400)
+                self.assertTrue(page.evaluate("lbOn()"), name)
+                self.assertIn("small.png", page.evaluate("LB.img.src"))
+            finally:
+                ctx.close()
 
     def test_space_folds_a_group_in_the_left_panel(self):
         gid = self.group("Foldme")

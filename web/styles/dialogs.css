@@ -85,9 +85,13 @@
 .sheet .r { display:flex; gap:10px; padding:3px 0; break-inside:avoid; border-bottom:1px solid var(--line); }
 .sheet .r .kk { flex:none; width:118px; color:var(--ink); font-weight:calc(500 + var(--wd)); }
 .sheet .r .aa { color:var(--ink-2); }
-#lightbox { position:fixed; inset:0; background:rgba(20,20,22,.86); z-index:90; display:none; place-items:center; cursor:zoom-out; }
-#lightbox.show { display:grid; }
-#lightbox img { max-width:94vw; max-height:94vh; border-radius:var(--r-s); }
+/* the image viewer (lightbox.js): placed by one transform, no transition (it would shake under a pinch) */
+#lightbox { position:fixed; inset:0; background:rgba(20,20,22,.86); z-index:90; display:none; overflow:hidden; cursor:zoom-out; touch-action:none; }
+#lightbox.show { display:block; outline:none; }
+#lightbox img { position:absolute; left:0; top:0; transform-origin:0 0; max-width:none; max-height:none; border-radius:var(--r-s);
+  cursor:zoom-in; -webkit-user-drag:none; user-select:none; will-change:transform; transition:none; }
+#lightbox.zoomed img { cursor:grab; border-radius:0; }
+#lightbox.zoomed img:active { cursor:grabbing; }
 /* A cut-off name's whole text (tooltip.js): the menu's surface, small */
 #tip { position:fixed; z-index:58; max-width:min(640px, 80vw); padding:4px 8px; background:var(--surface); color:var(--ink);
   border-radius:var(--r-s); box-shadow:var(--menu-shadow); font:calc(12px * var(--ui-k))/1.45 var(--font); word-break:break-all; white-space:pre-line; pointer-events:none;

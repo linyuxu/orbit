@@ -48,6 +48,7 @@ function showMain() {
   if (isFile) { showFile(S.file); return; }
   if (EMBED_REVIEW) return;
   input.value = S.drafts[S.current] || ""; autosize(); updateSend(); renderEditing(); closeMention();
+  if (EMBED && S.current === EMBED.sid) { QUOTE_READY.on = true; if (QUOTES_IN.length) setTimeout(() => QUOTES_IN.splice(0).forEach(quoteHere), 0); }  // (quoted from beside before it showed)
   if (!S.current) renderConv();
   else if (!S.cards.has(S.current)) { $("#cards").innerHTML = ""; loadCards(S.current); }
   else renderConv();
@@ -380,9 +381,7 @@ document.addEventListener("click", e => {
 });
 $("#jump").innerHTML = I("down", 14) + "Latest";
 $("#jump").addEventListener("click", () => { scrollLatest(); });
-function openLightbox(src) { const lb = $("#lightbox"); lb.querySelector("img").src = src; lb.classList.add("show"); }
-function closeLightbox() { $("#lightbox").classList.remove("show"); }
-$("#lightbox").addEventListener("click", closeLightbox);
+/* (the image viewer: lightbox.js) */
 
 /* The tab row by mouse: drag a tab along the row (its neighbours slide aside); the same order as ⌘⌃H ⌘⌃L, and a
    session's order follows on the server. */

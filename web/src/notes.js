@@ -71,7 +71,7 @@ function quoteSource() {
     const v = ed.ed.view, r = v.state.selection.main;
     if (r.empty || !v.hasFocus) return null;
     const a = v.state.doc.lineAt(r.from).number, b = v.state.doc.lineAt(r.to).number;
-    return { text: v.state.sliceDoc(r.from, r.to), ref: `${agentPath(S.file)}:${a}${b > a ? "-" + b : ""}`, at: () => v.coordsAtPos(r.to) };
+    return { text: v.state.sliceDoc(r.from, r.to), ref: `${agentPath(S.file)}:${a}${b > a ? "-" + b : ""}`, at: () => v.coordsAtPos(r.to), file: true };
   }
   const c = selectedCardText();
   if (!c) return null;
@@ -79,9 +79,11 @@ function quoteSource() {
   return { text: c.text, ref: `${c.name} #${c.cid}`, at: () => { const rs = range.getClientRects(); return rs[rs.length - 1] || range.getBoundingClientRect(); } };
 }
 const quoteBlock = q => `> ${q.ref}\n` + q.text.replace(/\s+$/, "").split("\n").map(l => "> " + l).join("\n") + "\n\n";
-function quoteTo(q, sid = S.current) {
+function quoteTo(q, sid) {
   hideQuoteBtn();
   if (EMBED) { window.parent.postMessage({ orbit: "quote", text: q.text, ref: q.ref }, location.origin); return; }
+  if (sid === undefined && q.file) return quoteBeside(q);  // (from a file or note: to the session beside it)
+  if (sid === undefined) sid = S.current;
   if (!sid) { toast("No session to quote into"); return; }
   const block = quoteBlock(q);
   if (sid !== S.current) {  // another session: its draft gets the quote, and it comes to the front
@@ -98,14 +100,48 @@ function quoteTo(q, sid = S.current) {
   }
   setTimeout(() => { input.focus(); input.setSelectionRange(input.value.length, input.value.length); updateSend(); saveDraft(); }, 0);
 }
+/* From a file or note tab: the session open beside it gets the quote (at the end of its input, the keyboard there);
+   with none beside, a menu of sessions, and the chosen one opens beside with the quote in its input. */
+const sideSession = () => !EMBED && S.side && S.side.kind === "session" && !(sideEntry() || {}).hidden && S.sessions.has(S.side.sid) ? S.side : null;
+function quoteBeside(q, sid) {
+  const sp = sideSession();
+  if (sp && (!sid || sp.sid === sid)) { quoteToSide(q, sp); focusSide(); return; }
+  if (sid) {  // (its side tab, from the list: S.side may follow a moment later)
+    openSide({ kind: "session", sid }, { focus: true });
+    const e = sideEntry(), now = e && e.list.find(x => x.kind === "session" && x.sid === sid);
+    if (now) quoteToSide(q, now);
+    return;
+  }
+  const ss = quoteTargets();
+  if (!ss.length) { toast("No session to quote into"); return; }
+  menu(ss.map(x => ({ label: x.name, key: x.id === S.current ? "current" : basename(x.cwd), run: () => quoteBeside(q, x.id) })), { at: quoteAt(q) });
+}
+const quoteTargets = () => [...S.sessions.values()].filter(x => !x.fleet && inView(x)).concat([...S.sessions.values()].filter(x => !x.fleet && !inView(x)));
+/* In a session beside (an embedded page): the quote at the end of its input, which has the keyboard; one that comes
+   before the session shows (the page still loading) waits for it (tabs.js showCurrent). */
+const QUOTES_IN = [], QUOTE_READY = { on: false };
+function quoteHere(q) {
+  const sid = EMBED && EMBED.sid;
+  if (!sid) return;
+  if (!QUOTE_READY.on || S.current !== sid) { QUOTES_IN.push(q); return; }
+  const v = input.value;
+  input.focus();
+  input.insertAt((v && !v.endsWith("\n") ? "\n\n" : "") + quoteBlock(q), v.length);
+  S.drafts[sid] = input.value; LS.set("drafts", S.drafts);  // (its draft at once: the page redrawn keeps it)
+  setTimeout(() => { input.focus(); input.setSelectionRange(input.value.length, input.value.length); updateSend(); }, 0);
+}
+const quoteAt = q => { const r = q.at(), k = rectScale(); return r ? { x: r.left / k, y: r.bottom / k } : { x: 200, y: 200 }; };
 function quoteMenu(q) {
   const others = [...S.sessions.values()].filter(x => !x.fleet && x.id !== S.current);
+  const sp = !EMBED && q.file ? sideSession() : null;
   menu([
-    { label: EMBED ? "Quote into the main input" : `Quote into ${cur() ? cur().name : "the input"}`, key: "Q", run: () => quoteTo(q) },
+    !EMBED && q.file ? (sp ? { label: `Quote beside: ${S.sessions.get(sp.sid).name}`, key: "Q", run: () => quoteBeside(q) }
+                           : { label: "Quote into a session beside", key: "Q", sub: () => quoteTargets().map(x => ({ label: x.name, run: () => quoteBeside(q, x.id) })) })
+      : { label: EMBED ? "Quote into the main input" : `Quote into ${cur() ? cur().name : "the input"}`, key: "Q", run: () => quoteTo(q) },
     EMBED || !others.length ? null : { label: "Quote to", sub: () => others.map(x => ({ label: x.name, run: () => quoteTo(q, x.id) })) },
     S.file ? { label: "Copy path:lines", run: () => copyText(q.ref) } : null,
     { label: "Copy", run: () => copyText(q.text) },
-  ].filter(Boolean), { at: (() => { const r = q.at(), k = rectScale(); return r ? { x: r.left / k, y: r.bottom / k } : { x: 200, y: 200 }; })() });
+  ].filter(Boolean), { at: quoteAt(q) });
 }
 const quoteBtn = $("#quotebtn");
 quoteBtn.innerHTML = `${I("quote", 13)}<span>Quote</span>`;
