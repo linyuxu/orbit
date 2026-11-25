@@ -51,9 +51,16 @@ function showMain() {
   else if (!S.cards.has(S.current)) { $("#cards").innerHTML = ""; loadCards(S.current); }
   else renderConv();
 }
-function record(key) {
-  S.hist = S.hist.slice(0, S.histPos + 1).filter(x => x !== key);
-  S.hist.push(key); S.histPos = S.hist.length - 1;
+/* ⌘- ⌘=: back and forward through visited tabs. An entry is a tab in its group ({k: "s:<id>" | "f:<path>", g}), so
+   back from another group goes to that group's tab (a file tab is one group's: the same path in the group in front
+   would be another tab). A tab is kept once, at its last visit; HIST_MAX entries. */
+const HIST_MAX = 200;
+function record(key, gid = S.group) {
+  if (!key) return;
+  S.hist = S.hist.slice(0, S.histPos + 1).filter(e => !(e.k === key && e.g === gid));
+  S.hist.push({ k: key, g: gid });
+  if (S.hist.length > HIST_MAX) S.hist = S.hist.slice(-HIST_MAX);
+  S.histPos = S.hist.length - 1;
 }
 function switchTo(sid, { focus = true, rec = true, group } = {}) {
   const s = S.sessions.get(sid);
@@ -80,6 +87,7 @@ function switchGroup(gid, { focus = true, quiet = false } = {}) {
   if (sid && ids.includes(sid)) S.current = sid;
   else if (!ids.includes(S.current)) S.current = ids[0] || null;
   if (!quiet && !S.left.shown) toast(groupName(gid));
+  record(tabKey());  // (the tab it lands on: ⌘- comes back to it)
   showCurrent(focus);
 }
 function groupByIndex(n) {
@@ -105,13 +113,26 @@ function cycleTab(d) {
   const i = keys.indexOf(tabKey());
   goKey(keys[(i + d + keys.length) % keys.length]);
 }
+/* Whether a history entry's tab is still there: a session not closed (shown in its group, or anywhere), a file tab
+   still open in its group. Closed ones are skipped. */
+function histOk(e) {
+  if (!e || typeof e !== "object") return false;
+  if (e.k.startsWith("s:")) { const s = S.sessions.get(e.k.slice(2)); return !!s && !s.closed && !s.fleet; }
+  return e.k.startsWith("f:") && (e.g === FAV || S.groups.some(g => g.id === e.g)) && fileTabs(e.g).some(t => t.path === e.k.slice(2));
+}
 function histGo(d) {
-  const ok = k => k.startsWith("s:") ? S.sessions.has(k.slice(2)) : true;
   let p = S.histPos + d;
-  while (p >= 0 && p < S.hist.length && !ok(S.hist[p])) p += d;
+  while (p >= 0 && p < S.hist.length && !histOk(S.hist[p])) p += d;
   if (p < 0 || p >= S.hist.length) return;
   S.histPos = p;
-  goKey(S.hist[p], { rec: false });
+  const e = S.hist[p];
+  if (e.k.startsWith("s:")) {
+    const sid = e.k.slice(2);
+    switchTo(sid, { rec: false, group: tabIds(e.g).includes(sid) ? e.g : undefined });  // (in its group, if it is still there)
+  } else {
+    if (e.g !== S.group) { saveDraft(); S.group = e.g; }  // that group's file tab, not one opened in the group in front
+    openFile(e.k.slice(2), { rec: false, keepPreview: true });
+  }
 }
 async function moveSession(sid, d) {
   const ids = tabIds(), i = ids.indexOf(sid), j = i + d;

@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Fixed ⌘- / ⌘= (back / forward through visited tabs) across groups: a file tab (a file, a note, the Calendar, a plugin
+  view) is remembered with its group, so back returns to that group's tab instead of opening the file in the group in
+  front; switching groups records the tab it lands on; closed tabs are skipped. 200 entries, a tab once.
 - The ⌘J terminal looks like iTerm: the font, size, line and letter spacing (and thin strokes) of iTerm's default
   profile (Appearance → Terminal font: Like iTerm, the default, or the code font). The server finds that font's file
   by its PostScript name in the font folders and serves it (`GET /api/term-font`, `…/file/regular|bold`): WebKit, the

@@ -21,7 +21,7 @@ const S = {
   pendingScroll: null,
   drafts: LS.get("drafts", {}),
   zoom: LS.get("zoom", ZOOM_DEFAULT),
-  hist: [], histPos: -1,          // visited tabs (⌘- ⌘=): "s:<sid>" | "f:<path>"
+  hist: [], histPos: -1,          // visited tabs (⌘- ⌘=): {k: "s:<sid>" | "f:<path>", g: its group} (tabs.js)
   recent: LS.get("recent", []),   // [{id: "s:…"|"f:…", t}] (⌘R)
   notes: LS.get("notes", []),
   unread: new Set(LS.get("unread", [])),

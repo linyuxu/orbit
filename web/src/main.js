@@ -32,7 +32,7 @@ setZoom(S.zoom, false);
   }
   applyLeft();
   const key = tabKey();
-  if (key) { S.hist = [key]; S.histPos = 0; }
+  if (key) { S.hist = [{ k: key, g: S.group }]; S.histPos = 0; }
   showCurrent(false);
   const f = LS.get("focus", "input");
   if (f === "left" && S.left.shown) focusPanel();
