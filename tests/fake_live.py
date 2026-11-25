@@ -76,6 +76,10 @@ class FakeLive:
         self.attached = 0
         self.ws_sessions: list[dict] = []  # session.start of each WebSocket-transport session (voice previews)
         self.ws_received: list[dict] = []
+        self.audio_in = 0  # bytes of input audio a call over the WebSocket transport sent (the watch's)
+        self.audio_chunks = 0
+        self.ws_calls = 0
+        self.start_error = ""  # non-empty: a call's session.start is answered with this error, then the socket closes
         self.attach_status = 0  # non-zero: refuse attaches with this HTTP status
         self.conn: socket.socket | None = None
         self.lock = threading.Lock()
@@ -213,6 +217,8 @@ class FakeLive:
                 ev = json.loads(data)
                 with self.lock:
                     self.ws_sessions.append(ev) if ev.get("type") == "session.start" else self.ws_received.append(ev)
+                if ev.get("type") == "session.start" and "delegation" in ev.get("session", {}):
+                    return self.serve_ws_call(sock, ev)  # (a call: the watch's; the voice preview has no delegation)
                 if ev.get("type") == "session.start":
                     send({"type": "session.started", "event_id": "evt_ws_1", "session": {"id": "live_ws_1", **ev["session"]}})
                     for k in range(3):
@@ -223,6 +229,57 @@ class FakeLive:
         except (ConnectionError, OSError, ValueError):
             pass
         finally:
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+    def serve_ws_call(self, sock: socket.socket, start: dict) -> None:
+        """A call over the WebSocket transport: this socket is the session's only one (emit() goes to it, as to a
+        sideband), input audio is counted, appends acknowledged and session.close answered (react)."""
+        if self.start_error:
+            try:
+                sock.sendall(server_frame(0x1, json.dumps({"type": "error", "event_id": "evt_err",
+                                                           "error": {"message": self.start_error}}).encode()))
+                sock.sendall(server_frame(0x8, struct.pack(">H", 1008)))
+            except OSError:
+                pass
+            sock.close()
+            return
+        with self.cond:
+            self.ws_calls += 1
+            self.conn = sock
+            self.attached += 1
+            self._send_locked({"type": "session.started", "event_id": f"evt_wsc_{self.ws_calls}",
+                               "session": {"id": f"live_ws_{self.ws_calls}", "status": "active"}})
+            self.cond.notify_all()
+        try:
+            while True:
+                fin, op, data, masked = read_client_frame(sock)
+                if op == 0x8:
+                    break
+                if op == 0x9:
+                    with self.lock:
+                        sock.sendall(server_frame(0xA, data))
+                    continue
+                if op != 0x1:
+                    continue
+                ev = json.loads(data)
+                if ev.get("type") == "session.input_audio.append":
+                    with self.lock:
+                        self.audio_in += len(base64.b64decode(ev.get("audio") or ""))
+                        self.audio_chunks += 1
+                    continue
+                ev["_masked"] = masked
+                with self.lock:
+                    self.received.append(ev)
+                self.react(ev)
+        except (ConnectionError, OSError, ValueError):
+            pass
+        finally:
+            with self.lock:
+                if self.conn is sock:
+                    self.conn = None
             try:
                 sock.close()
             except OSError:

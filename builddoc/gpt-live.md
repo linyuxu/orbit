@@ -347,3 +347,42 @@ Built: `orbit/services/live/` (`session.py` the call, `ws.py` the websocket clie
   `microphone` permission need no flags) both make the call, connect the peer (a second peer connection answers
   for the fake), open `oai-events`, show captions, turn a delegation into a card and its answer into one commentary,
   show standby, and hang up into a note card.
+
+## 12. The watch (server side; the watchOS app comes next)
+
+An Apple Watch has no browser that could hold a WebRTC call, and watchOS keeps low-level networking (WebSocket, the
+Network framework) from most apps; URLSession's HTTP requests always work, over Wi-Fi or through the iPhone by
+Bluetooth. So for the watch this server holds the whole GPT Live session, over its **WebSocket transport** (as the
+voice preview does), and relays the audio over plain HTTP (`orbit/server/watch.py`):
+
+| Route | Does |
+|---|---|
+| `POST /api/live/watch/start {sid}` | the call: `{call, live, rate: 24000, format: "pcm16", chime}` once `session.started` came (≤ 15 s); 400 no key (`need: "openai-key"`), 404 no such session, 409 a call already (`busy`), 502 OpenAI refused (its message) |
+| `POST /api/live/watch/<call>/up` | body: raw PCM 16-bit mono 24 kHz little-endian, ~100–200 ms a chunk (at most 256 KB) → 204, `Connection: keep-alive` (the next chunk on the same connection); 404 once the call ended |
+| `GET /api/live/watch/<call>/down` | a stream of frames until the call ends (no length: it ends with the connection): 1 byte type, 4 bytes length (big-endian), the payload. `a`: the voice's audio, PCM like the upload (silent chunks are not sent: the output streams silence too); `j`: JSON, the `{"t": "live"}` events the pages get (`kind`: `state` first and at each phase, `caption`, `delegation`, `error`), and `{"t": "ping"}` every 10 s. The last `state` has `phase: "ended"` (with `reason`, `error`, `note`), then the stream closes |
+| `POST /api/live/watch/<call>/stop` | hang-up (as `/api/live/stop`) |
+
+The token as the phone's: `Authorization: Bearer <token>` (the `?token=` of the phone's link), checked by the
+handler's guard; from the network, HTTPS once it is on.
+
+The call is the same `Call` (delegations, corrections, the session's state, results held while the user talks, the
+note card): `transport: "watch"` in `/api/live`, so the Mac's and the phone's pages show it as a call held elsewhere
+(their bar, and ⌘⇧V hangs it up). What differs:
+- `session.start` (`ws_session()`): the session of §2 with `audio.format {type: "audio/pcm", rate: 24000}`, without
+  `wake_policy` / `idle_timeout_s` (the WebSocket transport refuses them: "requires a session with wake policy
+  support") and the page's data channel. So **no standby**: the watch's call is billed active ($0.05/min) until
+  hang-up; the watch should hang up when its user is done.
+- The session lives as long as the socket (no reattach on this transport): when it goes, the call ends
+  (`connection_lost`). Events need no replay dedupe; `session.started` carries the session's id.
+- Input audio: each upload goes in as `session.input_audio.append` (at most 1 s each); when the watch sends nothing for
+  0.6 s, 0.25 s of silence goes in each 0.25 s (the docs: keep input audio running), so a pause in the uploads (the
+  Bluetooth link, the wrist down) does not stop the session's timeline.
+- Audio is never logged; the call's log has `audio {up_bytes, down_bytes, quiet_chunks}` at its end.
+- A down stream that stops reading keeps at most 400 frames (the oldest go); a new `down` may be opened at any time
+  (after a network change): it starts with the call's state.
+
+Tested (`tests/test_live_watch.py`, the fake's WebSocket call mode): the session.start, uploads on one kept-alive
+connection, a loud chunk relayed and a silent one not, a delegation into a card and its captions on the stream, the
+result said, hang-up ending the stream with the note card, silence filling a pause, the socket lost, the errors, and
+the token from another machine.
+

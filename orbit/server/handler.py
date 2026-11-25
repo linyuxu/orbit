@@ -24,6 +24,7 @@ from orbit.desk.session import DRIVERS, Stopping
 from orbit.machines import federation, https, remote
 from orbit.server.forward import FILE_ROUTES, Forward
 from orbit.server.streams import Streams
+from orbit.server.watch import Watch
 from orbit.server.support import UPLOAD_MAX, USAGE, append_log, complete_dir, font_families, save_upload
 from orbit.services import schedule
 from orbit.services.shell import open_terminal_app
@@ -34,7 +35,7 @@ WEB = ROOT / "web"
 DEFAULT_PORT = 8770
 
 
-class Handler(Forward, Streams, BaseHTTPRequestHandler):
+class Handler(Forward, Streams, Watch, BaseHTTPRequestHandler):
     server_version = "orbit"
     desk: Desk
     port: int
@@ -43,7 +44,7 @@ class Handler(Forward, Streams, BaseHTTPRequestHandler):
     stop_server = None  # stops the server (POST /api/shutdown), set by make_server (and main)
 
     def log_message(self, fmt, *args):  # quiet: only errors
-        if args and isinstance(args[1], str) and args[1].startswith(("4", "5")):
+        if len(args) > 1 and isinstance(args[1], str) and args[1].startswith(("4", "5")):
             sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
 
     # ------------------------------------------------------------------ guards
@@ -632,6 +633,9 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
         if p == "/api/live/usage":  # what the voice calls cost: this month, and the balance left if the user gave one
             from orbit.services.live import usage as live_usage
             return self._json(live_usage.summary(self.desk.state_dir, self.desk.settings))
+        m = re.fullmatch(r"/api/live/watch/(call-[0-9a-f]+)/down", p)
+        if m:  # the watch's call: the voice's audio and the call's events, as frames (server/watch.py)
+            return self._watch_down(m.group(1))
         if p == "/api/live":  # the voice call: phase, bound session, transcript so far (any client with the token: the phone)
             return self._json(self.desk.live.state())
         if p == "/api/term-font":  # the font of iTerm's default profile, for the ⌘J terminal ({} without iTerm)
@@ -901,6 +905,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
         route = self._view_route(m.group(1)) if m else None
         if route:  # (2.0) a reply typed in a native thread (any page with the token: the phone's too)
             return self._view_action(route, m.group(2), self._body())
+        if self._watch_post(p):  # the watch's voice call (server/watch.py): its audio is a raw body, not JSON
+            return
         b = self._body()
         if p in FILE_ROUTES and federation.machine_in(b):
             return self._remote_files(federation.machine_in(b), "POST", p, {}, b)

@@ -10,10 +10,13 @@ ids in <state>/live/<call>.jsonl (never the key, never audio).
 
 from __future__ import annotations
 
+import array
+import base64
 import copy
 import json
 import queue
 import re
+import struct
 import threading
 import time
 import urllib.error
@@ -43,6 +46,14 @@ DETAIL_TOKENS = 300  # the next part of the answer, as silent context for follow
 RECONNECT_BASE_S, RECONNECT_MAX_S, STABLE_S = 0.2, 5.0, 30.0  # sideband reattach backoff (as Codex)
 ATTACH_GIVE_UP_S = 30.0  # never attached in this long: the call ends
 CLOSE_WAIT_S = 5.0  # hang-up: wait this long for session.closed
+# The watch's call (§12): the server holds the GPT Live session over its WebSocket transport, PCM 16-bit mono 24 kHz
+# both ways; the watch talks to this server over plain HTTP (watchOS keeps low-level networking from most apps).
+RATE = 24000
+WS_START_WAIT_S = 15.0  # session.start → session.started, else the call does not start
+UP_MAX_BYTES = RATE * 2  # an input_audio.append carries at most 1 s (a longer upload is cut into pieces)
+GAP_FILL_S = 0.6  # no audio from the watch this long: silence goes in for it (the docs: keep input audio running)
+QUIET_PEAK = 4  # an output chunk whose loudest sample is below this is silence: not sent to the watch (Bluetooth)
+SINK_MAX = 400  # frames waiting for a slow watch (~40 s of speech); past it the oldest go
 APPEND_TOKENS = 450  # an append may carry 500 tokens; a little room for the estimate
 FINAL = ("completed", "error", "cancelled", "paused")
 ACTIVE = ("thinking", "running")
@@ -496,6 +507,28 @@ def session_body(desk, s, sdp: str, model: str, cfg: dict | None = None) -> dict
     }
 
 
+def ws_session(desk, s, model: str, cfg: dict | None = None) -> dict:
+    """The session.start of a call over the WebSocket transport (the watch, §12): the session of session_body, with its
+    audio format named (PCM 24 kHz both ways), without what that transport refuses (wake_policy and idle_timeout_s:
+    "requires a session with wake policy support", so no standby) or does not have (the page's data channel)."""
+    se = session_body(desk, s, "", model, cfg)["session"]
+    for k in ("wake_policy", "idle_timeout_s", "client"):
+        se.pop(k, None)
+    se["audio"] = {"format": {"type": "audio/pcm", "rate": RATE}, "output": dict(se["audio"]["output"])}
+    return {"type": "session.start", "session": se}
+
+
+def frame(kind: bytes, payload: bytes) -> bytes:
+    """One message of the watch's down stream: a type byte (b"a" audio, b"j" JSON), its length (4 bytes, big-endian)."""
+    return kind + struct.pack(">I", len(payload)) + payload
+
+
+def quiet(pcm: bytes) -> bool:
+    """PCM 16-bit that is silence (the output streams all the time, silence too)."""
+    a = array.array("h", pcm[: len(pcm) // 2 * 2])
+    return not a or max(max(a), -min(a)) < QUIET_PEAK
+
+
 # ---------------------------------------------------------------------------------------------- transcripts
 def ordered(frags: list[dict]) -> list[dict]:
     """By the session's timeline (start_ms), never by arrival."""
@@ -586,8 +619,9 @@ def result_detail(c: dict, length: str = "brief") -> str:
 
 # ---------------------------------------------------------------------------------------------- the call
 class Call:
-    def __init__(self, live: "Live", sid: str, model: str):
+    def __init__(self, live: "Live", sid: str, model: str, transport: str = "webrtc"):
         self.live, self.desk, self.sid, self.model = live, live.desk, sid, model
+        self.transport = transport  # "webrtc" (a page: media to OpenAI, this server on the sideband) | "watch" (§12)
         self.target = Target(live.desk, sid)  # (this server's session, or another machine's)
         self.cfg = config.current(live.desk.settings)  # (again as the call is created)
         self.id = "call-" + uuid.uuid4().hex[:10]
@@ -633,6 +667,12 @@ class Call:
         self.log_path = d / f"{self.id}.jsonl"
         self.log_lock = threading.Lock()
         self.q: queue.Queue | None = None
+        # The watch's call: the down streams listening (frames), the audio up, session.started waited for at the start
+        self.sinks: list[queue.Queue] = []
+        self.started_ev = threading.Event()
+        self.start_error = ""
+        self.audio_at = 0.0  # when the watch's audio last came
+        self.up_bytes = self.down_bytes = self.quiet_chunks = 0
 
     # ------------------------------------------------------------------ log and page
     def log(self, stage: str, **kw: Any) -> None:
@@ -648,6 +688,7 @@ class Call:
     def state(self, transcript: bool = True) -> dict:
         with self.lock:
             out = {"call": self.id, "phase": self.phase, "sid": self.sid, "live": self.live_id, "started": self.t0, "usage": dict(self.usage),
+                   "transport": self.transport,
                    "expires_at": self.expires_at, "reason": self.reason, "error": self.error, "model": self.model,
                    "delegations": [{"id": k, **{x: self.dels[k].get(x) for x in ("cid", "how", "text", "done")}}
                                    for k in self.order]}
@@ -660,7 +701,10 @@ class Call:
         return {"id": f["key"], "who": f["who"], "text": f["text"], "start": f["start"], "end": f["end"]}
 
     def _tell(self, kind: str, **kw: Any) -> None:
-        self.desk.broadcast({"t": "live", "kind": kind, "call": self.id, **kw})
+        ev = {"t": "live", "kind": kind, "call": self.id, **kw}
+        self.desk.broadcast(ev)
+        if self.sinks:  # (the watch: the same events on its down stream)
+            self._to_sinks(frame(b"j", json.dumps(ev, ensure_ascii=False).encode()))
 
     def _set_phase(self, p: str) -> None:
         with self.lock:
@@ -721,6 +765,161 @@ class Call:
         for fn in (self._sideband, self._follow_cards, self._tick):
             threading.Thread(target=fn, daemon=True, name=f"live-{fn.__name__}").start()
         return {"call": self.id, "sdp": answer, "live": self.live_id, "chime": self.cfg["live_chime"] and self.cfg["live_chime_sound"]}
+
+    def create_ws(self) -> dict:
+        """The watch's call (§12): this server opens the GPT Live session over the WebSocket transport (the key in
+        order, as create), sends session.start and waits for session.started; then the same threads as a page's call,
+        with this socket in the sideband's place (it carries the audio too)."""
+        ks = keys.entries(self.desk.state_dir, "openai")
+        if not ks:
+            raise NoKey("No OpenAI API key: set one in Settings → Voice")
+        self.cfg = config.current(self.desk.settings)
+        start = ws_session(self.desk, self.target, self.model, self.cfg)
+        self.log("create", sid=self.sid, model=self.model, transport="websocket", input=len(start["session"]["input"]),
+                 instructions_tokens=est_tokens(start["session"]["instructions"]))
+        ws = None
+        for i, k in enumerate(ks):
+            t = time.time()
+            try:
+                ws = wsock.connect(f"{ws_base()}/v1/live/sessions", headers={"Authorization": f"Bearer {k['key']}"}, timeout=15)
+            except wsock.HandshakeError as e:
+                try:
+                    msg = str((json.loads(e.body or "{}").get("error") or {}).get("message") or "")
+                except (ValueError, AttributeError):
+                    msg = ""
+                self.log("create_failed", status=e.status, error=msg[:500], key=keys.label(k), ms_create=int((time.time() - t) * 1000))
+                if e.status in keys.FAILOVER:
+                    keys.note(self.desk.state_dir, k["id"], False, f"OpenAI answered {e.status}" + (f": {msg}" if msg else ""))
+                    if i + 1 < len(ks):
+                        continue
+                    many = f" (all {len(ks)} keys)" if len(ks) > 1 else ""
+                    self._fail(f"OpenAI answered {e.status}{many}" + (f": {msg}" if msg else ""))
+                self._fail(f"OpenAI answered {e.status}" + (f": {msg}" if msg else ""))
+            except OSError as e:
+                self.log("create_failed", error=str(e)[:300])
+                self._fail(f"could not reach OpenAI: {e}")
+            keys.note(self.desk.state_dir, k["id"], True)
+            self.key, self.key_label = k["key"], keys.label(k)
+            break
+        try:
+            ws.send(json.dumps(start))
+        except OSError as e:
+            ws.abort()
+            self._fail(f"could not reach OpenAI: {e}")
+        with self.lock:
+            self.ws, self.attached = ws, 1
+        threading.Thread(target=self._ws_reader, args=(ws,), daemon=True, name="live-_ws_reader").start()
+        if not self.started_ev.wait(WS_START_WAIT_S) or self.start_error or not self.live_id:
+            why = self.start_error or ("the voice session did not start" if self.live_id or not self.ended else "the connection closed")
+            self.log("create_failed", error=why[:500])
+            with self.lock:
+                self.closing = True  # (the reader, seeing the socket go, finishes nothing: this call never started)
+            ws.abort()
+            self._fail(f"OpenAI: {why}")
+        self.log("created", transport="websocket", ms_create=int((time.time() - t) * 1000), key=self.key_label)
+        self.audio_at = time.time()
+        self.q = self.desk.subscribe()
+        for fn in (self._follow_cards, self._tick):
+            threading.Thread(target=fn, daemon=True, name=f"live-{fn.__name__}").start()
+        return {"call": self.id, "live": self.live_id, "rate": RATE, "format": "pcm16",
+                "chime": self.cfg["live_chime"] and self.cfg["live_chime_sound"]}
+
+    def _ws_reader(self, ws) -> None:
+        """The WebSocket transport's events: the voice's audio to the watch, everything else as the sideband's. The
+        session lives as long as this socket: when it goes, the call ends (no reattach on this transport)."""
+        try:
+            while True:
+                m = ws.recv()
+                if isinstance(m, bytes):
+                    continue
+                try:
+                    ev = json.loads(m)
+                except ValueError:
+                    continue
+                if not isinstance(ev, dict):
+                    continue
+                typ = ev.get("type")
+                if typ == "session.output_audio.delta":
+                    self._audio_out(ev.get("delta") or "")
+                    continue
+                if typ == "error" and not self.started_ev.is_set():
+                    err = ev.get("error") or {}
+                    self.start_error = str(err.get("message") or err.get("code") or "error")[:300] if isinstance(err, dict) else str(err)[:300]
+                self._on_message(ev)
+                if typ in ("session.started", "error"):
+                    self.started_ev.set()
+        except wsock.Closed as e:
+            self.log("ws_closed", code=e.code, reason=e.reason[:200])
+        except Exception as e:  # noqa: BLE001 - a bug in a handler must not end the call silently
+            self.log("ws_error", error=f"{type(e).__name__}: {e}"[:300])
+            ws.abort()
+        with self.lock:
+            if self.ws is ws:
+                self.ws = None
+        self.started_ev.set()
+        self.closed_ev.set()  # (a hang-up waiting for session.closed: the socket going says as much)
+        if not self.ended and not self.closing:
+            self._finish(self.reason or "connection_lost")
+
+    def audio_in(self, pcm: bytes) -> None:
+        """The watch's microphone: PCM 16-bit mono 24 kHz, as input audio (never logged; counted)."""
+        if self.ended or self.closing:
+            raise KeyError(self.id)
+        pcm = pcm[: len(pcm) // 2 * 2]
+        self.audio_at = time.time()
+        self.up_bytes += len(pcm)
+        self._append_audio(pcm)
+
+    def _append_audio(self, pcm: bytes) -> None:
+        ws = self.ws
+        if ws is None:
+            return
+        for i in range(0, len(pcm), UP_MAX_BYTES):
+            try:
+                ws.send(json.dumps({"type": "session.input_audio.append", "audio": base64.b64encode(pcm[i:i + UP_MAX_BYTES]).decode()}))
+            except OSError:
+                return
+
+    def _audio_out(self, b64: str) -> None:
+        try:
+            pcm = base64.b64decode(b64)
+        except ValueError:
+            return
+        if not pcm:
+            return
+        if quiet(pcm):  # (the output streams silence too: the watch plays what comes, so silence need not travel)
+            self.quiet_chunks += 1
+            return
+        self.down_bytes += len(pcm)
+        self._to_sinks(frame(b"a", pcm))
+
+    def listen(self) -> queue.Queue:
+        """A down stream (the watch's GET …/down): its frames come on this queue; None after the last."""
+        q: queue.Queue = queue.Queue()
+        st = self.state(transcript=False)
+        q.put(frame(b"j", json.dumps({"t": "live", "kind": "state", "call": self.id, "state": st}, ensure_ascii=False).encode()))
+        with self.lock:
+            if self.ended:
+                q.put(None)
+            else:
+                self.sinks.append(q)
+        return q
+
+    def unlisten(self, q: queue.Queue) -> None:
+        with self.lock:
+            if q in self.sinks:
+                self.sinks.remove(q)
+
+    def _to_sinks(self, data: bytes | None) -> None:
+        with self.lock:
+            sinks = list(self.sinks)
+        for q in sinks:
+            while q.qsize() >= SINK_MAX:  # (a watch that stopped reading: the oldest go, the call goes on)
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    break
+            q.put(data)
 
     def _fail(self, msg: str) -> None:
         with self.lock:
@@ -796,9 +995,9 @@ class Call:
         self.log("sent", type=ev["type"], event_id=ev.get("event_id"), delegation=ev.get("delegation_id"),
                  **({"content": ev["content"]} if "content" in ev else {}))
 
-    def _on_message(self, msg: str | bytes) -> None:
+    def _on_message(self, msg: str | bytes | dict) -> None:
         try:
-            ev = json.loads(msg)
+            ev = msg if isinstance(msg, dict) else json.loads(msg)
         except ValueError:
             return
         if not isinstance(ev, dict):
@@ -827,6 +1026,7 @@ class Call:
             se = ev.get("session") or {}
             with self.lock:
                 self.expires_at = se.get("expires_at") or self.expires_at
+                self.live_id = self.live_id or str(se.get("id") or "")  # (the WebSocket transport: its id comes here)
             if self.phase == "connecting":
                 self._set_phase("listening")
         elif typ == "session.paused":
@@ -1248,6 +1448,8 @@ class Call:
             if self.expires_at and time.time() > self.expires_at + 10 and not self.closing:
                 self._finish("expired")
                 return
+            if self.transport == "watch" and not self.closing and time.time() - self.audio_at > GAP_FILL_S:
+                self._append_audio(b"\0" * int(RATE * 0.25) * 2)  # (the watch's audio paused: the session's timeline goes on)
             try:
                 self._release()
                 self._snapshot()
@@ -1298,6 +1500,9 @@ class Call:
         with self.lock:
             self.phase = "ended"
         self._tell("state", state={**self.state(transcript=False), "note": (self.note or {}).get("id")})
+        if self.transport == "watch":
+            self.log("audio", up_bytes=self.up_bytes, down_bytes=self.down_bytes, quiet_chunks=self.quiet_chunks)
+        self._to_sinks(None)  # (the watch's down stream ends)
 
     def _note(self) -> dict | None:
         """The call as a note card (no model call): its transcript by turn, the requests it made."""
@@ -1349,6 +1554,24 @@ class Live:
                 raise Busy(self.call)
             new = self.call = Call(self, sid, self.model())
         return new.create(sdp)
+
+    def start_watch(self, sid: str) -> dict:
+        """A call whose audio comes and goes through this server (the watch, §12)."""
+        Target(self.desk, sid)
+        if not keys.get(self.desk.state_dir, "openai"):
+            raise NoKey("No OpenAI API key: set one in Settings → Voice")
+        with self.lock:
+            if self.call is not None and not self.call.ended:
+                raise Busy(self.call)
+            new = self.call = Call(self, sid, self.model(), transport="watch")
+        return new.create_ws()
+
+    def watch_call(self, call: str) -> Call:
+        """The watch's call by its id (KeyError: none, another, or not the watch's)."""
+        c = self.call
+        if c is None or c.id != call or c.transport != "watch":
+            raise KeyError(call)
+        return c
 
     def stop(self, call: str = "") -> dict:
         c = self.call
