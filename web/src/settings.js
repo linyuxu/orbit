@@ -9,7 +9,7 @@
    that everyone should get drops the Appearance prefs saved before it, once. */
 const PREFS_V = 2;
 const PREFS_DEFAULT = { v: PREFS_V, weight: "regular", readSize: 14, noteFont: "Inconsolata", noteSize: 15, readWidth: "full",
-                        uiFont: "Inter", uiSize: 12, readFont: "Consolas", codeFont: "Inconsolata", codeSize: 14, termFont: "iterm" };  // (Inconsolata 14 ≈ Consolas 13)
+                        uiFont: "Inter", uiSize: 12, readFont: "Consolas", codeFont: "Inconsolata", codeSize: 14, termFont: "iterm", groupTint: true };  // (Inconsolata 14 ≈ Consolas 13)
 /* (The conversation's Consolas is Microsoft's and cannot be shipped: where it is not installed, its stack falls to the
    built-in Inconsolata, a font made after it.) */
 /* A font missing on this machine (SF Pro and SF Mono are Apple's, Consolas Microsoft's: neither may be shipped) falls
@@ -467,6 +467,8 @@ function settingsAppearance(pane, keys) {
     value: p.weight === "full" ? "regular" : p.weight, onChange: v => setPref("weight", v) });
   segmented(setRow(pane, "Reading width", "The conversation and its input: a centred column of a comfortable line length, or the whole pane."), {
     options: [{ value: "", label: "Comfortable" }, { value: "full", label: "Full" }], value: p.readWidth || "", onChange: v => setPref("readWidth", v) });
+  toggleSwitch(setRow(pane, "Group colour on every tab", "A coloured group's tabs wear a light tint of its colour at the top of the page. Its home, the group pill and its row in the left panel keep their colour either way."), {
+    on: p.groupTint !== false, label: "Group colour on every tab", onChange: on => { setPref("groupTint", on); renderTabs(); } });
   setHeading(pane, "Fonts");
   fontPicker(pane, keys, { label: "Interface font", desc: "Menus, lists, tabs, the status bar.", key: "uiFont" });
   sizeControl(setRow(pane, "Interface size", "Menus, lists, tabs, the status bar, dialogs, Settings."), { value: p.uiSize, dflt: PREFS_DEFAULT.uiSize, lo: UI_SIZE[0], hi: UI_SIZE[1], onChange: v => setPref("uiSize", v) });

@@ -14,7 +14,7 @@ function renderTabs() {
   gp.style.setProperty("--gc", gs.color || "");
   // every tab of a coloured group wears its home's tint at the top of the page (the home draws its own)
   const pane = $("#pane");
-  pane.classList.toggle("gtint", !!gs.color && S.file !== HOME);
+  pane.classList.toggle("gtint", !!gs.color && S.file !== HOME && readPrefs().groupTint !== false);  // (Appearance: off if you like)
   pane.style.setProperty("--gc", gs.color || "");
   const html = key => {
     if (key.startsWith("f:")) return fileTabHtml(fileTabs().find(t => t.path === key.slice(2)));

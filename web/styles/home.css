@@ -100,8 +100,8 @@ img.gicon { border-radius:4px; object-fit:cover; }
 
 /* a coloured group's other tabs: the same tint at the top of the page as its home's head, fading out; over the
    page (the mouse goes through it), so it shows above whatever the tab draws */
-#pane.gtint::after { content:""; position:absolute; left:0; right:0; top:0; height:150px; z-index:3; pointer-events:none;
-  background:linear-gradient(180deg, color-mix(in srgb, var(--gc) 16%, transparent), transparent); }
+#pane.gtint::after { content:""; position:absolute; left:0; right:0; top:0; height:110px; z-index:3; pointer-events:none;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--gc) 10%, transparent), transparent); }  /* (light: muted text keeps its contrast) */
 
 /* a coloured group in the left panel: a short bar of its colour at the row's start */
 .prow.grp.hued { position:relative; }
