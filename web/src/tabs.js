@@ -36,6 +36,7 @@ function placeFocus(key, was) {
 /* Show the session view, the file view or ± Review in the main pane. */
 function showMain() {
   const isX = xOn(), isP = isPluginTab(S.file), isFile = !!S.file && !isX && !isP;
+  if (xKind() !== "home" && typeof homeUnshown === "function") homeUnshown();
   $("#sessview").hidden = !!S.file || EMBED_REVIEW || isX;
   $("#fileview").hidden = !isFile;
   $("#pview").hidden = !isP;
@@ -82,7 +83,7 @@ function switchGroup(gid, { focus = true, quiet = false } = {}) {
   const want = String(S.lastTab[gid] || "");
   const ids = tabIds();
   S.file = null;
-  if (want.startsWith("f:") && fileTabs().some(t => t.path === want.slice(2))) S.file = want.slice(2);
+  if (want.startsWith("f:") && (want === "f:" + HOME || fileTabs().some(t => t.path === want.slice(2)))) S.file = want.slice(2);
   const sid = want.startsWith("s:") ? want.slice(2) : want.startsWith("f:") ? null : want;
   if (sid && ids.includes(sid)) S.current = sid;
   else if (!ids.includes(S.current)) S.current = ids[0] || null;
@@ -93,6 +94,7 @@ function switchGroup(gid, { focus = true, quiet = false } = {}) {
 function groupByIndex(n) {
   if (n === 1) return switchGroup(FAV);
   const g = topGroups()[n - 2];  // (the top groups: a subgroup is reached in its parent)
+  if (g && g.id === S.group && S.file !== HOME) { openHome(g.id); return; }  // (its key again: its home)
   if (g) switchGroup(g.id); else toast(`No group ${n - 1}: ⌘\` → Sessions to make one`);
 }
 /* The tab row: sessions and files are tabs alike, in one order per group (S.tabOrder; ⌘⌃H ⌘⌃L move any tab past
@@ -118,7 +120,7 @@ function cycleTab(d) {
 function histOk(e) {
   if (!e || typeof e !== "object") return false;
   if (e.k.startsWith("s:")) { const s = S.sessions.get(e.k.slice(2)); return !!s && !s.closed && !s.fleet; }
-  return e.k.startsWith("f:") && (e.g === FAV || S.groups.some(g => g.id === e.g)) && fileTabs(e.g).some(t => t.path === e.k.slice(2));
+  return e.k.startsWith("f:") && (e.g === FAV || S.groups.some(g => g.id === e.g)) && (e.k === "f:" + HOME || fileTabs(e.g).some(t => t.path === e.k.slice(2)));
 }
 function histGo(d) {
   let p = S.histPos + d;
@@ -129,7 +131,8 @@ function histGo(d) {
   if (e.k.startsWith("s:")) {
     const sid = e.k.slice(2);
     switchTo(sid, { rec: false, group: tabIds(e.g).includes(sid) ? e.g : undefined });  // (in its group, if it is still there)
-  } else {
+  } else if (e.k === "f:" + HOME) openHome(e.g, { rec: false });
+  else {
     if (e.g !== S.group) { saveDraft(); S.group = e.g; }  // that group's file tab, not one opened in the group in front
     openFile(e.k.slice(2), { rec: false, keepPreview: true });
   }
@@ -272,7 +275,8 @@ $("#tabs").addEventListener("contextmenu", e => {
   const at = { at: { x: e.clientX, y: e.clientY } };
   if (t.dataset.sid) tabMenu(t.dataset.sid, at); else fileMenu(t.dataset.file, at);
 });
-$("#grouppill").addEventListener("click", () => {
+$("#grouppill").addEventListener("click", e => {
+  if (!e.target.closest(".gcaret")) { openHome(); return; }  // the pill is the group's home tab; its ▾: another group
   menu([{ label: "Favorites", key: "⌘1", run: () => switchGroup(FAV) },
         ...groupMenuItems(gid => switchGroup(gid), { current: S.group }),
         { sep: true }, { label: "New group…", run: () => newGroup() }], { anchor: $("#grouppill") });

@@ -7,7 +7,11 @@ function renderTabs() {
   if (DRAG.active) { DRAG.pending.add(renderTabs); return; }  // (a drag is moving the tabs: after it)
   if (EMBED) return;
   const gp = $("#grouppill");
-  gp.innerHTML = S.group === FAV ? `<span class="star">${I("star", 13)}</span><span class="nm">Favorites</span>` : `<span class="nm">${esc(S.group ? groupPath(S.group) : "Orbit")}</span>`;
+  const gs = S.group && S.group !== FAV ? groupOf(S.group) || {} : {};
+  gp.innerHTML = (S.group === FAV ? `<span class="star">${I("star", 13)}</span><span class="nm">Favorites</span>` : `${groupIconHtml(S.group, 14)}<span class="nm">${esc(S.group ? groupPath(S.group) : "Orbit")}</span>`) +
+    `<span class="gcaret" title="Another group">${I("caret", 12)}</span>`;
+  gp.classList.toggle("active", S.file === HOME);  // (the group's home is in front: the pill is the tab)
+  gp.style.setProperty("--gc", gs.color || "");
   const html = key => {
     if (key.startsWith("f:")) return fileTabHtml(fileTabs().find(t => t.path === key.slice(2)));
     const id = key.slice(2);

@@ -8,6 +8,19 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A group's home page, its first tab (the group pill; a click on the group in the left panel; its ⌘ digit pressed
+  again): widgets on a grid of sixths: its sessions as cards (state, last answer), its subgroups (a click goes in), its
+  files and views, the schedules that wake its sessions, what happened lately, what was pinned, and Markdown notes of
+  your own (files in the vault, `Groups/<path>/…`; Edit or ⏎ writes in place, Esc is done; their checkboxes tick on the
+  page; templates: About, Next steps, Decisions). A widget is dragged by its head, takes a third / a half / two thirds
+  / the row, hides. A group's look: an icon (an emoji or a picture), a colour (the pill, its row in the panel, the
+  head's tint, a subgroup card's edge) and a cover picture over its home, never under what is read
+  (`POST /api/groups/<id>/style`, `…/home {widgets}`). Pins: an answer's menu (right-click) has "Pin to <group>'s
+  home"; agents run `orbit-agent pin TEXT|-|--file F [--group G]` (their [orbit] line says: decisions, conclusions,
+  key facts, never progress); kept newest first in the group's `Pins.md` (`…/pin`, `…/unpin`). The phone: a group's
+  name opens its home, one column, notes and pins included.
+- Dragging (tabs, the left panel, a home page's widgets) selects no text on the way: a press that may become a drag
+  starts no selection, and the page cannot select while one is dragged.
 - Groups nest, like folders: a group holds sessions, file tabs and subgroups, 3 levels at most ("Work › Orbit ›
   Release"). The server keeps `parent` on a group (`POST /api/groups {name, parent}`, `…/<id>/nest {parent, after}`;
   `move` is among siblings); names are unique among siblings; deleting a group moves its sessions and subgroups up a

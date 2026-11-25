@@ -223,7 +223,8 @@ function renderLeft() {
     const fold = r => r.fold ? `<span class="fold" title="${r.shut ? "Unfold" : "Fold"} (→ ←)">${I("chev", 10)}</span>` : `<span class="fold" style="visibility:hidden"></span>`;
     if (r.kind === "fleetgrp") return `<div class="prow grp fleetgrp${kc}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" title="Fleet helpers: quick asks (⌘K), meeting Prep, --fleet schedules. One opens beside, in the side pane"><span class="ix">${I("zap", 11)}</span><span class="nm">Fleet</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     if (r.kind === "group") {
-      return `<div class="prow grp${r.depth ? " sub" : ""}${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}" title="${esc(r.depth ? groupPath(r.gid) : r.key)}"><span class="ix${r.gid === FAV ? " star" : r.ix ? " num" : ""}">${r.gid === FAV ? I("star", 11) : r.depth ? I("folder", 12) : esc(r.ix)}</span><span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
+      const gc = r.gid !== FAV && (groupOf(r.gid) || {}).color;
+      return `<div class="prow grp${r.depth ? " sub" : ""}${gc ? " hued" : ""}${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}${gc ? `;--gc:${gc}` : ""}" title="${esc(r.depth ? groupPath(r.gid) : r.key)}"><span class="ix${r.gid === FAV ? " star" : r.ix ? " num" : ""}">${r.gid === FAV ? I("star", 11) : r.depth ? I("folder", 12) : esc(r.ix)}</span>${groupIconHtml(r.gid, 14)}<span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     }
     if (r.kind === "ftab") {
       const isCur = S.file === r.path && r.gid === S.group, m = /^\/@([\w-]+)(\/.*)$/.exec(r.path);
@@ -385,7 +386,7 @@ function openRow(r, { focus = true, pinned = false } = {}) {
     try { openFile(panelRoot() + "/" + r.rel, { pinned, focus }); } finally { fromList = false; }
     return;
   }
-  if (r.kind === "group") { switchGroup(r.gid, { focus: false, quiet: true }); S.pcursor = r.k; renderLeft(); return; }
+  if (r.kind === "group") { openHome(r.gid, { focus: false }); S.pcursor = r.k; renderLeft(); return; }  // (a group itself: its home)
   if (r.kind === "newgroup") { newGroup(); return; }
   if (r.kind === "fleetgrp") return;  // not a group of tabs
   if (byMouse && S.filter) { FILTER_LATER.pending = true; FILTER_LATER.value = S.filter; }  // a click: the list stays as it is under the pointer (cleared once it leaves)
@@ -484,6 +485,8 @@ function groupMenu(gid, where) {
     { label: "New session here", key: "⌘N", run: () => newSession(gid) },
     { label: "New subgroup…", disabled: deep >= GROUP_DEPTH, run: () => newGroup(gid) },
     { label: "Rename group", key: "⌘R", run: () => renameGroup(gid) },
+    { label: "Its look: icon, colour, cover…", run: () => groupLookDialog(gid) },
+    { label: "Open its home", run: () => openHome(gid) },
     { sep: true },
     { label: "Move up", key: "⌘⌃H", disabled: i <= 0, run: () => api("POST", `/api/groups/${gid}/move`, { delta: -1 }).catch(e => toast(e.message)) },
     { label: "Move down", key: "⌘⌃L", disabled: i >= sib.length - 1, run: () => api("POST", `/api/groups/${gid}/move`, { delta: 1 }).catch(e => toast(e.message)) },

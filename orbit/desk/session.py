@@ -49,7 +49,7 @@ def orbit_line(s: "Session") -> str:
             "that session\"); when you hand work to another session, name it. Shell commands for working with the user: "
             "`orbit-agent ctx` (what they are looking at: tab, file, cursor, selection), "
             "`orbit-agent open PATH[:LINE]` (open a file for them), `orbit-agent show FILE.html|-` (show an HTML page beside "
-            "the conversation), `orbit-agent note TEXT` (add to their journal note), `orbit-agent sessions`, "
+            "the conversation), `orbit-agent note TEXT` (add to their journal note), `orbit-agent pin TEXT` (pin a decision, conclusion or key fact to your group's home page: only what is worth keeping, never progress), `orbit-agent sessions`, "
             "`orbit-agent send SESSION TEXT` (ask another session), `orbit-agent steer SESSION TEXT` (add to the request it is running now), "
             "`orbit-agent read SESSION --last N` (another session's recent "
             "turns), `orbit-agent mention SESSION TEXT` (a note to another agent, not a task), `orbit-agent wake WHEN TEXT` "

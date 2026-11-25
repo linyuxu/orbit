@@ -204,6 +204,8 @@ async function loadX(fresh = false) {
 setInterval(() => { if (!document.hidden && xKind() === "calendar") loadX(); }, 5 * 60000);
 function renderX() {
   if (!xOn()) return;
+  if (xKind() === "home") return renderHome();  // (a group's home: home.js)
+  if (typeof homeUnshown === "function") homeUnshown();
   if (xKind() === "schedules") renderSchedulesX(); else renderCalendarX();
 }
 function drawX(head, body, foot) {
@@ -239,6 +241,7 @@ function xMenu(where) {
 function xWeek(d) { XV.week = d === 0 ? 0 : XV.week + d; XV.cur = null; loadX(); }
 /* Keys in the Schedules / Calendar side tab. */
 function xKey(e, combo) {
+  if (xKind() === "home") return homeKey(e, combo);  // (home.js: its widgets, not a list)
   const pg = Math.max(1, Math.floor(($("#xbody").clientHeight || 400) / 44) - 1);
   const mv = { ArrowDown: 1, ArrowUp: -1, "C:KeyN": 1, "C:KeyP": -1, Home: "home", End: "end", "AS:Comma": "home", "AS:Period": "end",
                PageDown: pg, PageUp: -pg, "C:KeyV": pg, "A:KeyV": -pg }[combo];

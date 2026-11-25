@@ -34,6 +34,7 @@ function pinFile(path) {
   if (t && !t.pinned) { t.pinned = true; saveUi(); renderTabs(); renderFileHead(); }
 }
 async function closeFile(path) {
+  if (path === HOME) { toast("The home page is the group's own tab: it stays"); return; }
   const ed = EDITORS.get(path);
   if (ed && ed.dirty) {
     const ok = await saveFile(path);

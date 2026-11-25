@@ -8,17 +8,80 @@ what it held (its sessions, its subgroups) up to its parent, so nothing is lost.
 
 from __future__ import annotations
 
+import json
+import re
+import time
 import uuid
+from pathlib import Path
 
 from orbit.desk.session import FLEET_GROUP
 
 GROUP_DEPTH = 3
+KEPT = ("id", "name", "parent", "icon", "color", "cover", "home", "pins")
+# A group's home page (its first tab): widgets on a grid, in order. A widget is {"id", "kind", "span", "hidden"?, "path"?}:
+# kind one of WIDGETS; span its width in sixths (2, 3, 4, 6: a third, a half, two thirds, the row); "path" a Markdown
+# note's (kind "md"). Without a layout of its own a group's home shows DEFAULT_HOME.
+WIDGETS = ("sessions", "groups", "tabs", "schedules", "activity", "pins", "md")
+SPANS = (2, 3, 4, 6)
+DEFAULT_HOME = [{"id": "sessions", "kind": "sessions", "span": 6}, {"id": "groups", "kind": "groups", "span": 6},
+                {"id": "tabs", "kind": "tabs", "span": 3}, {"id": "schedules", "kind": "schedules", "span": 3},
+                {"id": "activity", "kind": "activity", "span": 6}]
+HOME_MAX = 40  # widgets
+COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def check_style(key: str, v: object) -> str:
+    """A group's icon (an emoji or a short text, or img:<path> of an uploaded picture), color (#rrggbb) or cover (a
+    picture's path); "" clears it. ValueError when it is not one."""
+    if not isinstance(v, str):
+        raise ValueError(f"{key}: a string")
+    v = v.strip()
+    if not v:
+        return ""
+    if key == "color":
+        if not COLOR.match(v):
+            raise ValueError("color: #rrggbb")
+        return v.lower()
+    if key == "icon" and not v.startswith("img:"):
+        if len(v) > 8 or any(c in v for c in "<>\"\'&"):
+            raise ValueError("icon: an emoji or a few letters (or a picture)")
+        return v
+    path = v[4:] if key == "icon" else v
+    if not path.startswith("/") or len(path) > 1000 or "\n" in path:
+        raise ValueError(f"{key}: a picture's absolute path")
+    return v
+
+
+def check_home(widgets: object) -> list[dict]:
+    """A home page's widgets, checked (ValueError: what is wrong)."""
+    if not isinstance(widgets, list) or len(widgets) > HOME_MAX:
+        raise ValueError(f"widgets: a list of {HOME_MAX} at most")
+    out, ids = [], set()
+    for w in widgets:
+        if not isinstance(w, dict) or w.get("kind") not in WIDGETS:
+            raise ValueError(f"a widget is {{kind: {', '.join(WIDGETS)}, span, …}}")
+        wid = str(w.get("id") or "")
+        if not re.fullmatch(r"[\w-]{1,40}", wid) or wid in ids:
+            raise ValueError("a widget needs its own id")
+        ids.add(wid)
+        x = {"id": wid, "kind": w["kind"], "span": w.get("span") if w.get("span") in SPANS else 6}
+        if w.get("hidden"):
+            x["hidden"] = True
+        if w["kind"] == "md":
+            path = w.get("path")
+            if not isinstance(path, str) or not path.startswith("/") or len(path) > 1000:
+                raise ValueError("a Markdown widget names its note (an absolute path)")
+            x["path"] = path
+            if isinstance(w.get("title"), str) and w["title"].strip():
+                x["title"] = " ".join(w["title"].split())[:80]
+        out.append(x)
+    return out
 
 
 def tidy(groups: list[dict]) -> list[dict]:
     """Groups as loaded, made a valid tree: a parent that is missing, itself, or would make a cycle or a tree deeper
     than GROUP_DEPTH is dropped (that group goes to the top)."""
-    out = [{k: v for k, v in g.items() if k in ("id", "name", "parent")} for g in groups]
+    out = [{k: v for k, v in g.items() if k in KEPT} for g in groups]
     ids = {g["id"] for g in out}
     by = {g["id"]: g for g in out}
     for g in out:
@@ -192,3 +255,82 @@ class Groups:
     def all_groups(self) -> list[dict]:
         """This machine's groups, then one per other machine (its sessions)."""
         return self.groups + (self.federation.groups() if self.federation else [])
+
+    # ---------- a group's look and its home page (its first tab)
+    def group_style(self, gid: str, patch: dict) -> dict:
+        """{icon?, color?, cover?}: set ("" clears) what is given."""
+        with self.lock:
+            g = self._group(gid)
+            for k in ("icon", "color", "cover"):
+                if k in patch:
+                    v = check_style(k, patch[k])
+                    if v:
+                        g[k] = v
+                    else:
+                        g.pop(k, None)
+        self._groups_changed()
+        return g
+
+    def group_home(self, gid: str, widgets: object) -> dict:
+        """The home page's widgets, as the page arranged them (None: back to the default)."""
+        with self.lock:
+            g = self._group(gid)
+            if widgets is None:
+                g.pop("home", None)
+            else:
+                g["home"] = {"widgets": check_home(widgets)}
+        self._groups_changed()
+        return g
+
+    # ---------- pins: what the user or an agent pinned to a group's home page (a Markdown file in the vault)
+    def group_folder(self, gid: str) -> Path:
+        """Where a group's notes go: <vault>/Groups/<its path> (made when first needed)."""
+        from orbit.workspace import notes
+        names, g = [], self._group(gid)
+        while g:
+            names.insert(0, re.sub(r'[\\/:*?"<>|#^\[\]]+', " ", g["name"]).strip() or g["id"])
+            g = self._group(g["parent"]) if g.get("parent") else None
+        return notes.root() / "Groups" / Path(*names)
+
+    def pins_file(self, gid: str) -> Path:
+        """The group's pins file (kept once made, so a renamed group keeps its pins)."""
+        g = self._group(gid)
+        p = g.get("pins")
+        return Path(p) if p else self.group_folder(gid) / "Pins.md"
+
+    def group_pin(self, gid: str, text: str, by: str = "", sid: str = "", cid: str = "") -> dict:
+        """Pin text to the group's home: a block at the top of its Pins.md. {"id", "path"}."""
+        from orbit.workspace import files
+        text = (text or "").strip()
+        if not text:
+            raise ValueError("nothing to pin")
+        if len(text) > 20000:
+            raise ValueError("too long to pin (20 000 characters at most)")
+        with self.lock:
+            f = self.pins_file(gid)
+            self._group(gid)["pins"] = str(f)
+        pid = uuid.uuid4().hex[:10]
+        src = f" · [source](orbit://session/{sid}{'#' + str(cid) if cid else ''})" if sid else ""
+        block = f"<!-- pin:{pid} -->\n## {time.strftime('%Y-%m-%d %H:%M')} · {by or 'You'}{src}\n\n{text}\n\n"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        old = f.read_text(encoding="utf-8") if f.exists() else "# Pins\n\n"
+        head, _, rest = old.partition("\n\n") if old.startswith("# ") else ("", "", old)
+        new = (head + "\n\n" if head else "") + block + rest
+        files.save(str(f), new, None, force=True)
+        self._groups_changed()
+        self.broadcast({"t": "pin", "gid": gid, "id": pid})
+        return {"id": pid, "path": str(f)}
+
+    def group_unpin(self, gid: str, pid: str) -> dict:
+        """Take a pin off (its block leaves Pins.md)."""
+        from orbit.workspace import files
+        f = self.pins_file(gid)
+        if not re.fullmatch(r"[0-9a-f]{10}", pid or "") or not f.exists():
+            raise ValueError("no such pin")
+        text = f.read_text(encoding="utf-8")
+        m = re.search(r"<!-- pin:" + pid + r" -->\n.*?(?=<!-- pin:[0-9a-f]{10} -->\n|\Z)", text, re.S)
+        if not m:
+            raise ValueError("no such pin")
+        files.save(str(f), text[:m.start()] + text[m.end():], None, force=True)
+        self.broadcast({"t": "pin", "gid": gid, "id": pid, "removed": True})
+        return {"ok": True}

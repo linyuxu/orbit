@@ -46,13 +46,15 @@ function pluginMenuItems() {
 /* Right-click on an answer: the plugins' answer actions (only when there are some: else the browser's own menu). */
 function answerMenu(c, at) {
   const acts = PUI.local ? PUI.actions.filter(x => x.where === "answer") : [];
-  if (!acts.length || !c) return false;
+  if (!c || !c.answer) return false;
   const card = { id: c.id, text: c.text, answer: c.answer || "", state: c.state, origin: c.origin || null };
+  const s = S.sessions.get(c.sid) || cur();
   menu([
     { label: "Copy answer", run: () => copyText(c.answer || "") },
-    { sep: true },
+    s && !EMBED ? { label: `Pin to ${groupPath(s.fleet ? S.group : s.group)}'s home`, run: () => pinToGroup(c.answer, { gid: s.fleet ? S.group : s.group, sid: s.id, cid: String(c.id), by: s.name }) } : null,
+    acts.length ? { sep: true } : null,
     ...acts.map(a => ({ label: a.title, run: () => runPluginAction(a, { session: c.sid, card }) })),
-  ], at);
+  ].filter(Boolean), at);
   return true;
 }
 $("#sb-plugins").addEventListener("click", e => {

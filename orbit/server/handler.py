@@ -1227,6 +1227,17 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json(self.desk.fleet_ask(str(b.get("text", "")), str(b.get("cwd", ""))))
             if p == "/api/groups":  # {name, parent?}: a group (under parent: a subgroup)
                 return self._json(self.desk.group_create(b.get("name", ""), str(b.get("parent") or "")))
+            m = re.fullmatch(r"/api/groups/([\w-]+)/(style|home|pin|unpin)", p)
+            if m:  # a group's look, its home page's widgets, what is pinned to it
+                gid, action = m.groups()
+                if action == "style":
+                    return self._json(self.desk.group_style(gid, b))
+                if action == "home":
+                    return self._json(self.desk.group_home(gid, b.get("widgets")))
+                if action == "pin":
+                    return self._json(self.desk.group_pin(gid, str(b.get("text", "")), str(b.get("by", "")),
+                                                          str(b.get("sid", "")), str(b.get("cid", ""))))
+                return self._json(self.desk.group_unpin(gid, str(b.get("id", ""))))
             m = re.fullmatch(r"/api/groups/([\w-]+)/(rename|move|delete|nest)", p)
             if m:
                 gid, action = m.groups()

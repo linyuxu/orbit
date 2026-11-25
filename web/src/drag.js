@@ -27,6 +27,7 @@ function dragSort(o) {
     const first = e.target.closest(o.item);
     if (!first || (o.canDrag && !o.canDrag(first))) return;  // (it may be detached already: the press redrew the list)
     const key = o.keyOf(first), x0 = e.clientX, y0 = e.clientY;
+    if (!e.target.closest("input, textarea, [contenteditable]")) e.preventDefault();  // (a press that may become a drag starts no text selection)
     let on = false, unit, peers, grab, k = 1, slot = -1, t = { x: 0, y: 0 };
     const local = ev => {  // the pointer in the box's layout coordinates (CSS px)
       const b = o.box.getBoundingClientRect();
@@ -38,6 +39,7 @@ function dragSort(o) {
       unit = o.unit(src); peers = o.peers(src);
       if (!unit.length || !peers.length) return false;
       on = true; DRAG.active = true; k = rectScale();
+      const sel = getSelection(); if (sel && sel.rangeCount) sel.removeAllRanges();  // (nothing stays selected under it)
       document.body.classList.add("dragsort"); if (typeof hideTip === "function") hideTip();
       unit.forEach(el => el.classList.add("dragging"));
       peers.flat().forEach(el => el.classList.add("dragpeer"));
@@ -77,6 +79,7 @@ function dragSort(o) {
     };
     const move = ev => {
       if (!on && (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 5 || !start(ev))) return;
+      ev.preventDefault();  // (the pointer passing over text selects none of it)
       follow(ev);
       const i = wanted(ev);
       if (i !== slot) { slot = i; place(i); follow(ev); }

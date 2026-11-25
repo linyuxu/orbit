@@ -27,6 +27,9 @@
                                       the current folder); prints its answer
     orbit-agent note TEXT... | - | --new NAME | --week
                                       write to the notes vault (the journal: this week's note; or a new note)
+    orbit-agent pin TEXT... | - | --file F [--group G]
+                                      pin something worth keeping to your group's home page (a decision, a
+                                      conclusion, a key fact or link; not progress): the user sees it there
     orbit-agent wake WHEN TEXT               wake this session later with TEXT (WHEN: 30m, 2h, tomorrow 9am)
     orbit-agent schedule [list]              the schedules
     orbit-agent schedule add WHEN TEXT [--name N] [--session S | --folder DIR | --fleet] [--max N] [--until HH:MM]
@@ -114,6 +117,25 @@ def cmd_note(a: argparse.Namespace) -> None:
         sys.exit("orbit-agent: nothing to add (give TEXT or pipe it in)")
     source = f"[session](orbit://session/{me()})" if me() else ""
     print(call("POST", "/api/notes/today", {"text": text, "source": source})["path"])
+
+
+def cmd_pin(a: argparse.Namespace) -> None:
+    text = open(a.file, encoding="utf-8").read() if a.file else read_text(a.text)
+    if not text.strip():
+        sys.exit("orbit-agent: nothing to pin (give TEXT, --file, or pipe it in)")
+    d = call("GET", "/api/sessions")
+    mine = next((s for s in d.get("sessions", []) if s["id"] == me()), None)
+    if a.group:
+        g = find_group(d.get("groups", []), a.group)
+        if not g:
+            sys.exit(f"orbit-agent: no group {a.group!r} (orbit-agent groups)")
+        gid = g["id"]
+    elif mine and mine.get("group") and mine["group"] != "fleet":
+        gid = mine["group"]
+    else:
+        sys.exit("orbit-agent: which group? (--group G; a session outside Orbit or a Fleet helper has none of its own)")
+    r = call("POST", f"/api/groups/{gid}/pin", {"text": text, "by": mine["name"] if mine else "", "sid": me()})
+    print(f"pinned to the home of {next((p for g, p in group_paths(d.get('groups', [])) if g['id'] == gid), gid)} ({r['path']})")
 
 
 # ------------------------------------------------------------------ ctx
@@ -592,6 +614,12 @@ def main(argv: list[str] | None = None) -> None:
     n.add_argument("--new", metavar="NAME", help="create the note NAME and print its path")
     n.add_argument("--week", action="store_true", help="print the path of the journal: this week's note (Monday to Sunday)")
     n.set_defaults(func=cmd_note)
+
+    pn = sub.add_parser("pin", help="pin something worth keeping to your group's home page")
+    pn.add_argument("text", nargs="*", help="Markdown to pin (- or none: stdin)")
+    pn.add_argument("--file", help="pin this file's text")
+    pn.add_argument("--group", default="", help="another group: its path (Work/Orbit), its name, or its id")
+    pn.set_defaults(func=cmd_pin)
 
     c = sub.add_parser("ctx", help="what the user is looking at")
     c.add_argument("--json", action="store_true")

@@ -96,6 +96,7 @@ function onKey(e) {
       && document.activeElement.closest("#fileview .cm-editor")) { consume(); openFind(); return; }
   if (combo === "Escape" && xOn() && XN.editing && inCalNote()) { consume(); leaveCalNote(); return; }  // the meeting note
   if (combo === "Escape" && xKind() === "calendar" && inXView() && !XN.editing && !EMBED && S.side) { consume(); focusSide(); return; }  // the list → the session beside
+  if (combo === "Escape" && typeof H !== "undefined" && H.editing && homeOn()) { consume(); leaveHomeEditor(); return; }  // a note on a group's home
   if (combo === "Escape") { consume(); handleEsc(); return; }
   if (EMBED && ((isCmd(combo) && !EMBED_OWN.has(combo)) || /^CA:Key[HJKL]$/.test(combo) || /^AS:Bracket(Left|Right)$/.test(combo) || PLUGIN_KEYS.has(combo))) {
     consume(); window.parent.postMessage({ orbit: "key", combo }, location.origin); return;

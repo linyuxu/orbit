@@ -4,6 +4,7 @@ function connect() {
   const es = new EventSource("/api/events?delta=1");  // (a streaming card's changes as patches: cardpatch.js)
   es.onmessage = ev => {
     const m = JSON.parse(ev.data);
+    if (typeof homeSoon === "function" && HOME_EVENTS.has(m.t)) homeSoon();  // (a group's home in front: drawn again, soon)
     if (m.t === "machines") { S.machines = m.machines || []; renderLeft(); renderTabs(); return; }
     if (m.t === "live") { if (!EMBED) voiceEvent(m); return; }
     if (m.t === "hello") {

@@ -223,7 +223,7 @@
 #ppeek .p1 .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 #ppeek .p2 { color:var(--ink-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-left:18px; }
 /* dragging (drag.js) */
-body.dragsort, body.dragsort * { cursor:grabbing !important; }
+body.dragsort, body.dragsort * { cursor:grabbing !important; -webkit-user-select:none !important; user-select:none !important; }
 
 /* dragging rows (drag.js): the row (or a group with its rows) follows the pointer, lifted; the others slide aside */
 .plist { position:relative; }

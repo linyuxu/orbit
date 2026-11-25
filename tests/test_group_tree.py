@@ -99,6 +99,67 @@ class GroupTreeTest(test_skeleton.SkeletonTest):
         self.assertEqual((by["c"], by["d"], by["f"], by["g"], by["h"]), (None, None, "e", "f", None))  # (4 deep: cut)
         self.assertNotIn("extra", json.dumps(gs))
 
+    # ------------------------------------------------------------------ a group's look, its home, its pins
+    def test_style_and_home_layout(self):
+        work = self.make("Work")
+        code, g = self.req("POST", f"/api/groups/{work}/style", {"icon": "🚀", "color": "#2A78D6", "cover": "/tmp/c.png"})
+        self.assertEqual((code, g["icon"], g["color"], g["cover"]), (200, "🚀", "#2a78d6", "/tmp/c.png"))
+        for bad in ({"color": "blue"}, {"icon": "<script>"}, {"cover": "relative.png"}, {"icon": "img:x.png"}):
+            self.assertEqual(self.req("POST", f"/api/groups/{work}/style", bad)[0], 400, bad)
+        self.req("POST", f"/api/groups/{work}/style", {"cover": ""})
+        self.assertNotIn("cover", next(x for x in self.groups() if x["id"] == work))
+        ws = [{"id": "sessions", "kind": "sessions", "span": 6}, {"id": "n1", "kind": "md", "path": "/tmp/a.md", "span": 3, "title": " About  "},
+              {"id": "pins", "kind": "pins", "span": 5, "hidden": True}]
+        code, g = self.req("POST", f"/api/groups/{work}/home", {"widgets": ws})
+        self.assertEqual(code, 200, g)
+        self.assertEqual(g["home"]["widgets"][1], {"id": "n1", "kind": "md", "span": 3, "path": "/tmp/a.md", "title": "About"})
+        self.assertEqual(g["home"]["widgets"][2], {"id": "pins", "kind": "pins", "span": 6, "hidden": True})  # (an odd width: the row)
+        for bad in ([{"id": "x", "kind": "nope"}], [{"id": "a", "kind": "md"}], [{"id": "a", "kind": "tabs"}, {"id": "a", "kind": "pins"}]):
+            self.assertEqual(self.req("POST", f"/api/groups/{work}/home", {"widgets": bad})[0], 400, bad)
+        self.req("POST", f"/api/groups/{work}/home", {"widgets": None})
+        self.assertNotIn("home", next(x for x in self.groups() if x["id"] == work))
+        reloaded = tidy(self.groups())  # (kept as it is on load)
+        self.assertEqual(next(x for x in reloaded if x["id"] == work)["icon"], "🚀")
+
+    def test_pins_newest_first_and_unpin(self):
+        work = self.make("Work")
+        orbit = self.make("Orbit", work)
+        s = self.new_session("pinner")
+        a = self.req("POST", f"/api/groups/{orbit}/pin", {"text": "Ship on **Friday**", "by": "pinner", "sid": s["id"], "cid": "3"})[1]
+        b = self.req("POST", f"/api/groups/{orbit}/pin", {"text": "Use the v2 API"})[1]
+        self.assertEqual(a["path"], b["path"])
+        self.assertTrue(a["path"].endswith("Groups/Work/Orbit/Pins.md"), a["path"])
+        text = open(a["path"]).read()
+        self.assertTrue(text.startswith("# Pins\n\n<!-- pin:" + b["id"]), text)  # (the newest on top)
+        self.assertIn(f"· pinner · [source](orbit://session/{s['id']}#3)\n\nShip on **Friday**", text)
+        self.req("POST", f"/api/groups/{work}/rename", {"name": "Job"})  # (renamed: its pins stay where they are)
+        c = self.req("POST", f"/api/groups/{orbit}/pin", {"text": "third"})[1]
+        self.assertEqual(c["path"], a["path"])
+        self.assertEqual(self.req("POST", f"/api/groups/{orbit}/unpin", {"id": a["id"]})[0], 200)
+        text = open(a["path"]).read()
+        self.assertNotIn("Friday", text)
+        self.assertIn("Use the v2 API", text)
+        self.assertIn("third", text)
+        self.assertEqual(self.req("POST", f"/api/groups/{orbit}/unpin", {"id": a["id"]})[0], 400)
+        self.assertEqual(self.req("POST", f"/api/groups/{orbit}/pin", {"text": "  "})[0], 400)
+
+    def test_orbit_agent_pin(self):
+        import os, subprocess, sys
+        work = self.make("Work")
+        s = self.new_session("pinner")
+        self.req("POST", f"/api/sessions/{s['id']}/update", {"group": work})
+        env = {**os.environ, "ORBIT_PORT": str(self.port), "ORBIT_SESSION": s["id"]}
+        run = lambda *a, **k: subprocess.run([sys.executable, "-m", "orbit.cli.agent", *a], env=env, capture_output=True, text=True, timeout=30, **k)
+        r = run("pin", "We use **Postgres 16**")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("pinned to the home of Work", r.stdout)
+        path = next(g for g in self.groups() if g["id"] == work)["pins"]
+        self.assertIn(f"pinner · [source](orbit://session/{s['id']})\n\nWe use **Postgres 16**", open(path).read())
+        r = run("pin", "-", "--group", "Main", input="from stdin\n")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("from stdin", open(next(g for g in self.groups() if g["id"] == "main")["pins"]).read())
+        self.assertNotEqual(run("pin", "x", "--group", "Nowhere").returncode, 0)
+
 
 if __name__ == "__main__":
     import unittest

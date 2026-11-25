@@ -772,3 +772,26 @@ body.vcall #toast { bottom:calc(268px + var(--sab)); }  /* (over the call view, 
 .glist .frow .nm { flex:none; max-width:62%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .glist .frow .wh { margin-left:auto; padding-left:10px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; color:var(--ink-3); }
 .glist .frow:active { background:var(--hover, rgba(0,0,0,.05)); }
+/* a group's home (m-list.js groupPage): its head (a tint of its colour, or its cover), then its widgets */
+.hhead { margin:0 0 6px; padding:18px var(--pad, 16px) 14px; background:linear-gradient(180deg, color-mix(in srgb, var(--gc, transparent) 18%, transparent), transparent); }
+.hhead.cover { min-height:150px; display:flex; flex-direction:column; justify-content:flex-end; color:#fff;
+  background:linear-gradient(180deg, rgba(0,0,0,.05) 20%, rgba(0,0,0,.55)), var(--cover) center / cover no-repeat; }
+.hhead .htitle { display:flex; align-items:center; gap:8px; }
+.hhead h1 { margin:0; font-size:26px; font-weight:700; }
+.hhead .hsum { margin-top:4px; font-size:13px; color:var(--ink-3); }
+.hhead.cover .hsum { color:rgba(255,255,255,.85); }
+.hsec { margin-top:14px; }
+.hst { padding:0 var(--pad, 16px) 4px; font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); }
+.hmd { padding:2px var(--pad, 16px) 4px; font-size:15px; line-height:1.55; overflow-wrap:anywhere; }
+.hmd > :first-child { margin-top:0; }
+.hmd li.task { list-style:none; margin-left:-1.3em; }
+.hmd li.task input { width:18px; height:18px; margin:0 8px 0 0; vertical-align:-3px; }
+.hpin { margin:6px var(--pad, 16px) 10px; padding-left:10px; border-left:3px solid var(--gc, var(--line, #ddd)); }
+.hpin .ph { font-size:12px; color:var(--ink-3); }
+.hpin .ph a { text-decoration:underline; }
+.hpin .pb { font-size:15px; line-height:1.5; }
+.hpin .pb > :first-child { margin-top:2px; } .hpin .pb > :last-child { margin-bottom:0; }
+.gicon { display:inline-grid; place-items:center; line-height:1; flex:none; }
+img.gicon { border-radius:4px; object-fit:cover; }
+#slist .shead .gicon { margin-right:6px; }
+.frow.grow { box-shadow:inset 3px 0 0 var(--gc, transparent); }
