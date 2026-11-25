@@ -18,7 +18,7 @@ const ACTIVE = new Set(["thinking", "running"]);
 const FINAL = new Set(["completed", "error", "cancelled"]);
 const S = {
   sessions: new Map(),          // every open session, in the server's order (also read by markdown.js for @@ links)
-  groups: [],                   // [{id, name}] in the user's order
+  groups: [],                   // [{id, name, parent?}]: a tree, in the user's order (orbit/desk/groups.py)
   machines: [],                 // other machines: [{name, ok, error}]
   harnesses: [],                // /api/harnesses (brands.js reads it for a plugin harness's icon)
   cards: new Map(),             // sid → [card] for the sessions opened here
@@ -31,6 +31,13 @@ const S = {
   online: false,
 };
 const groupName = gid => (S.groups.find(g => g.id === gid) || { name: "?" }).name;
+const groupKids = parent => S.groups.filter(g => (g.parent || "") === (parent || ""));
+function groupPath(gid, sep = " › ") {
+  const names = []; let g = S.groups.find(x => x.id === gid);
+  while (g && names.length < 8) { names.unshift(g.name); g = g.parent ? S.groups.find(x => x.id === g.parent) : null; }
+  return names.length ? names.join(sep) : "?";
+}
+const groupSubtree = gid => [gid, ...groupKids(gid).flatMap(c => groupSubtree(c.id))];
 const harnessLabel = id => (S.harnesses.find(h => h.id === id) || { label: { claude: "Claude Code", codex: "Codex", agy: "agy", opencode: "OpenCode" }[id] || id }).label;
 const machineUp = name => !(S.machines || []).some(m => m.name === name && !m.ok);
 const mentionTag = name => "@@" + String(name).trim().replace(/\s+/g, "-");  // (markdown.js: @@Name links)

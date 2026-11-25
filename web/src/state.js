@@ -49,6 +49,33 @@ Object.defineProperty(S, "side", { get() { const e = sideEntry(); return e && !e
 const harnessLabel = id => (S.harnesses.find(h => h.id === id) || { label: id }).label;
 const ACTIVE = new Set(["thinking", "running"]);
 const groupName = gid => gid === FAV ? "Favorites" : (S.groups.find(g => g.id === gid) || { name: "?" }).name;
+/* Groups are a tree (orbit/desk/groups.py): {id, name, parent?}; a group's children are those whose parent it is, in
+   list order. GROUP_DEPTH levels at most. ⌘2…⌘9 are the top groups'. */
+const GROUP_DEPTH = 3;
+const groupOf = gid => S.groups.find(g => g.id === gid);
+const groupKids = parent => S.groups.filter(g => (g.parent || "") === (parent || ""));
+const topGroups = () => groupKids("");
+function groupDepth(gid) { let n = 0, g = groupOf(gid); while (g) { n++; g = g.parent ? groupOf(g.parent) : null; } return n; }
+function groupHeight(gid) { return 1 + Math.max(0, ...groupKids(gid).map(c => groupHeight(c.id))); }
+function groupDescendants(gid) { return groupKids(gid).flatMap(c => [c.id, ...groupDescendants(c.id)]); }
+/* "Work › Orbit › Release" (Favorites as is). */
+function groupPath(gid, sep = " › ") {
+  if (gid === FAV) return "Favorites";
+  const names = []; let g = groupOf(gid);
+  while (g && names.length < 8) { names.unshift(g.name); g = g.parent ? groupOf(g.parent) : null; }
+  return names.length ? names.join(sep) : "?";
+}
+/* Every group, a parent before its children: [{g, depth (0 = top)}]. */
+function groupTree(parent = "", depth = 0) { return groupKids(parent).flatMap(g => [{ g, depth }, ...groupTree(g.id, depth + 1)]); }
+/* Menu items for every group, indented under its parent (⌘2… on the top ones). */
+function groupMenuItems(run, { current = "", disabled = () => false } = {}) {
+  const tops = topGroups();
+  return groupTree().map(({ g, depth }) => {
+    const i = depth ? -1 : tops.indexOf(g);
+    return { label: "\u2003".repeat(depth) + g.name, key: g.id === current ? "current" : i >= 0 && i < 8 ? `⌘${i + 2}` : "",
+             disabled: g.id === current || disabled(g), run: () => run(g.id) };
+  });
+}
 /* Other machines (from the server): their sessions carry "remote": NAME and sit in this server's groups. The
    Groups panel can show one machine only (S.machine: "" every machine, "local" this one, or NAME). */
 const machineOk = s => !S.machine || (S.machine === "local" ? !s.remote : s.remote === S.machine);

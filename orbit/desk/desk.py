@@ -20,7 +20,7 @@ from orbit.desk import cardpatch
 from orbit.desk.agents import Agents
 from orbit.desk.driving import Driving
 from orbit.desk.fleet import Fleet
-from orbit.desk.groups import Groups
+from orbit.desk.groups import Groups, tidy
 from orbit.desk.handoff import Handoff
 from orbit.desk.meetings import Meetings
 from orbit.desk.requests import Requests
@@ -52,7 +52,7 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
         self.hosting: dict = {"mode": "direct", "why": "not turned on (orbit serve turns it on)"}
         self.card_hooks: dict[tuple[str, int], object] = {}  # (session, card) → called with the card when it ends
         self.sessions: dict[str, Session] = {}  # insertion order = tab order
-        self.groups: list[dict] = []  # [{"id", "name"}] in left-panel order (⌘2…⌘9)
+        self.groups: list[dict] = []  # [{"id", "name", "parent"?}]: a tree in list order (desk/groups.py; ⌘2…⌘9: the top ones)
         self.clients: list[queue.Queue] = []
         self._cards_told: dict[tuple, dict] = {}  # (sid, card id) → the card as last broadcast (patches start from it)
         self.badge = 0  # the page's unread count (the app shell's Dock badge)
@@ -91,7 +91,7 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
             bad = self.path.with_suffix(f".bad-{int(time.time())}.json")
             self.path.rename(bad)  # keep the broken file for recovery, never overwrite it
             data = {"sessions": []}
-        self.groups = [g for g in data.get("groups", []) if g.get("id") and g.get("name")] or \
+        self.groups = tidy([g for g in data.get("groups", []) if g.get("id") and g.get("name")]) or \
             [dict(g) for g in DEFAULT_GROUPS]  # a fresh Orbit starts with a few groups (rename or delete them)
         ids = {g["id"] for g in self.groups}
         for m in data.get("sessions", []):

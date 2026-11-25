@@ -95,7 +95,7 @@ async function updateMention() {
   let rows = [];
   if (kind === "session") {
     rows = [...S.sessions.values()].filter(x => x.id !== S.current && !x.fleet)
-      .map(x => ({ x, score: q ? Math.max(fuzzy(q, x.name), fuzzy(q, mentionTag(x.name)), fuzzy(q, x.id), fuzzy(q, groupName(x.group))) : 0 }));
+      .map(x => ({ x, score: q ? Math.max(fuzzy(q, x.name), fuzzy(q, mentionTag(x.name)), fuzzy(q, x.id), fuzzy(q, groupPath(x.group))) : 0 }));
   } else if (kind === "file") {
     const items = await completeSource("files", s);
     rows = items.map(x => ({ x, score: q ? fuzzy(q, x.path) : -x.path.split("/").length - (x.dir ? 0 : 0.5) }));
@@ -117,7 +117,7 @@ function renderMention() {
   const head = { session: "Mention a session", file: "A file or folder of this session's folder", skill: "A skill or command" }[MENTION.kind];
   const row = (x, k) => {
     const cls = `row${k === MENTION.i ? " sel" : ""}`;
-    if (MENTION.kind === "session") return `<div class="${cls}" data-mi="${k}" role="option">${stateMark(x)}<span>${esc(mentionTag(x.name))}</span><span class="sub">${esc(groupName(x.group))} · ${esc(x.id.slice(0, 8))}</span></div>`;
+    if (MENTION.kind === "session") return `<div class="${cls}" data-mi="${k}" role="option">${stateMark(x)}<span>${esc(mentionTag(x.name))}</span><span class="sub">${esc(groupPath(x.group))} · ${esc(x.id.slice(0, 8))}</span></div>`;
     if (MENTION.kind === "file") return `<div class="${cls}" data-mi="${k}" role="option"><span class="ic">${I(x.dir ? "folder" : "file", 13)}</span><span>${esc(basename(x.path))}${x.dir ? "/" : ""}</span><span class="sub">${esc(dirname("/" + x.path).slice(1))}</span></div>`;
     return `<div class="${cls}" data-mi="${k}" role="option"><span>/${esc(x.name)}</span><span class="desc">${esc(x.description || "")}</span><span class="sub">${esc(x.source)}</span></div>`;
   };

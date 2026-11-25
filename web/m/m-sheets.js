@@ -71,7 +71,7 @@ async function newSession() {
       `<div class="field"><div class="flabel">Folder</div><input id="nf-cwd" class="tinput" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="next" value="${esc(lastOn(""))}">` +
       `<div class="sugg" id="nf-sugg"></div></div>` +
       `<div class="field"><div class="flabel">Agent</div><div id="nf-h">${chipsHtml("harness", harnessOpts(""), firstHarness(""))}</div></div>` +
-      `<div class="field"><div class="flabel">Group</div>${chipsHtml("group", S.groups.map(g => ({ value: g.id, label: g.name })), gid)}</div>` +
+      `<div class="field"><div class="flabel">Group</div>${chipsHtml("group", S.groups.map(g => ({ value: g.id, label: groupPath(g.id) })), gid)}</div>` +
       `<div class="field"><div class="flabel">Mode</div><div id="nf-mode">${modeChipsHtml(firstHarness(""), last.mode || "acceptEdits")}</div></div>` +
       `<div class="field"><div class="flabel">First request <span class="opt">optional</span></div><textarea id="nf-text" class="tinput area" rows="3" placeholder="What should the agent do?"></textarea></div>` +
       `<div class="ferr" id="nf-err"></div>`,

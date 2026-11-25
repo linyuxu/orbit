@@ -126,21 +126,33 @@ function setFolded(gid, shut) {
 function sessionRows() {
   const rows = [];
   const q = S.filter;
-  const views = [{ gid: FAV, name: "Favorites", ix: "★", key: "⌘1" }, ...S.groups.map((g, i) => ({ gid: g.id, name: g.name, ix: i < 8 ? String(i + 2) : "", key: i < 8 ? `⌘${i + 2}` : "" }))];
-  for (const v of views) {
+  /* A group and what it holds: its sessions and its other tabs, then its subgroups (each with what it holds).
+     Its count is its whole subtree's (working/all), so a folded group still says when something works inside. A
+     filter shows a group when anything inside it matches. */
+  const block = (v, depth) => {
     const ss = [...S.sessions.values()].filter(s => inView(s, v.gid) && machineOk(s));
-    const scored = ss.map(s => ({ s, sc: q ? Math.max(fuzzy(q, s.name), fuzzy(q, tilde(s.cwd)) - 1, fuzzy(q, v.name) - 2) : 0 })).filter(x => x.sc >= 0);
+    const scored = ss.map(s => ({ s, sc: q ? Math.max(fuzzy(q, s.name), fuzzy(q, tilde(s.cwd)) - 1, fuzzy(q, v.path) - 2) : 0 })).filter(x => x.sc >= 0);
     // its other tabs (files, notes, views; the server's layout, every screen's), smaller, after its sessions, in the tab row's order
     const tabs = groupFileTabs(v.gid).filter(t => !q || fuzzy(q, ftabTitle(t.path)) >= 0 || fuzzy(q, tilde(t.path)) - 1 >= 0);
-    if (q && !scored.length && !tabs.length) continue;
-    const working = ss.filter(s => s.state === "working" || s.agents > 0).length;  // (subagents at work count)
+    const kids = v.gid === FAV ? [] : groupKids(v.gid).map(g => block({ gid: g.id, name: g.name, path: groupPath(g.id), ix: "", key: "" }, depth + 1));
+    const working = ss.filter(s => s.state === "working" || s.agents > 0).length + kids.reduce((n, k) => n + k.working, 0);  // (subagents at work count)
+    const total = ss.length + kids.reduce((n, k) => n + k.total, 0);
+    const hit = !q || scored.length > 0 || tabs.length > 0 || kids.some(k => k.hit);
     const shut = !q && FOLDED.has(v.gid);
-    rows.push({ kind: "group", gid: v.gid, name: v.name, ix: v.ix, key: v.key, count: `${working}/${ss.length}`, k: "g:" + v.gid, shut, fold: ss.length + tabs.length > 0 });
-    if (shut) continue;
-    if (q) scored.sort((a, b) => b.sc - a.sc);
-    for (const { s } of scored) rows.push({ kind: "session", gid: v.gid, sid: s.id, k: `s:${v.gid}:${s.id}` });
-    for (const t of tabs) rows.push({ kind: "ftab", gid: v.gid, path: t.path, k: `f:${v.gid}:${t.path}` });
-  }
+    const out = [{ kind: "group", gid: v.gid, name: v.name, ix: v.ix, key: v.key, depth, count: `${working}/${total}`, k: "g:" + v.gid, shut,
+                   fold: ss.length + tabs.length + kids.length > 0 }];
+    if (!shut) {
+      if (q) scored.sort((a, b) => b.sc - a.sc);
+      for (const { s } of scored) out.push({ kind: "session", gid: v.gid, sid: s.id, depth, k: `s:${v.gid}:${s.id}` });
+      for (const t of tabs) out.push({ kind: "ftab", gid: v.gid, path: t.path, depth, k: `f:${v.gid}:${t.path}` });
+      for (const k of kids) if (k.hit) out.push(...k.rows);  // (after its own rows: those stay right under its head)
+    }
+    return { rows: out, hit, working, total };
+  };
+  const tops = topGroups();
+  const views = [{ gid: FAV, name: "Favorites", path: "Favorites", ix: "★", key: "⌘1" },
+                 ...tops.map((g, i) => ({ gid: g.id, name: g.name, path: g.name, ix: i < 8 ? String(i + 2) : "", key: i < 8 ? `⌘${i + 2}` : "" }))];
+  for (const v of views) { const b = block(v, 0); if (b.hit) rows.push(...b.rows); }
   // The Fleet: helpers (⌘K quick asks, Prep, `--fleet` schedules, orbit-agent ask). No tab: one opens in the side pane.
   const fleet = [...S.sessions.values()].filter(s => s.fleet && machineOk(s))
     .map(s => ({ s, sc: q ? Math.max(fuzzy(q, s.name), fuzzy(q, tilde(s.cwd)) - 1, fuzzy(q, "fleet") - 2) : 0 })).filter(x => x.sc >= 0);
@@ -211,12 +223,12 @@ function renderLeft() {
     const fold = r => r.fold ? `<span class="fold" title="${r.shut ? "Unfold" : "Fold"} (→ ←)">${I("chev", 10)}</span>` : `<span class="fold" style="visibility:hidden"></span>`;
     if (r.kind === "fleetgrp") return `<div class="prow grp fleetgrp${kc}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" title="Fleet helpers: quick asks (⌘K), meeting Prep, --fleet schedules. One opens beside, in the side pane"><span class="ix">${I("zap", 11)}</span><span class="nm">Fleet</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     if (r.kind === "group") {
-      return `<div class="prow grp${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" title="${esc(r.key)}"><span class="ix${r.gid === FAV ? " star" : r.ix ? " num" : ""}">${r.gid === FAV ? I("star", 11) : esc(r.ix)}</span><span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
+      return `<div class="prow grp${r.depth ? " sub" : ""}${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}" title="${esc(r.depth ? groupPath(r.gid) : r.key)}"><span class="ix${r.gid === FAV ? " star" : r.ix ? " num" : ""}">${r.gid === FAV ? I("star", 11) : r.depth ? I("folder", 12) : esc(r.ix)}</span><span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     }
     if (r.kind === "ftab") {
       const isCur = S.file === r.path && r.gid === S.group, m = /^\/@([\w-]+)(\/.*)$/.exec(r.path);
       const where = isView(r.path) ? "" : m ? `${m[1]}: ${tilde(dirname(m[2]))}` : tilde(dirname(r.path));
-      return `<div class="prow ftab${kc}${isCur ? " cur" : ""}" data-k="${esc(r.k)}" data-tip="${esc(isView(r.path) ? ftabTitle(r.path) : tilde(r.path))}">` +
+      return `<div class="prow ftab${kc}${isCur ? " cur" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}" data-tip="${esc(isView(r.path) ? ftabTitle(r.path) : tilde(r.path))}">` +
         `<span class="ic">${isView(r.path) ? I(viewInfo(r.path).icon, 12) : fileIcon(r.path)}</span><span class="nm">${esc(ftabTitle(r.path))}</span>` +
         `<span class="wh">${esc(where)}</span></div>`;
     }
@@ -225,7 +237,7 @@ function renderLeft() {
     const pv = sessionPreview(s);
     const st = sessionStatus(s), unread = S.unread.has(s.id) && !isCur, model = s.model_seen || s.model;
     const stopped = s.state === "stopped";
-    return `<div class="prow ss${kc}${isCur ? " cur" : ""}${stopped ? " stopped" : ""}${unread ? " unread" : ""}" data-k="${esc(r.k)}" data-tip="${esc(s.name)}">` +
+    return `<div class="prow ss${kc}${isCur ? " cur" : ""}${stopped ? " stopped" : ""}${unread ? " unread" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}" data-tip="${esc(s.name)}">` +
       `<span class="si ${st.cls}">${st.icon}</span>${harnessIcon(s.harness)}<span class="nm">${esc(sessionTitle(s))}</span>` +
       `${s.favorite && r.gid !== FAV ? `<span class="star">${I("star", 11)}</span>` : ""}${machineTag(s)}<span class="tm">${esc(lastMoved(s))}</span>${stopped ? `<button class="rsm" data-resume="${esc(s.id)}" title="Start its agent again">Resume</button>` : ""}</div>`;
   }).join("");
@@ -406,7 +418,7 @@ async function deleteRow(r) {
   if (r.kind === "session") return closeSession(r.sid);  // (asks; from Favorites too: it closes, ⌘W only unstars)
   if (r.kind === "ftab") {
     const ok = await confirmDialog({ title: `Close “${ftabTitle(r.path)}”?`, ok: "Close",
-      body: `The tab closes in ${groupName(r.gid)}, on every screen. ${/^(orbit|plugin):/.test(r.path) ? "" : "The file stays on disk. "}⌘⇧T reopens it.` });
+      body: `The tab closes in ${groupPath(r.gid)}, on every screen. ${/^(orbit|plugin):/.test(r.path) ? "" : "The file stays on disk. "}⌘⇧T reopens it.` });
     if (ok) closeGroupTab(r);
     return;
   }
@@ -465,48 +477,84 @@ function folderMenu(dir, where) {
   ].filter(Boolean), where);
 }
 function groupMenu(gid, where) {
-  const i = S.groups.findIndex(g => g.id === gid);
-  const g = S.groups[i];
+  const g = groupOf(gid); if (!g) return;
+  const sib = groupKids(g.parent || ""), i = sib.indexOf(g), deep = groupDepth(gid), h = groupHeight(gid);
+  const bad = new Set([gid, ...groupDescendants(gid)]);
   menu([
     { label: "New session here", key: "⌘N", run: () => newSession(gid) },
+    { label: "New subgroup…", disabled: deep >= GROUP_DEPTH, run: () => newGroup(gid) },
     { label: "Rename group", key: "⌘R", run: () => renameGroup(gid) },
     { sep: true },
     { label: "Move up", key: "⌘⌃H", disabled: i <= 0, run: () => api("POST", `/api/groups/${gid}/move`, { delta: -1 }).catch(e => toast(e.message)) },
-    { label: "Move down", key: "⌘⌃L", disabled: i >= S.groups.length - 1, run: () => api("POST", `/api/groups/${gid}/move`, { delta: 1 }).catch(e => toast(e.message)) },
+    { label: "Move down", key: "⌘⌃L", disabled: i >= sib.length - 1, run: () => api("POST", `/api/groups/${gid}/move`, { delta: 1 }).catch(e => toast(e.message)) },
+    { label: "Into the group above", key: "Tab", disabled: i <= 0 || groupDepth(sib[i - 1].id) + h > GROUP_DEPTH, run: () => indentGroup(gid) },
+    { label: "Out a level", key: "⇧Tab", disabled: !g.parent, run: () => outdentGroup(gid) },
+    { label: "Move into", sub: () => [
+        { label: "The top level", disabled: !g.parent, run: () => nestGroup(gid, "") },
+        { sep: true },
+        ...groupMenuItems(p => nestGroup(gid, p), { disabled: x => bad.has(x.id) || x.id === g.parent || groupDepth(x.id) + h > GROUP_DEPTH }),
+      ] },
     { sep: true },
-    { label: "New group…", run: newGroup },
+    { label: "New group…", run: () => newGroup() },
     { label: "Delete group…", danger: true, disabled: S.groups.length < 2, run: () => deleteGroup(gid) },
   ], where);
+}
+/* Tab: into the sibling above (as its last subgroup); ⇧Tab: out a level, right after the group it was in. */
+function indentGroup(gid) {
+  const g = groupOf(gid); if (!g) return;
+  const sib = groupKids(g.parent || ""), i = sib.indexOf(g);
+  if (i <= 0) { toast("No group above it to go into"); return; }
+  nestGroup(gid, sib[i - 1].id);
+}
+function outdentGroup(gid) {
+  const g = groupOf(gid); if (!g) return;
+  if (!g.parent) { toast("It is at the top already"); return; }
+  nestGroup(gid, (groupOf(g.parent) || {}).parent || "", g.parent);
+}
+async function nestGroup(gid, parent, after = "") {
+  try {
+    await api("POST", `/api/groups/${gid}/nest`, { parent, after });
+    if (parent) { FOLDED.delete(parent); LS.set("folded", [...FOLDED]); }  // (where it went: in sight)
+    S.pcursor = "g:" + gid; renderLeft();
+  } catch (e) { toast(e.message); }
 }
 /* A group's name: given, and no other group's (case and every space ignored: "Invest Assistant" is "InvestAssistant";
    Favorites and the Fleet count). The server checks the same. */
 const groupKey = n => String(n || "").replace(/\s+/g, "").toLowerCase();
-function groupNameError(name, gid = "") {
+function groupNameError(name, gid = "", parent = "") {
   const k = groupKey(name);
   if (!k) return "Give the group a name.";
-  if (k === "favorites" || k === "fleet") return `“${name.trim()}” is Orbit's own: there is a group named that already.`;
-  const same = S.groups.find(g => g.id !== gid && groupKey(g.name) === k);
-  if (same) return `There is a group named “${same.name}” already.`;
+  if (/[/›]/.test(name)) return "A group's name has no / or › (they separate a subgroup's path).";
+  if (!parent && (k === "favorites" || k === "fleet")) return `“${name.trim()}” is Orbit's own: there is a group named that already.`;
+  const same = groupKids(parent).find(g => g.id !== gid && groupKey(g.name) === k);
+  if (same) return `There is a group named “${same.name}” there already.`;
   return null;
 }
-async function newGroup() {
-  const v = await dialog({ title: "New group", fields: [{ key: "name", label: "Name" }], ok: "Create",
-    validate: v => groupNameError(v.name) });
+async function newGroup(parent = "") {
+  parent = typeof parent === "string" ? parent : "";  // (a click handler's event is not a parent)
+  const v = await dialog({ title: parent ? `New group in ${groupPath(parent)}` : "New group", fields: [{ key: "name", label: "Name" }], ok: "Create",
+    validate: v => groupNameError(v.name, "", parent) });
   if (!v) return;
-  try { const g = await api("POST", "/api/groups", { name: v.name }); if (!S.groups.some(x => x.id === g.id)) S.groups.push(g); switchGroup(g.id, { quiet: true }); }
-  catch (e) { toast(e.message); }
+  try {
+    const g = await api("POST", "/api/groups", { name: v.name, parent });
+    if (!S.groups.some(x => x.id === g.id)) S.groups.push(g);
+    if (parent) { FOLDED.delete(parent); LS.set("folded", [...FOLDED]); }
+    switchGroup(g.id, { quiet: true });
+  } catch (e) { toast(e.message); }
 }
 async function renameGroup(gid) {
   const g = S.groups.find(g => g.id === gid); if (!g) return;
-  const v = await dialog({ title: "Rename group", fields: [{ key: "name", label: "Name", value: g.name }], validate: v => groupNameError(v.name, gid) });
+  const v = await dialog({ title: "Rename group", fields: [{ key: "name", label: "Name", value: g.name }], validate: v => groupNameError(v.name, gid, g.parent || "") });
   if (v) try { await api("POST", `/api/groups/${gid}/rename`, v); } catch (e) { toast(e.message); }
 }
 async function deleteGroup(gid) {
   const g = S.groups.find(g => g.id === gid); if (!g) return;
-  const to = S.groups.find(x => x.id !== gid);
-  const n = [...S.sessions.values()].filter(s => s.group === gid).length;
-  const ok = await confirmDialog({ title: `Delete group “${g.name}”?`, ok: "Delete", danger: true,
-    body: n ? `Its ${n} session${n === 1 ? "" : "s"} move to “${to.name}”. No conversation is lost.` : "The group is empty." });
+  const to = g.parent ? groupOf(g.parent) : topGroups().find(x => x.id !== gid) || S.groups.find(x => x.id !== gid);
+  const n = [...S.sessions.values()].filter(s => s.group === gid).length, kids = groupKids(gid).length;
+  const parts = [n ? `Its ${n} session${n === 1 ? "" : "s"} move to “${groupPath(to.id)}”.` : "",
+                 kids ? `Its ${kids} subgroup${kids === 1 ? "" : "s"} move up a level.` : ""].filter(Boolean);
+  const ok = await confirmDialog({ title: `Delete group “${groupPath(gid)}”?`, ok: "Delete", danger: true,
+    body: parts.length ? parts.join(" ") + " No conversation is lost." : "The group is empty." });
   if (ok) try { await api("POST", `/api/groups/${gid}/delete`); } catch (e) { toast(e.message); }
 }
 /* Keys while the left panel has the keyboard (interaction.md §6). */
@@ -544,12 +592,21 @@ function panelKey(e, combo) {
   }
   if (tab === "sessions" && r && !S.filter && (combo === "ArrowLeft" || combo === "ArrowRight")) {  // fold, unfold, as in a tree
     const grp = r.kind === "group" || r.kind === "fleetgrp";
-    if (combo === "ArrowLeft") { if (grp && !r.shut && r.fold) setFolded(r.gid, true); else if (!grp && r.gid) { S.pcursor = "g:" + r.gid; renderLeft(); } }
+    if (combo === "ArrowLeft") {
+      const up = grp && (groupOf(r.gid) || {}).parent;  // (a subgroup, folded or empty: up to its parent)
+      if (grp && !r.shut && r.fold) setFolded(r.gid, true);
+      else if (up) { S.pcursor = "g:" + up; renderLeft(); }
+      else if (!grp && r.gid) { S.pcursor = "g:" + r.gid; renderLeft(); }
+    }
     else if (grp && r.shut) setFolded(r.gid, false); else movePanel(1);
     return true;
   }
   if (tab === "sessions") {
     if (combo === "M:KeyR" && r && r.kind !== "newgroup") { renameRow(r); return true; }
+    if ((combo === "Tab" || combo === "S:Tab") && r && r.kind === "group" && r.gid !== FAV) {  // into the group above it / out a level
+      if (combo === "Tab") indentGroup(r.gid); else outdentGroup(r.gid);
+      return true;
+    }
     // ⌃D: close / delete the row (asked first). In the filter it still deletes a character, except at its end (where
     // it has none to delete) or with no filter.
     if (combo === "C:KeyD" && r && r.kind !== "newgroup" && (!S.filter || filterPos() >= S.filter.length)) { deleteRow(r); return true; }
@@ -579,7 +636,7 @@ $("#ptabs").addEventListener("mousedown", e => {
 });
 $("#followbtn").addEventListener("click", () => { S.follow = !S.follow; saveUi(); followPanel(); renderLeft(); });
 $("#paddbtn").addEventListener("click", () => S.left.tab === "files" && ctxRoot() ? newFileIn(ctxRoot()) : S.left.tab === "notes" ? newNote() : S.left.tab === "misc" ? scheduleDialog()
-  : menu([{ label: "New session", key: "⌘N", run: () => newSession() }, { label: "New group…", run: newGroup }, { label: "Resume another session…", run: attachDialog },
+  : menu([{ label: "New session", key: "⌘N", run: () => newSession() }, { label: "New group…", run: () => newGroup() }, { label: "Resume another session…", run: attachDialog },
                  { sep: true }, { label: "Other machines…", run: remotesDialog }, { label: "Add a machine…", run: addRemote }], { anchor: $("#paddbtn") }));
 $("#pfbox").addEventListener("mousedown", e => { e.preventDefault(); plist.focus(); });
 plist.addEventListener("mousedown", e => {
@@ -706,7 +763,15 @@ plist.addEventListener("mouseleave", () => {
    group's rows (or just under its head) to move it there; drag a group's head to move the group with its sessions.
    (The keys do the same: ⌘⌃H ⌘⌃L.) */
 const prowOf = el => el && PROWS.find(x => x.k === el.dataset.k);
-const groupBlock = head => { const out = [head]; let n = head.nextElementSibling; while (n && !n.matches(".prow.grp, .prow.newgrp")) { out.push(n); n = n.nextElementSibling; } return out; };
+const rowDepth = el => +(el.style.getPropertyValue("--d") || 0);
+/* A group's head with everything under it: its rows and its subgroups', up to the next group at its level or above. */
+const groupBlock = head => {
+  const d = rowDepth(head), out = [head];
+  let n = head.nextElementSibling;
+  while (n && !n.matches(".prow.newgrp") && !(n.matches(".prow.grp") && rowDepth(n) <= d)) { out.push(n); n = n.nextElementSibling; }
+  return out;
+};
+const parentOf = gid => (groupOf(gid) || {}).parent || "";
 dragSort({
   box: plist, item: ".prow.ss, .prow.grp", axis: "y",
   keyOf: el => el.dataset.k, byKey: k => [...plist.querySelectorAll(".prow[data-k]")].find(x => x.dataset.k === k),
@@ -714,7 +779,8 @@ dragSort({
   unit: el => prowOf(el).kind === "group" ? groupBlock(el) : [el],
   peers: el => {
     const src = prowOf(el), rows = [...plist.querySelectorAll(".prow[data-k]")].filter(x => x !== el);
-    if (src.kind === "group") return rows.filter(x => { const r = prowOf(x); return r && r.kind === "group" && r.gid !== FAV; }).map(groupBlock);
+    if (src.kind === "group") return rows.filter(x => { const r = prowOf(x); return r && r.kind === "group" && r.gid !== FAV && parentOf(r.gid) === parentOf(src.gid); })  // (among its siblings: Tab, ⇧Tab and Move into nest)
+      .map(groupBlock);
     const fav = src.gid === FAV;
     return rows.filter(x => { const r = prowOf(x); return r && ((r.kind === "session" && r.gid !== "fleet" && (r.gid === FAV) === fav) || (!fav && r.kind === "group" && r.gid !== FAV)); }).map(x => [x]);
   },
@@ -732,8 +798,8 @@ dragSort({
 async function dropOn(key, el, after) {
   const src = PROWS.find(x => x.k === key), r = prowOf(el); if (!src || !r) return renderLeft();
   if (src.kind === "group") {
-    const i = S.groups.findIndex(g => g.id === src.gid);
-    let j = S.groups.findIndex(g => g.id === r.gid) + (after ? 1 : 0); if (j > i) j--;
+    const sib = groupKids(parentOf(src.gid)), i = sib.findIndex(g => g.id === src.gid);
+    let j = sib.findIndex(g => g.id === r.gid) + (after ? 1 : 0); if (j > i) j--;
     if (j !== i) api("POST", `/api/groups/${src.gid}/move`, { delta: j - i }).catch(e => toast(e.message)); else renderLeft();
     return;
   }

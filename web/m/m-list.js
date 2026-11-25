@@ -37,9 +37,9 @@ function listViews() {
   const views = [];
   const favs = all.filter(s => s.favorite && !s.fleet);
   if (favs.length) views.push({ gid: "fav", name: "Favorites", star: true, ss: favs });
-  for (const g of S.groups) {
+  for (const g of groupKids("")) {  // the top groups; a subgroup is a row in its parent, opened as a page of its own
     const ss = all.filter(s => s.group === g.id && !s.fleet);
-    views.push({ gid: g.id, name: g.name, ss });  // (an empty group too: it is the user's)
+    views.push({ gid: g.id, name: g.name, ss, kids: groupKids(g.id) });  // (an empty group too: it is the user's)
   }
   const known = new Set(S.groups.map(g => g.id));
   const lost = all.filter(s => !s.fleet && !known.has(s.group));  // (a group this server does not list: still shown)
@@ -48,6 +48,39 @@ function listViews() {
   if (fleet.length) views.push({ gid: "fleet", name: "Fleet", fleet: true, ss: fleet });
   return views;
 }
+/* A subgroup: one row (a folder, its name, working/all of its whole subtree, a chevron); a tap opens it as a page. */
+function subRow(g) {
+  const ids = new Set(groupSubtree(g.id)), ss = [...S.sessions.values()].filter(s => !s.fleet && ids.has(s.group));
+  const working = ss.filter(isMoving).length;
+  return `<button class="frow grow" data-sub="${esc(g.id)}"><span class="fi">${I("folder", 15)}</span><span class="nm">${esc(g.name)}</span>` +
+    `<span class="wh">${working ? `${working}/` : ""}${ss.length}</span><span class="chv">${I("chev", 12)}</span></button>`;
+}
+/* What a group holds, as rows: its sessions, its other tabs, then its subgroups. */
+const groupRowsHtml = (ss, gid) => ss.map(rowHtml).join("") + groupTabs(gid).map(ftabRow).join("") + groupKids(gid).map(subRow).join("");
+/* A subgroup's page (pushed over the list; Back, or a swipe from the left edge, comes back): what it holds, live. */
+const GROUP_PAGES = new Set();
+function groupPage(gid) {
+  const page = makePage({ title: groupName(gid) });
+  page.gid = gid;
+  page.refresh = () => {
+    const g = S.groups.find(x => x.id === gid);
+    if (!g) { page.body.innerHTML = emptyBox("That group is gone", "It was deleted, on this screen or another."); return; }
+    page.setTitle(g.name, g.parent ? groupPath(g.parent) : "");
+    const ss = [...S.sessions.values()].filter(s => s.group === gid && !s.fleet);
+    const html = groupRowsHtml(ss, gid);
+    page.body.innerHTML = html ? `<div class="rows glist">${html}</div>` : emptyBox("Nothing here yet", "Its sessions and tabs show here. Start a session in it with <b>+</b> on the Groups list.");
+  };
+  page.body.addEventListener("click", e => {
+    const o = e.target.closest("[data-open]"); if (o) { openSession(o.dataset.open); return; }
+    const ft = e.target.closest("[data-ftab]"); if (ft) { openFtab(ft.dataset.ftab); return; }
+    const sb = e.target.closest("[data-sub]"); if (sb) openGroupPage(sb.dataset.sub);
+  });
+  page.onClose = () => GROUP_PAGES.delete(page);
+  GROUP_PAGES.add(page);
+  page.refresh();
+  return page;
+}
+function openGroupPage(gid) { pushPage(groupPage(gid), "sessions"); }
 function rowHtml(s) {
   const pv = sessionPreview(s), unread = isUnread(s), stopped = s.state === "stopped";
   return `<button class="srow${unread ? " unread" : ""}${stopped ? " stopped" : ""}" data-open="${esc(s.id)}">` +
@@ -111,14 +144,17 @@ function renderList() {
   const box = $("#slist");
   const none = !views.some(v => v.ss.length);  // (the groups show anyway, empty ones too)
   box.innerHTML = workingStripHtml() + views.map(v => {
-    const shut = S.folded.has(v.gid), working = v.ss.filter(isMoving).length;
+    const shut = S.folded.has(v.gid);
+    const all = v.kids ? [...S.sessions.values()].filter(s => !s.fleet && groupSubtree(v.gid).includes(s.group)) : v.ss;  // (its count: its whole subtree)
+    const working = all.filter(isMoving).length;
     return `<section class="grp${shut ? " shut" : ""}"><button class="shead" data-fold="${esc(v.gid)}" aria-expanded="${!shut}">` +
       `${v.star ? `<span class="gstar">${I("star", 12)}</span>` : v.fleet ? `<span class="gstar">${I("zap", 12)}</span>` : ""}<span class="gn">${esc(v.name)}</span>` +
-      `<span class="chev">${I("chevd", 12)}</span><span class="cnt">${working ? `${working}/` : ""}${v.ss.length}</span></button>` +
-      (shut ? "" : `<div class="rows">${v.ss.map(rowHtml).join("")}${groupTabs(v.gid).map(ftabRow).join("")}</div>`) + `</section>`;
+      `<span class="chev">${I("chevd", 12)}</span><span class="cnt">${working ? `${working}/` : ""}${all.length}</span></button>` +
+      (shut ? "" : `<div class="rows">${groupRowsHtml(v.ss, v.gid)}</div>`) + `</section>`;
   }).join("") + (none ? `<div class="empty"><h2>No session yet</h2>Start one with <b>+</b> above: pick a folder, an agent and what to ask.</div>` : "");
   updateTitleBar();
   renderTabbar();  // (its count of answers not seen yet)
+  for (const p of GROUP_PAGES) p.refresh();  // (a subgroup's page open over it: the same news)
 }
 /* The big title gives way to the small one in the bar when it scrolls under it (iOS's large title). */
 function updateTitleBar() {
@@ -145,7 +181,9 @@ $("#slist").addEventListener("click", e => {
   const o = e.target.closest("[data-open]");
   if (o) { openSession(o.dataset.open); return; }
   const ft = e.target.closest("[data-ftab]");
-  if (ft) openFtab(ft.dataset.ftab);
+  if (ft) { openFtab(ft.dataset.ftab); return; }
+  const sb = e.target.closest("[data-sub]");
+  if (sb) openGroupPage(sb.dataset.sub);
 });
 
 /* ===================================================================== pull to refresh

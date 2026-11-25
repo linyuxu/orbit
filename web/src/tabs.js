@@ -86,13 +86,13 @@ function switchGroup(gid, { focus = true, quiet = false } = {}) {
   const sid = want.startsWith("s:") ? want.slice(2) : want.startsWith("f:") ? null : want;
   if (sid && ids.includes(sid)) S.current = sid;
   else if (!ids.includes(S.current)) S.current = ids[0] || null;
-  if (!quiet && !S.left.shown) toast(groupName(gid));
+  if (!quiet && !S.left.shown) toast(groupPath(gid));
   record(tabKey());  // (the tab it lands on: ⌘- comes back to it)
   showCurrent(focus);
 }
 function groupByIndex(n) {
   if (n === 1) return switchGroup(FAV);
-  const g = S.groups[n - 2];
+  const g = topGroups()[n - 2];  // (the top groups: a subgroup is reached in its parent)
   if (g) switchGroup(g.id); else toast(`No group ${n - 1}: ⌘\` → Sessions to make one`);
 }
 /* The tab row: sessions and files are tabs alike, in one order per group (S.tabOrder; ⌘⌃H ⌘⌃L move any tab past
@@ -214,7 +214,7 @@ async function moveToGroup(sid, gid) {
     if (!v) return;
     try { gid = (await api("POST", "/api/groups", { name: v.name })).id; } catch (e) { toast(e.message); return; }
   }
-  try { await api("POST", `/api/sessions/${sid}/update`, { group: gid }); toast(`Moved to ${groupName(gid)}`); } catch (e) { toast(e.message); }
+  try { await api("POST", `/api/sessions/${sid}/update`, { group: gid }); toast(`Moved to ${groupPath(gid)}`); } catch (e) { toast(e.message); }
 }
 /* Fork: a new session in the same group continuing this conversation, with all its settings (server-side: every
    harness; also `orbit-agent fork` and /fork-session). It opens in front; the original is untouched. */
@@ -248,7 +248,7 @@ function closeOrUnfavorite(sid = S.current, gid = S.group) {
 }
 async function unfavorite(sid) {
   const s = S.sessions.get(sid); if (!s) return;
-  try { await api("POST", `/api/sessions/${sid}/update`, { favorite: false }); toast(`Removed “${s.name}” from Favorites: still open in ${groupName(s.group)} (⌘⌃P stars it again)`); }
+  try { await api("POST", `/api/sessions/${sid}/update`, { favorite: false }); toast(`Removed “${s.name}” from Favorites: still open in ${groupPath(s.group)} (⌘⌃P stars it again)`); }
   catch (e) { toast(e.message); }
 }
 $("#tabs").addEventListener("mousedown", e => {
@@ -274,8 +274,8 @@ $("#tabs").addEventListener("contextmenu", e => {
 });
 $("#grouppill").addEventListener("click", () => {
   menu([{ label: "Favorites", key: "⌘1", run: () => switchGroup(FAV) },
-        ...S.groups.map((g, i) => ({ label: g.name, key: i < 8 ? `⌘${i + 2}` : "", run: () => switchGroup(g.id) })),
-        { sep: true }, { label: "New group…", run: newGroup }], { anchor: $("#grouppill") });
+        ...groupMenuItems(gid => switchGroup(gid), { current: S.group }),
+        { sep: true }, { label: "New group…", run: () => newGroup() }], { anchor: $("#grouppill") });
 });
 
 /* card actions (delegated) */

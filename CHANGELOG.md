@@ -8,6 +8,14 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Groups nest, like folders: a group holds sessions, file tabs and subgroups, 3 levels at most ("Work › Orbit ›
+  Release"). The server keeps `parent` on a group (`POST /api/groups {name, parent}`, `…/<id>/nest {parent, after}`;
+  `move` is among siblings); names are unique among siblings; deleting a group moves its sessions and subgroups up a
+  level. The left panel draws the tree (a group's own rows, then its subgroups, each level indented); a folded group's
+  count is its whole subtree's; ← goes up to the parent; Tab puts a group into the one above it, ⇧Tab takes it out a
+  level; its menu has New subgroup…, Move into ▸. The tab row shows the chosen group's own tabs; the group pill, "Move
+  to", the new-session dialog and toasts show the path. ⌘2…⌘9 are the top groups'. The phone: a subgroup is a row in
+  its parent, opened as a page of its own. `orbit-agent groups` prints paths; `--group` takes a path.
 - The Groups panel: ⌃D on a row closes its session or tab, or deletes its group, always asked first (a tab closed
   there reopens with ⌘⇧T); ⌘R renames the row: a group, a session, or a file tab's file. In the filter ⌃D still deletes
   a character, except at its end. ⌘⇧T reopens a file tab in its own group.

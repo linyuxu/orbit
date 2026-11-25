@@ -1225,13 +1225,15 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json(save_upload(self.desk.state_dir, str(b.get("name", "")), str(b.get("data", ""))))
             if p == "/api/fleet/ask":
                 return self._json(self.desk.fleet_ask(str(b.get("text", "")), str(b.get("cwd", ""))))
-            if p == "/api/groups":
-                return self._json(self.desk.group_create(b.get("name", "")))
-            m = re.fullmatch(r"/api/groups/([\w-]+)/(rename|move|delete)", p)
+            if p == "/api/groups":  # {name, parent?}: a group (under parent: a subgroup)
+                return self._json(self.desk.group_create(b.get("name", ""), str(b.get("parent") or "")))
+            m = re.fullmatch(r"/api/groups/([\w-]+)/(rename|move|delete|nest)", p)
             if m:
                 gid, action = m.groups()
                 if action == "rename":
                     return self._json(self.desk.group_rename(gid, b.get("name", "")))
+                if action == "nest":  # {parent ("" = the top), after?}: into another group, or out to the top
+                    return self._json(self.desk.group_nest(gid, str(b.get("parent") or ""), str(b.get("after") or "")))
                 if action == "move":
                     self.desk.group_move(gid, int(b.get("delta", 0)))
                 else:

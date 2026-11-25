@@ -334,9 +334,35 @@ def cmd_groups(a: argparse.Namespace) -> None:
     if a.json:
         print(json.dumps(d.get("groups", []), indent=2, ensure_ascii=False))
         return
-    for g in d.get("groups", []):
+    for g, path in group_paths(d.get("groups", [])):
         n = sum(1 for s in d["sessions"] if s.get("group") == g["id"])
-        print(f"{g['name']}\t{n} session{'s' if n != 1 else ''}\t{g['id']}")
+        print(f"{path}\t{n} session{'s' if n != 1 else ''}\t{g['id']}")
+
+
+def group_paths(groups: list[dict]) -> list[tuple[dict, str]]:
+    """The groups as a tree, a parent before its subgroups: [(group, "Work/Orbit/Release")]."""
+    out: list[tuple[dict, str]] = []
+
+    def walk(parent: str | None, prefix: str) -> None:
+        for g in groups:
+            if (g.get("parent") or None) == parent:
+                out.append((g, prefix + g["name"]))
+                walk(g["id"], prefix + g["name"] + "/")
+    walk(None, "")
+    return out
+
+
+def find_group(groups: list[dict], ref: str) -> dict | None:
+    """A group by id, by path ("Work/Orbit"), or by name when only one group has it (case ignored)."""
+    ref = ref.strip().strip("/").lower()
+    paths = group_paths(groups)
+    hit = next((g for g, p in paths if g["id"].lower() == ref or p.lower() == ref), None)
+    if hit:
+        return hit
+    named = [(g, p) for g, p in paths if g["name"].lower() == ref]
+    if len(named) > 1:
+        sys.exit(f"orbit-agent: several groups are named {ref!r}: " + ", ".join(p for _, p in named) + " (give its path)")
+    return named[0][0] if named else None
 
 
 def cmd_new(a: argparse.Namespace) -> None:
@@ -347,7 +373,7 @@ def cmd_new(a: argparse.Namespace) -> None:
     body = {"cwd": folder, "name": a.name, "model": a.model, "mode": a.mode, "harness": a.harness}
     if a.group:
         groups = call("GET", pre + "/api/sessions").get("groups", [])
-        g = next((x for x in groups if x["id"] == a.group or x["name"].lower() == a.group.lower()), None)
+        g = find_group(groups, a.group)
         if not g:
             sys.exit(f"orbit-agent: no group {a.group!r} (orbit-agent groups)")
         body["group"] = g["id"]
@@ -608,7 +634,7 @@ def main(argv: list[str] | None = None) -> None:
     nw.add_argument("--name", default="")
     nw.add_argument("--model", default="")
     nw.add_argument("--mode", default="default", choices=["default", "acceptEdits", "plan", "bypassPermissions"])
-    nw.add_argument("--group", default="", help="group name or id")
+    nw.add_argument("--group", default="", help="group: its path (Work/Orbit), its name, or its id")
     nw.add_argument("--harness", default="claude", help="claude, codex, agy or opencode")
     nw.add_argument("--on", default="", metavar="REMOTE", help="start it on another machine (orbit remote ls); FOLDER is there")
     nw.set_defaults(func=cmd_new)

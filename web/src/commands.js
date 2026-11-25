@@ -59,7 +59,7 @@ async function newSession(gidArg) {
       { key: "model", label: "Model", type: "dropdown", value: harness === last.harness ? last.model : "", options: modelsFor(harness) },
       { key: "effort", label: "Effort", type: "dropdown", value: harness === last.harness ? (last.effort || "") : "", options: effortsFor(harness) },
       { key: "mode", label: "Mode", type: "dropdown", value: modesFor(harness).includes(last.mode) ? last.mode : "default", options: modeOptions(harness) },
-      { key: "group", label: "Group", type: "dropdown", value: gid, options: S.groups.map(g => ({ value: g.id, label: g.name })) },
+      { key: "group", label: "Group", type: "dropdown", value: gid, options: groupTree().map(({ g, depth }) => ({ value: g.id, label: "\u2003".repeat(depth) + g.name })) },
     ],
     render: (_, ctl) => { ctls = ctl; },
     validate: async v => {
@@ -84,7 +84,7 @@ async function renameSession(sid = S.current) {
 function tabMenu(sid = S.current, where) {
   const s = S.sessions.get(sid); if (!s) return;
   const working = s.state === "working";
-  const groups = () => [...S.groups.map(g => ({ label: g.name, key: g.id === s.group ? "current" : "", disabled: g.id === s.group, run: () => moveToGroup(sid, g.id) })),
+  const groups = () => [...groupMenuItems(gid => moveToGroup(sid, gid), { current: s.group }),
                         { sep: true }, { label: "New group…", run: () => moveToGroup(sid, "__new") }];
   const inFav = !EMBED && S.group === FAV && s.favorite;  // (in Favorites, Remove from Favorites at the end does it)
   menu([
@@ -237,6 +237,7 @@ const SHORTCUTS = [
     ["⌘W", "Close what has the keyboard: the side tab, else the file tab, else the session tab", "M:KeyW", closeWhatHasKeyboard],
     ["⌘⇧T", "Reopen the last closed tab, in its group (again: the one before)", "MS:KeyT", reopenLast],
     ["⌃D", "In the Groups panel: close the row's session or tab, or delete its group (asked first)"],
+    ["Tab · ⇧Tab", "In the Groups panel on a group: into the group above it (a subgroup) · out a level. Groups nest 3 deep"],
     ["⌘1 · ⌘2…⌘9", "Favorites · the groups in left-panel order",
       ["M:Digit1", "M:Digit2", "M:Digit3", "M:Digit4", "M:Digit5", "M:Digit6", "M:Digit7", "M:Digit8", "M:Digit9"],
       [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => () => groupByIndex(n))],

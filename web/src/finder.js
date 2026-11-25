@@ -142,8 +142,8 @@ function idScore(q, ids) {
 function sessionItem(s, { detail, side } = {}) {
   return {
     ids: [s.id, s.id.replace(/^.*~/, "")],
-    label: s.name, mark: s, tag: s.closed ? "closed" : groupName(s.group),
-    detail: detail ?? tilde(s.cwd), match: `${tilde(s.cwd)} ${groupName(s.group)}`,
+    label: s.name, mark: s, tag: s.closed ? "closed" : groupPath(s.group),
+    detail: detail ?? tilde(s.cwd), match: `${tilde(s.cwd)} ${groupPath(s.group)}`,
     key: s.closed ? ago(s.closed_at) : "",
     run: side ? async () => { if (s.closed) await api("POST", `/api/sessions/${s.id}/reopen`); openSide({ kind: "session", sid: s.id }); }
               : () => s.closed ? reopen(s.id) : switchTo(s.id),

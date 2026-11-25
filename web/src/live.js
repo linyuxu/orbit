@@ -129,7 +129,7 @@ function reportCtx() {
     const s = cur();
     const ctx = {
       session: s ? { id: s.id, name: s.name, cwd: s.cwd } : null,
-      group: S.group === FAV ? "Favorites" : S.group ? groupName(S.group) : "",
+      group: S.group === FAV ? "Favorites" : S.group ? groupPath(S.group) : "",
       files: fileTabs().map(t => t.path),
       side: S.side ? sideTitle(S.side) + (S.side.path ? ` (${S.side.path})` : S.side.url ? ` (${S.side.url})` : "") : "",
       selection: ctxSelection().slice(0, 20000),

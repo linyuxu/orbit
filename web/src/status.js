@@ -7,7 +7,7 @@ function renderTabs() {
   if (DRAG.active) { DRAG.pending.add(renderTabs); return; }  // (a drag is moving the tabs: after it)
   if (EMBED) return;
   const gp = $("#grouppill");
-  gp.innerHTML = S.group === FAV ? `<span class="star">${I("star", 13)}</span><span class="nm">Favorites</span>` : `<span class="nm">${esc(S.group ? groupName(S.group) : "Orbit")}</span>`;
+  gp.innerHTML = S.group === FAV ? `<span class="star">${I("star", 13)}</span><span class="nm">Favorites</span>` : `<span class="nm">${esc(S.group ? groupPath(S.group) : "Orbit")}</span>`;
   const html = key => {
     if (key.startsWith("f:")) return fileTabHtml(fileTabs().find(t => t.path === key.slice(2)));
     const id = key.slice(2);
@@ -40,7 +40,7 @@ function renderStatus() {
     $("#sb-extra").textContent = s ? s.name : "";
     $("#sb-extra").style.display = s ? "" : "none";
   } else {
-    $("#sb-state").innerHTML = s ? `${stateMark(s)}<span class="sw">${esc(s.state)}${s.queued ? ` · ${s.queued} queued` : ""}</span>` : esc(S.group ? groupName(S.group) : "no session");
+    $("#sb-state").innerHTML = s ? `${stateMark(s)}<span class="sw">${esc(s.state)}${s.queued ? ` · ${s.queued} queued` : ""}</span>` : esc(S.group ? groupPath(S.group) : "no session");
     $("#sb-state").title = s && s.error ? s.error : "";
     $("#sb-harness").textContent = s ? harnessLabel(s.harness) : "";
     $("#sb-harness").style.display = s ? "" : "none";
