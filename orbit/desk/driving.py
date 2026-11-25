@@ -8,7 +8,7 @@ import threading
 import time
 
 from orbit.desk.session import ACTIVE, DRIVERS, MODES, ORBIT_PREFIX, orbit_line, orbit_skill_hint, Session
-from orbit.drivers.base import auto_title, Driver, DriverEvent, unavailable
+from orbit.drivers.base import auto_title, Driver, DriverEvent, session_link, unavailable
 from orbit.drivers.process import ProcessDriver
 
 AUTO_RETRIES = 2  # a request whose agent died goes on by itself this many times before it waits for Continue
@@ -236,6 +236,25 @@ class Driving:
                 if x["id"] == nxt["id"]:
                     x["retry"] = n
                     self._card_changed(x)
+
+    def follow_living(self) -> list[str]:
+        """At the server's start: each open session without a driver whose agent still runs outside Orbit (its
+        driver's link_alive) is followed at once: its driver started with resume=True takes the running agent on
+        (no new one). A stopped one stays stopped. The sessions followed."""
+        out = []
+        for s in list(self.sessions.values()):
+            cls = DRIVERS.get(s.harness)
+            if s.closed or s.driver is not None or cls is None or cls.link_alive.__func__ is Driver.link_alive.__func__:
+                continue
+            try:
+                if not cls.link_alive(session_link(cls, s.id, str(self.state_dir)), session_id=s.id,
+                                      state_dir=str(self.state_dir)):
+                    continue
+                self._start(s, resume=True)
+                out.append(s.id)
+            except Exception as e:  # noqa: BLE001 - a driver's own code: the other sessions go on
+                print(f"orbit: {s.name}: following its running agent: {type(e).__name__}: {e}", flush=True)
+        return out
 
     def resume_interrupted(self, why: str = "Orbit's server restarted") -> None:
         """After a restart: each session whose request the stopping server cut off goes on with it."""

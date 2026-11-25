@@ -100,6 +100,46 @@ class DeskPointsTest(test_skeleton.SkeletonTest):
         Driver.end(d)  # the default: close()
         d.close.assert_called_once_with()
 
+    def test_agents_that_outlive_the_server(self):
+        """(#31) link_alive: at start, a session whose agent still runs is followed (started with resume, no new
+        agent); a stopped one stays stopped. end_link: closing a session with no driver still ends its agent."""
+        from orbit.desk.session import DRIVERS
+        from orbit.drivers.base import Driver
+        running, asked, ended = set(), [], []
+
+        class Mux(DRIVERS["claude"]):
+            @classmethod
+            def link_alive(cls, link, session_id="", state_dir=""):
+                asked.append((link, session_id))
+                return session_id in running
+
+            @classmethod
+            def end_link(cls, link, session_id="", state_dir=""):
+                ended.append((link, session_id))
+        a, b = self.new_session("runs on"), self.new_session("stopped")
+        for x in (a, b):
+            self.desk.get(x["id"]).driver = None
+        running.add(a["id"])
+        (self.state / "harness-ids.json").write_text(json.dumps({"claude": {a["id"]: "conv-a"}}))
+        with mock.patch.dict(DRIVERS, {"claude": Mux}), mock.patch.object(self.desk, "_start") as start:
+            followed = self.desk.follow_living()
+            self.assertEqual(followed, [a["id"]])
+            start.assert_called_once_with(self.desk.get(a["id"]), resume=True)
+            self.assertIn(("conv-a", a["id"]), asked)  # (the linked conversation id; else the session's own)
+            self.assertIn((b["id"], b["id"]), asked)
+            self.req("POST", f"/api/sessions/{b['id']}/close", {})
+            for _ in range(50):
+                if ended:
+                    break
+                time.sleep(0.02)
+        self.assertEqual(ended, [(b["id"], b["id"])])
+        self.assertFalse(Driver.link_alive("x"))  # (the defaults: not followed, nothing ended)
+        self.assertIsNone(Driver.end_link("x"))
+        with mock.patch.object(self.desk, "_start") as start:
+            self.desk.follow_living()  # (a driver without link_alive is not asked)
+            start.assert_not_called()
+        (self.state / "harness-ids.json").unlink()
+
     def test_the_fleet_harness_and_model(self):
         code, e = self.req("POST", "/api/settings", {"fleet_harness": "nope"})
         self.assertEqual(code, 400)

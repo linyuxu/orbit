@@ -6,6 +6,7 @@
 <script>/* A phone gets the phone's app (web/m/), with the same query, unless it chose the desktop layout there. */
 try { if (window.top === window && matchMedia("(pointer: coarse) and (max-width: 820px)").matches && localStorage.getItem("orbit.forceDesktop") !== "1") location.replace("/m/" + location.search); } catch (e) {}</script>
 <title>Orbit</title>
+<script src="/src/scriptguard.js"></script>
 <link rel="stylesheet" href="/vendor/hljs-light.min.css" media="(prefers-color-scheme: light)">
 <link rel="stylesheet" href="/vendor/hljs-dark.min.css" media="(prefers-color-scheme: dark)">
 <script src="/vendor/markdown-it.min.js"></script>

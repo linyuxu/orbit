@@ -164,7 +164,8 @@ def _serve(a: argparse.Namespace, started: float, info: Path, ctl: dict) -> None
     plugin_services.start_all()  # the plugins' services: the server listens, they can call it
     plugin_items.start()  # (1.3) item sources refreshed by a command: in the background, every `every`
     # Requests the last server cut off when it stopped go on (their agents resume their conversations).
-    threading.Timer(1.0, desk.resume_interrupted).start()
+    # Agents that ran on outside Orbit (a driver's link_alive) are followed first: those requests go to them.
+    threading.Timer(1.0, lambda: (desk.follow_living(), desk.resume_interrupted())).start()
     # The index of conversations to resume (Resume another session): the file stores read once, in the background.
     warm = threading.Timer(5.0, lambda: desk.external_index.refresh(dict(DRIVERS), files_only=True))
     warm.daemon = True

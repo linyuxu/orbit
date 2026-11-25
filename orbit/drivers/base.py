@@ -219,16 +219,7 @@ class Driver:
         return Path(self.state_dir) / "harness-ids.json" if self.state_dir else None
 
     def linked(self, sid: str | None = None) -> str:
-        p = self._ids_path()
-        if not p:
-            return ""
-        with _ids_lock:
-            try:
-                ids = json.loads(p.read_text())
-            except (OSError, ValueError):
-                return ""
-        v = ids.get(self.harness, {}).get(sid or self.session_id, "")
-        return v if isinstance(v, str) else ""
+        return linked_id(self.state_dir, self.harness, sid or self.session_id)
 
     def link(self, conversation: str) -> None:
         p = self._ids_path()
@@ -268,8 +259,42 @@ class Driver:
     def alive(self) -> bool:
         raise NotImplementedError
 
+    # ------------------------------------------------------------------ agents that outlive the server
+    # For an agent running outside Orbit's processes (in a terminal multiplexer), which close() leaves running and a
+    # later server should take on. Asked with no instance: `link` is the session's conversation id as the driver
+    # linked it (link()), else the Orbit session's id (session_link()). (Not `alive`: that is the instance's process.)
+    @classmethod
+    def link_alive(cls, link: str, session_id: str = "", state_dir: str = "") -> bool:
+        """At the server's start: does this session's agent still run? True: the session is followed at once (its
+        driver made and started with resume=True, which takes the running agent on: no new one), so its state and
+        ⌘T work without a Resume. False (the default): it waits, stopped, for a request or Resume, as before."""
+        return False
+
+    @classmethod
+    def end_link(cls, link: str, session_id: str = "", state_dir: str = "") -> None:
+        """The user closed a session Orbit has no driver for (not followed since the server started): end its agent
+        all the same (as end() would). Default: nothing (no agent of it runs without its driver)."""
+
     def history(self) -> list[HistoryCard]:
         return []
+
+
+def linked_id(state_dir: str, harness: str, sid: str) -> str:
+    """The harness's conversation id linked to an Orbit session (harness-ids.json), or ""."""
+    if not state_dir:
+        return ""
+    with _ids_lock:
+        try:
+            ids = json.loads((Path(state_dir) / "harness-ids.json").read_text())
+        except (OSError, ValueError):
+            return ""
+    v = ids.get(harness, {}).get(sid, "") if isinstance(ids, dict) else ""
+    return v if isinstance(v, str) else ""
+
+
+def session_link(cls: type[Driver], sid: str, state_dir: str) -> str:
+    """What link_alive / end_link are asked about: the conversation id linked, else the session's own id."""
+    return linked_id(state_dir, cls.harness, sid) or sid
 
 
 def unavailable(harness: str) -> type[Driver]:

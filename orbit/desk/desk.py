@@ -27,6 +27,7 @@ from orbit.desk.requests import Requests
 from orbit.desk.layout import Layout
 from orbit.desk.sides import Sides
 from orbit.desk.session import ACTIVE, DEFAULT_GROUPS, DRIVERS, FLEET_GROUP, MODES, OPEN_IN, SETTINGS, Session
+from orbit.drivers.base import session_link
 from orbit.drivers.process import ProcessDriver
 from orbit.services.calendar import Calendar
 from orbit.services.live import config as live_config
@@ -258,11 +259,20 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
         drv, s.driver = s.driver, None
         if drv:  # the user closed it: end(), not close() (restarts and hand-offs call close())
             threading.Thread(target=getattr(drv, "end", drv.close), daemon=True).start()
+        elif s.harness in DRIVERS:  # no driver (not followed since the server started): its agent may run all the same
+            cls = DRIVERS[s.harness]
+            threading.Thread(target=self._end_link, args=(cls, s.id), daemon=True).start()
         threading.Thread(target=self.shells.close_key, args=(sid,), daemon=True).start()
         threading.Thread(target=self.shells.close_key, args=("term:" + sid,), daemon=True).start()  # (detaches only)
         s.state = "stopped"
         self.save()
         self.broadcast({"t": "closed", "id": sid, "session": s.public()})
+
+    def _end_link(self, cls, sid: str) -> None:
+        try:
+            cls.end_link(session_link(cls, sid, str(self.state_dir)), session_id=sid, state_dir=str(self.state_dir))
+        except Exception as e:  # noqa: BLE001 - a driver's own code: closing goes on
+            print(f"orbit: {sid}: end_link: {type(e).__name__}: {e}", flush=True)
 
     def reopen(self, sid: str) -> dict:
         """Bring a closed session back with its name; its process starts on the next send (or Resume)."""

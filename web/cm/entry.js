@@ -371,7 +371,8 @@ const noteTheme = EditorView.theme({
  *               zoom(url),                               — a click on a rendered image
  *               composer: { placeholder, attrs } })      — the input: UI font, conversation size, grows to 260px
  *                                                          (attrs: the content's, e.g. the phone keyboard's autocorrect)
- * Returns { view, getDoc(), setDoc(text, keepCursor), focus(), revealLine(text), posAt(x, y), insert(pos, text), markdown, language }.
+ * Returns { view, getDoc(), setDoc(text, keepCursor), focus(), revealLine(text), posAt(x, y), linkAt(x, y), insert(pos, text),
+ *           markdown, language }   (linkAt: the link at a point, {url} or {wiki}, or null: a link's context menu)
  */
 export function createEditor({ parent, doc, path, onChange, onOpenLink, extraKeys = [], wiki = null, preview = null, onFiles = null,
                               zoom = null, composer = null }) {
@@ -454,6 +455,13 @@ export function createEditor({ parent, doc, path, onChange, onOpenLink, extraKey
       if (keepCursor) view.scrollDOM.scrollTop = top;
     },
     focus: () => view.focus(),
+    linkAt(x, y) {
+      const pos = view.posAtCoords({ x, y });
+      if (pos == null) return null;
+      if (isMd && wiki) { const name = wikiAt(view, pos); if (name) return { wiki: name }; }
+      const url = linkAt(view, pos);
+      return url ? { url } : null;
+    },
     setPlaceholder: text => view.dispatch({ effects: ph.reconfigure(cmPlaceholder(text || "")) }),
     find: (q, dir = 0) => runFind(view, q, dir),
     clearFind: () => view.dispatch({ effects: setFind.of({ q: "", deco: Decoration.none }) }),

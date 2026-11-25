@@ -109,7 +109,9 @@ class HarnessCases:
     def test_listed_with_models(self):
         _, d = self.req("GET", "/api/harnesses")
         h = {x["id"]: x for x in d["harnesses"]}
-        self.assertEqual(set(h), {"claude", "codex", "agy", "opencode"})
+        from orbit.desk.session import DRIVERS
+        self.assertEqual(set(h), set(DRIVERS))  # (every registered one: a build may add its own)
+        self.assertLessEqual({"claude", "codex", "agy", "opencode"}, set(h))  # (the built-ins at least)
         self.assertEqual(h["codex"]["label"], "Codex")
         self.assertEqual([m["value"] for m in h["codex"]["models"]], ["fake-5"])
         self.assertEqual([m["value"] for m in h["agy"]["models"]], ["fake-pro", "fake-flash"])

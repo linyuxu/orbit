@@ -186,6 +186,16 @@ as before. History rebuilds the same: Claude Code's transcript starts such a tur
 `close` ends the process when the server stops or hands off, or a setting changed (a new process resumes the
 conversation); `end` (optional, default `close`) when the user closed the session: a driver whose agent outlives it
 (one in a terminal multiplexer, left running by `close` for the next server) ends the agent there.
+Such an agent pairs that with two optional classmethods, asked with no instance; `link` is the session's
+conversation id as the driver linked it (`link()`), else the Orbit session's id; `session_id` and `state_dir` come as
+keywords. (Not named `alive`: that is the instance's own process.)
+- `link_alive(link) -> bool`: at the server's start, before the requests a restart cut off go on
+  (`Desk.follow_living`): True, the session is followed at once (its driver made and started with `resume=True`, which
+  takes the running agent on: no new one), so its state and ⌘T work without a Resume. False (the default): it stays
+  stopped until a request or Resume, as before. A driver that does not define it is not asked.
+- `end_link(link)`: the user closed a session Orbit has no driver for (not followed since the start): end its agent
+  all the same. Default: nothing.
+
 Class attributes and methods say what the harness offers:
 
 | | |

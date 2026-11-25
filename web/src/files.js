@@ -103,7 +103,7 @@ function mountFile(path, ed, f) {
     ed.ed = CM.createEditor({
       parent: ed.host, doc: f.text, path,
       onChange: () => fileEdited(path),
-      onOpenLink: url => openUrl(url),
+      onOpenLink: url => openDocLink(url, path),
       extraKeys: [{ key: "Mod-s", run: () => { saveCurrent(); return true; } }],
       wiki: isNote(path) ? { open: name => openWiki(name, path), names: () => S.noteNames } : null,
       preview: { resolve: (src, embed) => previewSrc(src, embed, path), inline: previewInline },
@@ -111,6 +111,15 @@ function mountFile(path, ed, f) {
       zoom: url => openLightbox(url),
     });
     applyReveal(path);
+    if (!ed.host.dataset.linkmenu) {  // a link's own menu (right-click on it): how to open it
+      ed.host.dataset.linkmenu = "1";
+      ed.host.addEventListener("contextmenu", e => {
+        const l = ed.ed && ed.ed.linkAt && ed.ed.linkAt(e.clientX, e.clientY);
+        if (!l || l.wiki) return;
+        e.preventDefault();
+        linkMenu(l.url, path, { at: { x: e.clientX, y: e.clientY } });
+      });
+    }
   } else if (f.kind === "image") {
     ed.host.innerHTML = `<div class="imgview"><img src="/api/raw?path=${encodeURIComponent(path)}&v=${f.mtime}" alt=""></div>`;
     ed.host.querySelector("img").addEventListener("click", e => openLightbox(e.target.src));
@@ -134,6 +143,49 @@ function previewSrc(src, embed, docPath) {
     p = parts.join("/");
   }
   return rawUrl(p);
+}
+/* A link in a document. A web address (or orbit://) opens as before; a file's (beside the document: relative to its
+   folder; ~/…, absolute, file://) opens in Orbit when it is text, else in its default app (a PDF in Preview); a
+   folder in the Finder. how: "auto", "orbit" (in Orbit whatever it is: an image, a PDF show here too), "finder". */
+const isWebLink = url => /^[a-z][a-z0-9+.-]*:/i.test(url) && !/^file:/i.test(url);
+function linkPath(url, docPath) {
+  let p = String(url).trim().replace(/^<|>$/g, "");
+  if (/^file:/i.test(p)) p = p.replace(/^file:(\/\/(localhost)?)?/i, "");
+  p = p.replace(/[?#].*$/, "");  // (a heading or a page in it: the file)
+  try { p = decodeURIComponent(p); } catch {}
+  if (p === "~" || p.startsWith("~/") || p.startsWith("/")) return p;
+  const parts = dirname(docPath).split("/");
+  for (const seg of p.split("/")) { if (seg === "..") { if (parts.length > 1) parts.pop(); } else if (seg && seg !== ".") parts.push(seg); }
+  return parts.join("/") || "/";
+}
+async function openDocLink(url, docPath, how = "auto") {
+  if (isWebLink(url)) return openUrl(url);
+  const p = linkPath(url, docPath);
+  if (how === "finder") return openExternal(p, "finder");
+  let info;
+  try { info = await api("GET", `/api/file?path=${encodeURIComponent(p)}`); }
+  catch (e) {
+    if (/is a folder/.test(e.message)) return openExternal(p, "default");  // (a folder: the Finder)
+    toast(`Cannot open ${tilde(p)}: ${/No such file|not found|no such/i.test(e.message) ? "no such file" : e.message}`);
+    return;
+  }
+  if (how === "orbit" || info.kind === "text") openFile(info.path, { pinned: true });
+  else openExternal(info.path, "default");
+}
+/* A link's menu: a file's (Open · Open in Orbit · Reveal in Finder · Copy path), a web address's (Open · Copy). */
+function linkMenu(url, docPath, where) {
+  if (isWebLink(url)) {
+    menu([{ label: "Open link", run: () => openUrl(url) }, { label: "Copy link", run: () => copyText(url) }], where);
+    return;
+  }
+  const p = linkPath(url, docPath);
+  menu([
+    { label: "Open", run: () => openDocLink(url, docPath) },
+    { label: "Open in Orbit", run: () => openDocLink(url, docPath, "orbit") },
+    { label: "Reveal in Finder", run: () => openDocLink(url, docPath, "finder") },
+    { sep: true },
+    { label: "Copy path", run: () => copyText(p) },
+  ], where);
 }
 /* A table cell: inline Markdown, with [[links]] (`\|` already unescaped) as clickable names. */
 function previewInline(text) {
