@@ -33,7 +33,7 @@ function applyLayout(L, rev) {
   }
   LAYOUT.sent = JSON.stringify(layoutNow());
   LS.set("ftabs", S.ftabs); LS.set("tabOrder", S.tabOrder); LS.set("sides", S.sides);
-  if (S.file && !fileTabs().some(t => t.path === S.file)) { S.file = null; showCurrent(false); }
+  if (S.file && S.file !== HOME && !fileTabs().some(t => t.path === S.file)) { S.file = null; showCurrent(false); }
   else { renderTabs(); renderSide(); renderReviewBadge(); }
 }
 async function loadLayout() {

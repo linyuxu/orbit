@@ -132,7 +132,7 @@ function setSessions(list, groups) {
     const sid = want.startsWith("s:") ? want.slice(2) : want.startsWith("f:") ? null : want;
     S.current = sid && S.sessions.has(sid) && inView(S.sessions.get(sid)) ? sid : (tabIds()[0] || null);
   }
-  if (S.file && !fileTabs().some(t => t.path === S.file)) S.file = null;
+  if (S.file && S.file !== HOME && !fileTabs().some(t => t.path === S.file)) S.file = null;  // (a group's home is no file tab: kept)
 }
 function saveUi() {
   if (EMBED) return;
