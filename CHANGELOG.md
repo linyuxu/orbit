@@ -8,6 +8,8 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- ⌥D kills the word after the cursor and ⌥⌫ the word before it in the editors (the input, code, Markdown), as in
+  Emacs: into the kill ring (⌃Y yanks it back), presses in a row make one kill. (⌥D used to type “∂”.)
 - Extension points, so a customized build needs no core patches (request #29):
   - `Driver.end()`: closing a session calls it (default: `close()`); a server restart, a hand-off or a changed setting
     still calls `close()`. A driver whose agent outlives it (in a terminal multiplexer) ends the agent only on `end()`.

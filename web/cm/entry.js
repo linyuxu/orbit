@@ -123,7 +123,25 @@ function kill(view, text, append = false) {
   if (!text) return;
   if (append && killRing.length) killRing[0] += text; else killRing.unshift(text);
   killRing = killRing.slice(0, 30);
-  try { navigator.clipboard.writeText(killRing[0]); } catch {}
+  navigator.clipboard?.writeText(killRing[0])?.catch(() => {});
+}
+// ⌥D / ⌥⌫: kill the word after / before the cursor (into the kill ring: ⌃Y yanks it back); presses in a row, the
+// cursor where the last left it, make one kill (⌥D appends, ⌥⌫ prepends), as in Emacs.
+let lastWordKill = null;  // {view, pos, at}
+function killWord(view, forward) {
+  const r = view.state.selection.main, from = r.head;
+  const to = view.moveByGroup(EditorSelection.cursor(from), forward).head;
+  if (to === from) return true;
+  const [a, b] = forward ? [from, to] : [to, from], text = view.state.sliceDoc(a, b);
+  const l = lastWordKill, more = l && l.view === view && l.pos === from && Date.now() - l.at < 4000 && killRing.length;
+  if (more && forward) killRing[0] += text;
+  else if (more) killRing[0] = text + killRing[0];
+  else kill(view, text);
+  if (more) navigator.clipboard?.writeText(killRing[0])?.catch(() => {});
+  view.dispatch({ changes: { from: a, to: b }, selection: { anchor: a }, effects: setMark.of(null), scrollIntoView: true,
+                  userEvent: forward ? "delete.forward" : "delete.backward" });
+  lastWordKill = { view, pos: a, at: Date.now() };
+  return true;
 }
 function regionText(view) {
   const r = view.state.selection.main;
@@ -176,10 +194,12 @@ const emacsKeys = [
       kill(v, v.state.sliceDoc(r.head, to));
       v.dispatch({ changes: { from: r.head, to }, userEvent: "delete.cut" });
       return true; } },
+  { key: "Alt-d", run: v => killWord(v, true) },
+  { key: "Alt-Backspace", run: v => killWord(v, false) },
   { key: "Ctrl-y", run: v => {
       const ins = text => { const r = v.state.selection.main; v.dispatch({ changes: { from: r.from, to: r.to, insert: text }, selection: { anchor: r.from + text.length }, userEvent: "input.paste" }); };
       if (killRing.length) ins(killRing[0]);
-      else navigator.clipboard.readText().then(ins, () => {});
+      else navigator.clipboard?.readText()?.then(ins, () => {});
       return true; } },
   { key: "Ctrl-/", run: undo },
   { key: "Mod-z", run: undo }, { key: "Mod-Shift-z", run: redo },

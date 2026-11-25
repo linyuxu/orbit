@@ -284,7 +284,7 @@ const SHORTCUTS = [
     ["⌃K · ⌃U · ⌃Y", "Kill to the end / to the start · yank what ⌃K ⌃U ⌃W ⌥D ⌥⌫ killed"],
   ]],
   ["Editors (code and Markdown)", [
-    ["⌃Space · ⌃G", "Set mark · cancel (⌃A ⌃E ⌃F ⌃B ⌃N ⌃P ⌥F ⌥B extend the region while the mark is set)"], ["⌃W · ⌥W · ⌃Y", "Cut region · copy region · yank"], ["⌃V · ⌥V", "Page down / up"],
+    ["⌃Space · ⌃G", "Set mark · cancel (⌃A ⌃E ⌃F ⌃B ⌃N ⌃P ⌥F ⌥B extend the region while the mark is set)"], ["⌃W · ⌥W · ⌃Y", "Cut region · copy region · yank"], ["⌥D · ⌥⌫ · ⌃K", "Kill a word forward / back (presses in a row make one kill) · to the end of the line"], ["⌃V · ⌥V", "Page down / up"],
     ["⌃S · ⌃R", "Incremental search: open the find bar, then next / previous match; Esc closes"],
     ["⌃L", "Recenter (middle, top, bottom)"], ["⌥⇧, · ⌥⇧.", "Top / end of the document"], ["Tab · ⇧Tab", "Indent / outdent (Tab never leaves the editor)"],
     ["⌃/ · ⌘Z ⌘⇧Z", "Undo · undo / redo"], ["⌃X H", "Select all"], ["⌥-click · ⌘-click", "Edit a link's text · open it (a plain click opens it in Markdown)"],
