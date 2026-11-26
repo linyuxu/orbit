@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- ⌘O → Files has every project: the files of every open session's folder (this machine's and the connected
+  ones'), the current one's first (with its git status); each says its project ("orbit/web/src"), whose name is
+  matched too. All Files is that and the homes. In every fuzzy filter a space only parts the words ("orbit readme").
 - ⌘⇧O comes back from an agent's page beside: the page runs in its own origin, so Orbit never saw the keys pressed
   in it. Its server now puts a small script in it that passes Orbit's own keys (⌘⇧O, ⌘W, ⌥⇧[ ], ⌘\, ⌘1…9, ⌘O, ⌘K…)
   to Orbit, which takes only those, only from a web side tab; the page's own keys stay its own. A website beside

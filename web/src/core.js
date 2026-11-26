@@ -159,7 +159,8 @@ async function copyText(s) { try { await navigator.clipboard.writeText(s); toast
 /* Fuzzy match: every query character in order; bonus for runs and word starts. -1 = no match. */
 function fuzzy(q, text) {
   if (!q) return 0;
-  q = q.toLowerCase();
+  q = q.toLowerCase().replace(/\s+/g, "");  // (a space only parts the words: "orbit readme" is in "orbit/README.md")
+  if (!q) return 0;
   const t = String(text || "").toLowerCase();
   let i = 0, score = 0, last = -2;
   for (let k = 0; k < t.length && i < q.length; k++) {

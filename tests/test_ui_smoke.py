@@ -584,6 +584,37 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             self.assertFalse(page.evaluate("sideFocused()"), name)
             page.evaluate("closeAllSides()")
 
+    def test_open_files_has_every_session_folder(self):
+        a, b = self.group("Open A"), self.group("Open B")
+        roots = {}
+        for name, g in (("op-here", a), ("op-there", b)):
+            d = Path(self.work) / name
+            (d / "lib").mkdir(parents=True, exist_ok=True)
+            (d / "lib" / "shared_util.py").write_text("x = 1\n")
+            (d / f"{name}-only.txt").write_text("y\n")
+            code, sess = self.req("POST", "/api/sessions", {"cwd": str(d), "name": name})
+            self.req("POST", f"/api/sessions/{sess['id']}/update", {"group": g})
+            roots[name] = (sess["id"], os.path.realpath(d))
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"switchTo({json.dumps(roots['op-here'][0])})")
+            page.wait_for_timeout(400)
+            page.evaluate("openFinder('Files')")
+            page.wait_for_selector(".finder .ptab.cur")
+            page.wait_for_timeout(800)
+            page.fill(".finder .fq", "op-there-only")  # (a file of another group's session folder)
+            page.wait_for_timeout(300)
+            self.assertIn("op-there-only.txt", page.inner_text(".finder .flist .frow"), name)
+            page.fill(".finder .fq", "shared_util")  # (in both: this session's folder first)
+            page.wait_for_timeout(300)
+            self.assertIn("op-here/lib", page.inner_text(".finder .flist .frow"))
+            page.fill(".finder .fq", "op-there shared")  # (the folder's name counts)
+            page.wait_for_timeout(300)
+            self.assertIn("op-there/lib", page.inner_text(".finder .flist .frow"))
+            page.press(".finder .fq", "Enter")
+            page.wait_for_timeout(800)
+            self.assertEqual(page.evaluate("S.file"), roots["op-there"][1] + "/lib/shared_util.py")
+
     def test_space_folds_a_group_in_the_left_panel(self):
         gid = self.group("Foldme")
         sid = self.session_in(gid, "inside")

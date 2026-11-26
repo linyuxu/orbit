@@ -34,7 +34,7 @@ function finder({ title, tabs, start = 0, opener, lead }) {  // lead(q): items a
   const draw = () => {
     const s = q.value.trim();
     const server = !!tabs[t].search;  // the server already matched these
-    const shown = s && !server ? all.map(it => ({ it, sc: Math.max(idScore(s, it.ids), fuzzy(s, it.label), fuzzy(s, it.match || "") - 1) })).filter(x => x.sc >= 0)
+    const shown = s && !server ? all.map(it => { const sc = Math.max(idScore(s, it.ids), fuzzy(s, it.label), fuzzy(s, it.match || "") - 1); return { it, sc: sc >= 0 ? sc + (it.boost || 0) : sc }; }).filter(x => x.sc >= 0)
       .sort((a, b) => b.sc - a.sc).slice(0, 400).map(x => x.it) : all.slice(0, 400);
     if (lead && s) shown.unshift(...lead(s));
     const withLive = !!tabs[t].live && s.length >= 2;
@@ -153,17 +153,29 @@ function sessionItem(s, { detail, side } = {}) {
     menu: s.closed ? null : where => tabMenu(s.id, where),
   };
 }
+/* The Files tab: every file of every open session's folder (this machine's and the connected ones'; a folder inside
+   another counted once), the current one's first. Each says its folder ("project/dir"), and the folder's name is
+   matched too ("orbit readme"). A folder listed before is used at once (and listed again meanwhile); the others are
+   listed together. */
 async function fileItems(side) {
-  const root = ctxRoot();
-  if (!root) return [];
-  await refreshTree(root);
-  const t = S.trees.get(root);
-  return (t && t.files || []).map(f => ({
-    label: basename(f), detail: f.includes("/") ? dirname(f) : "", match: f, icon: "file",
-    tag: t.status[f] ? (t.status[f] === "?" ? "U" : t.status[f]) : "",
-    run: () => openFile(root + "/" + f, { side }), alt: () => openFile(root + "/" + f, { pinned: true, side }),
-    menu: where => fileMenu(root + "/" + f, where),
-  }));
+  const cur = typeof filesRoots === "function" ? filesRoots().cur : ctxRoot();
+  const seen = [...new Set([cur, ...[...S.sessions.values()].filter(s => !s.fleet && s.cwd && machineOk(s)).map(s => s.cwd)].filter(Boolean))];
+  const roots = seen.filter(r => !seen.some(o => o !== r && r.startsWith(o + "/")));  // (the outermost of nested ones)
+  await Promise.all(roots.map(r => S.trees.has(r) ? (refreshTree(r), null) : refreshTree(r)));
+  const out = [];
+  for (const root of roots) {
+    const t = S.trees.get(root); if (!t || t.error) continue;
+    const name = basename(root.replace(/^\/@[^/]+/, "")) || root, machine = (/^\/@([^/]+)/.exec(root) || [])[1] || "";
+    const here = root === cur || (cur && cur.startsWith(root + "/"));
+    for (const f of t.files || []) {
+      const st = here && t.status[f];
+      out.push({ label: basename(f), detail: name + (f.includes("/") ? "/" + dirname(f) : ""), match: name + "/" + f, icon: "file",
+        tag: st ? (st === "?" ? "U" : st) : machine, boost: here ? 0.5 : 0,
+        run: () => openFile(root + "/" + f, { side }), alt: () => openFile(root + "/" + f, { pinned: true, side }),
+        menu: where => fileMenu(root + "/" + f, where) });
+    }
+  }
+  return out;
 }
 /* The All Files tab: file names in every open session's folder and in the home folders (this machine's, and each
    machine this server reaches: their paths /@NAME/…), matched by the server (GET /api/findfiles). */
@@ -211,7 +223,7 @@ function openFinder(start, { side = false, opener } = {}) {
       const closed = all.filter(s => s.closed && s.named).sort((a, b) => (b.closed_at || 0) - (a.closed_at || 0));
       return [...open, ...closed].map(s => sessionItem(s, { side }));
     } },
-    { name: "Files", empty: ctxRoot() ? "No files." : "Open a session to list its folder.", items: () => fileItems(side) },
+    { name: "Files", empty: "No session folders: open a session (All Files also looks in the homes).", items: () => fileItems(side) },
     { name: "All Files", empty: "Type to search file names in every session's folder and in the home folder, on this Mac and on the machines it reaches.",
       search: t => allFileItems(t, side) },
     { name: "Notes", empty: S.vault ? "No notes yet: ⌘⇧D opens this week's." : "No vault: Settings → Notes.", items: () => noteItems(side), live: (t, signal) => noteSearch(t, signal, side) },
