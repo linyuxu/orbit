@@ -4,11 +4,11 @@
    (network first: an update shows at the next start, not the one after; the server is the user's own machine), and
    from the cache when it does not (offline, or the tailnet away). /api/* is never cached (live data, the event
    stream, uploads), nor the manifest (it carries the token). */
-const CACHE = "orbit-m-32";
+const CACHE = "orbit-m-33";
 const WAIT = 2000;
 const SHELL = [
   "/m/", "/m/m.css", "/m/m-core.js", "/m/m-cards.js", "/m/m-list.js", "/m/m-conv.js", "/m/m-voice.js", "/m/m-sheets.js",
-  "/m/m-tabs.js", "/m/m-files.js", "/m/m-side.js", "/m/m-notes.js", "/m/m-misc.js", "/m/m-pviews.js", "/m/m.js",
+  "/m/m-tabs.js", "/m/m-files.js", "/m/m-side.js", "/m/m-notes.js", "/m/m-misc.js", "/m/m-push.js", "/m/m-pviews.js", "/m/m.js",
   "/m/icon-192.png", "/m/apple-touch-icon.png",
   "/styles/base.css", "/src/scriptguard.js", "/src/markdown-base.js", "/src/markdown.js", "/src/brands.js", "/src/fileicons.js", "/src/voice-core.js", "/src/cardpatch.js",
   "/vendor/markdown-it.min.js", "/vendor/highlight.min.js", "/vendor/katex.min.js", "/vendor/katex.min.css",
@@ -50,18 +50,28 @@ self.addEventListener("fetch", e => {
   }));
 });
 
-/* Next phase: push notifications ("#12 finished"). The server sends {title, body, sid}; a tap opens that session.
-   Nothing subscribes yet, so these never fire. */
+/* Push notifications (orbit/services/push.py sends; Misc → Notifications subscribes): {title, body, sid, url, tag}.
+   A tap opens the notification's session: the running app is brought to the front and told {t:"open", sid} (m-push.js
+   opens it); with none running, the app starts at /m/#s/<sid>. Only this app's own pages are opened. */
+const pushUrl = d => {
+  const sid = typeof d.sid === "string" ? d.sid : "";
+  return "/m/" + (sid ? "#s/" + encodeURIComponent(sid) : "");
+};
 self.addEventListener("push", e => {
   let d = {};
-  try { d = e.data ? e.data.json() : {}; } catch {}
-  e.waitUntil(self.registration.showNotification(d.title || "Orbit", { body: d.body || "", tag: d.sid || "orbit", data: { sid: d.sid || "" }, icon: "/m/icon-192.png" }));
+  try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : "" }; }
+  if (!d || typeof d !== "object") d = {};
+  const sid = typeof d.sid === "string" ? d.sid : "";
+  e.waitUntil(self.registration.showNotification(String(d.title || "Orbit"), {
+    body: String(d.body || ""), tag: String(d.tag || sid || "orbit"), data: { sid, url: pushUrl(d) }, icon: "/m/icon-192.png" }));
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();
-  const sid = (e.notification.data || {}).sid, url = "/m/" + (sid ? "#s/" + encodeURIComponent(sid) : "");
-  e.waitUntil(self.clients.matchAll({ type: "window" }).then(ws => {
-    const w = ws.find(x => new URL(x.url).pathname.startsWith("/m"));
-    return w ? w.navigate(url).then(x => (x || w).focus()) : self.clients.openWindow(url);
+  const d = e.notification.data || {}, sid = typeof d.sid === "string" ? d.sid : "", url = pushUrl(d);
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async ws => {
+    const w = ws.find(x => new URL(x.url).origin === location.origin && new URL(x.url).pathname.startsWith("/m"));
+    if (!w) return self.clients.openWindow(url);
+    try { await w.focus(); } catch {}
+    w.postMessage({ t: "open", sid });
   }));
 });

@@ -8,6 +8,18 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Notifications on the phone's lock screen (Web Push), sent by Orbit's server itself: Misc → Notifications turns them
+  on (a tap: the browser asks, the app subscribes with the server's VAPID key; iPhone: Orbit on the Home Screen from
+  its HTTPS address), Send a test, Remind me, the last sends with the push service's answer, Turn off. A tap on a
+  notification opens its session (the running app, or a cold start at `/m/#s/<id>`). Two senders: a reminder (a
+  schedule with `notify`: `orbit-agent remind WHEN TEXT`, once or repeating; the server sends it, no agent wakes) and
+  an agent (`orbit-agent notify TITLE BODY`, pointing at its session). Each reminder's due time reaches a device once,
+  also when it fires again after a restart (a key per due time and device, `<state>/push/sent.json`); `--key` does
+  the same for an agent's retry. Only push services' hosts are sent to (Apple, Google, Mozilla, Windows; https, no
+  redirects); a device that unsubscribed (404 / 410) is forgotten. RFC 8291 / 8292 in the standard library
+  (orbit/services/webpush.py: P-256, ECDSA with RFC 6979, AES-128-GCM), checked against the RFCs' vectors.
+  `GET/POST /api/push`, `/api/push/subscribe`, `/unsubscribe`, `/send`, behind the pairing token like every `/api`.
+  Ordinary schedules wake their agent as before.
 - The user's own words to another session: `orbit-agent relay SESSION WORDS` (when the user asks an agent to pass
   something on, e.g. by voice). The receiver gets the words alone (no "(from session …)"); its card says they are the
   user's, via that session (`origin.kind: "user-relay"`, with what proves it; `orbit-agent read` shows it). Orbit

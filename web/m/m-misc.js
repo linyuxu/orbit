@@ -24,6 +24,7 @@ function miscChanged() { for (const p of miscPages()) p.refresh(); }
 async function loadMisc() {
   loadPluginUi();  // (m-pviews.js: the plugins' views, listed below)
   loadUsage();
+  if (!PUSH.st) pushLoad();
   const [st, sc] = await Promise.all([api("GET", "/api/settings").catch(() => null), api("GET", "/api/schedules").catch(() => null)]);
   if (st) S.settings = st;
   if (sc) S.schedules = sc.schedules || [];
@@ -55,7 +56,8 @@ function miscRootPage() {
     page.body.innerHTML = `<div class="rows">` +
       navRow({ attrs: `data-open="calendar"`, icon: I("calendar", 18), name: "Calendar", hint: calHint }) +
       navRow({ attrs: `data-open="schedules"`, icon: I("clock", 18), name: "Schedules", hint: S.schedules == null ? "" : on.length ? esc(fmtNext(on[0].next)) : "none" }) +
-      navRow({ attrs: `data-open="usage"`, icon: I("monitor", 18), name: "Usage", hint: usageHint() }) + `</div>` +
+      navRow({ attrs: `data-open="usage"`, icon: I("monitor", 18), name: "Usage", hint: usageHint() }) +
+      navRow({ attrs: `data-open="push"`, icon: I("bell", 18), name: "Notifications", hint: pushHint() }) + `</div>` +
       `<div class="rows"><div class="mrow awake"><span class="aw-t"><span class="nm">Keep the screen on</span><span class="sub">While Orbit is open (always in a voice call); dark after a minute untouched</span></span>` +
       `<button class="switch${keepAwake() ? " on" : ""}" data-awake role="switch" aria-checked="${keepAwake()}" aria-label="Keep the screen on"><span></span></button></div></div>` +
       pluginRowsHtml();
@@ -65,7 +67,8 @@ function miscRootPage() {
     const pv = e.target.closest("[data-pview]"); if (pv) { openPluginView(+pv.dataset.pview); return; }
     if (e.target.closest("[data-awake]")) { LS.set("keepAwake", !keepAwake()); holdScreen(awakeWanted()); page.refresh(); return; }
     const r = e.target.closest("[data-open]"); if (!r) return;
-    pushPage(r.dataset.open === "calendar" ? calendarPage() : r.dataset.open === "usage" ? usagePage() : schedulesPage(), "misc");
+    const o = r.dataset.open;
+    pushPage(o === "calendar" ? calendarPage() : o === "usage" ? usagePage() : o === "push" ? notifPage() : schedulesPage(), "misc");
   });
   page.refresh();
   loadMisc();
@@ -188,7 +191,7 @@ function schedulesPage() {
       const st = !it.enabled ? "stopped" : it.last && it.last.error ? "err" : "ok";
       return `<div class="schrow${it.enabled ? "" : " off"}" data-sch="${esc(it.id)}" role="button" tabindex="0"><span class="sdot ${st}"></span>` +
         `<span class="tx"><span class="t1"><span class="nm">${esc(it.name)}</span></span>` +
-        `<span class="t2">${it.check ? `<span class="watch">watch</span> ` : ""}${esc(it.describe)} → ${esc(it.target_name || "")}</span>` +
+        `<span class="t2">${it.check ? `<span class="watch">watch</span> ` : it.notify ? `<span class="watch">reminder</span> ` : ""}${esc(it.describe)} → ${esc(it.target_name || "")}</span>` +
         `<span class="t2">${it.enabled ? `next ${esc(fmtNext(it.next) || "—")}` : "off"} · ${lastLine(it)}</span></span>` +
         `<button class="switch${it.enabled ? " on" : ""}" data-toggle="${esc(it.id)}" role="switch" aria-checked="${it.enabled}" aria-label="${it.enabled ? "Pause" : "Resume"} ${esc(it.name)}"><span></span></button></div>`;
     }).join("") + `</div>` : emptyBox("No schedules yet", "A schedule sends a request to a session at set times: every 2h, weekdays 9am. Make one in Orbit on the Mac, or ask an agent: <code>orbit-agent wake 30m \"check CI\"</code>.");
@@ -206,7 +209,7 @@ function schedulesPage() {
     const r = e.target.closest("[data-sch]"), it = r && find(r.dataset.sch); if (!it) return;
     actionSheet(`${it.name} · ${it.describe}`, [
       { label: "Run now", icon: "play", run: async () => {
-        try { const x = await api("POST", `/api/schedules/${encodeURIComponent(it.id)}/run`); toast(x.last && x.last.error ? "Could not run: " + x.last.error : `Sent to ${x.target_name}${x.last && x.last.cid ? " as #" + x.last.cid : ""}`); }
+        try { const x = await api("POST", `/api/schedules/${encodeURIComponent(it.id)}/run`); toast(x.last && x.last.error ? "Could not run: " + x.last.error : x.notify ? `Sent to ${(x.last.push || {}).sent || 0} device(s)` : `Sent to ${x.target_name}${x.last && x.last.cid ? " as #" + x.last.cid : ""}`); }
         catch (err) { toast(err.message); }
       } },
       { label: it.enabled ? "Pause" : "Resume", icon: it.enabled ? "pause" : "play", run: () => toggle(it) },

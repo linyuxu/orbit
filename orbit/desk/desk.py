@@ -61,6 +61,7 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
         self.show_dir = state_dir / "show"  # pages agents show with `orbit-agent show`
         self.scheduler = None  # orbit.services.schedule.Scheduler, attached by the server
         self.live = None  # orbit.services.live.Live: the GPT Live voice call, attached by the server
+        self.push = None  # orbit.services.push.Push: Web Push to the phone (push.of(desk) makes it)
         self.federation = None  # orbit.machines.federation.Federation: other machines' sessions, attached by the server
         from orbit.desk.external_index import ExternalIndex
         self.external_index = ExternalIndex(self.broadcast)  # conversations to resume (Resume another session)

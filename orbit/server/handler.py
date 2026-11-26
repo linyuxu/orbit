@@ -674,6 +674,9 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             return self._json(self.desk.get_ctx())
         if p == "/api/schedules":
             return self._json({"schedules": self.desk.scheduler.list(), "now": time.time()})
+        if p == "/api/push":  # the phone's notifications: the VAPID public key, the devices, the last sends
+            from orbit.services import push
+            return self._json(push.of(self.desk).status())
         if p == "/api/version":
             from orbit import API_VERSION, __version__
             return self._json({"version": __version__, "api": f"{API_VERSION[0]}.{API_VERSION[1]}"})
@@ -1074,6 +1077,26 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     return self._json({"error": str(e), "busy": {"call": e.call.id, "sid": e.call.sid}}, 409)
                 except ValueError as e:
                     return self._json({"error": str(e)}, 502 if str(e).startswith(("OpenAI", "could not reach")) else 400)
+            if p.startswith("/api/push"):  # Web Push (orbit/services/push.py): behind the token, as every /api call
+                from orbit.services import push
+                pu = push.of(self.desk)
+                if p == "/api/push":  # the status, and whether this device's subscription is one of them
+                    return self._json(pu.status(str(b.get("endpoint") or "")))
+                if p == "/api/push/subscribe":
+                    return self._json({"subscription": pu.subscribe(b.get("subscription"), str(b.get("label") or "")),
+                                       **pu.status(str((b.get("subscription") or {}).get("endpoint") or ""))})
+                if p == "/api/push/unsubscribe":
+                    gone = pu.unsubscribe(str(b.get("endpoint") or ""), str(b.get("id") or ""))
+                    return self._json({"removed": gone, **pu.status()})
+                if p == "/api/push/send":  # orbit-agent notify; the phone's "Send a test" (to itself: endpoint)
+                    sid = str(b.get("sid") or "")
+                    if sid and sid not in self.desk.sessions:
+                        raise KeyError(sid)
+                    only = pu.sub_id(str(b["endpoint"])) if b.get("endpoint") else str(b.get("sub") or "")
+                    if b.get("endpoint") and not pu.status(str(b["endpoint"]))["subscribed"]:
+                        return self._json({"error": "this device is not subscribed"}, 404)
+                    return self._json(pu.notify(str(b.get("title") or ""), str(b.get("body") or ""), sid,
+                                                key=str(b.get("key") or ""), sub=only, via=str(b.get("via") or "api")[:40]))
             if p == "/api/schedules":
                 return self._json(self.desk.scheduler.create(b))
             if p == "/api/schedules/parse":

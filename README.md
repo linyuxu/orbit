@@ -270,6 +270,8 @@ orbit-agent ask "which test covers the parser?"        # a Fleet helper in this 
 orbit-agent note "found the cause: the cache key ignores the locale"   # to the journal: under today in this week's note
 orbit-agent note --new "Projects/Cache bug"                            # a new note; prints its path
 orbit-agent wake 30m "check whether the deploy finished"               # wake this session later
+orbit-agent notify "Report ready" "Q3 numbers are in"                  # to the user's phone (lock screen); a tap opens this session
+orbit-agent remind "daily 08:00" "Standup notes" --title Standup       # a reminder to the phone at its times; no agent wakes
 orbit-agent schedule add "weekdays 9am" "summarize last night's CI" --folder ~/proj   # a new session each run
 orbit-agent calendar --days 2                                          # the user's meetings (when Calendar is on)
 ```
@@ -284,6 +286,11 @@ pause/resume · R run now · O journal · L last run · ⌫ remove · ⌘E menu;
 target (a session, a folder, the Fleet), a watch's check command and the guards. Misc lists Calendar and Schedules,
 each with what is next.
 
+- **Reminder** (`notify`): sent to the phone's lock screen at its times by the server itself, no agent woken
+  (`orbit-agent remind WHEN TEXT`, or Misc → Notifications → Remind me on the phone); a tap opens its session. Each due
+  time is sent once per device, also when it fires again after a restart. The phone turns notifications on in Misc →
+  Notifications (iPhone: Orbit added to the Home Screen from its HTTPS address); the server sends them itself (Web
+  Push, `<state>/push/`: its VAPID keys, the devices, what was sent and the push service's answer).
 - **Watch**: `orbit-agent schedule watch --every 30s --check CMD TEXT` runs CMD on its interval with no agent and no
   cost; each line it prints is an event (JSON with an `id`, or text). Only new events wake the agent, with TEXT and the
   events; the first run only learns what is there (`--include-existing` to act on it). `schedule check ID` tries it.

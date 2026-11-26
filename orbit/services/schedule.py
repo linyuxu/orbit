@@ -11,6 +11,10 @@ When (what people type; `parse` normalizes it):
     in 30m · in 2h                        once, that long from now
     cron 0 9 * * 1-5 · 0 9 * * 1-5        a 5-field cron (minute hour day month weekday), for what the rest cannot say
 
+A reminder (`notify`) sends its text to the phone's lock screen at its times (orbit/services/push.py) and wakes no
+agent; its session, if it names one, is what a tap opens. Each time it is due is sent once: the key is the schedule
+and that time, so a run fired again after a restart (its next time not yet saved) reaches no device twice.
+
 A watch schedule (`check`) runs a shell command on its interval with no agent and no cost; the command prints one
 event per line (JSON with an "id", or plain text); only events not seen before wake the agent, with the task and the
 new events. The first run only learns what is there (unless include_existing).
@@ -291,6 +295,9 @@ class Scheduler:
             return out
 
     def _target_name(self, it: dict) -> str:
+        if it.get("notify"):
+            s = self.desk.sessions.get(it.get("sid") or "")
+            return "phone notification" + (f" → {s.name}" if s else "")
         if it.get("fleet"):
             return "Fleet" + (f" in {os.path.basename(it['cwd'].rstrip('/'))}" if it.get("cwd") else "")
         if it.get("sid"):
@@ -314,10 +321,13 @@ class Scheduler:
         out: dict[str, Any] = {}
         if "name" in b or it is None:
             out["name"] = str(b.get("name") or "").strip()
+        notify = bool(b.get("notify")) if "notify" in b else bool((it or {}).get("notify"))
+        if "notify" in b or it is None:
+            out["notify"] = notify
         if "text" in b or it is None:
             out["text"] = str(b.get("text") or "").strip()
             if not out["text"]:
-                raise ValueError("say what to ask the agent")
+                raise ValueError("say what the reminder says" if notify else "say what to ask the agent")
         if "when" in b or it is None:
             out["when"] = str(b.get("when") or "")
             out["spec"] = parse(out["when"])
@@ -325,6 +335,8 @@ class Scheduler:
             out["check"] = str(b.get("check") or "").strip()
             out["include_existing"] = bool(b.get("include_existing"))
         check = out.get("check", (it or {}).get("check", ""))
+        if notify and check:
+            raise ValueError("a reminder sends a notification at its times: it has no check command")
         if "spec" in out:
             sp = out["spec"]
             if check and sp["kind"] != "every" and sp["kind"] != "cron":
@@ -339,7 +351,13 @@ class Scheduler:
             out["max"] = n
         if "until" in b:
             out["until"] = _clock(str(b["until"])) if b.get("until") else ""
-        if "fleet" in b and b.get("fleet"):
+        if notify:  # a reminder: no agent; its session (optional) is what a tap on the notification opens
+            if "sid" in b or "cwd" in b or "fleet" in b or it is None:
+                sid = str(b.get("sid") or "")
+                if sid:
+                    self.desk.get(sid)  # KeyError: no such session
+                out["fleet"], out["sid"], out["cwd"] = False, sid, ""
+        elif "fleet" in b and b.get("fleet"):
             cwd = os.path.realpath(os.path.expanduser(str(b.get("cwd") or "~")))
             if not os.path.isdir(cwd):
                 raise ValueError(f"no such folder: {cwd}")
@@ -373,7 +391,7 @@ class Scheduler:
         it["next"] = next_run(it["spec"], now) if it["enabled"] else None
         if it["enabled"] and it["next"] is None:
             raise ValueError("that time has passed")
-        if it["spec"]["kind"] != "once":  # a repeating job keeps a journal of its runs
+        if it["spec"]["kind"] != "once" and not it.get("notify"):  # a repeating job keeps a journal of its runs
             j = self.journal(it)
             j.parent.mkdir(parents=True, exist_ok=True)
             if not j.exists():
@@ -472,6 +490,18 @@ class Scheduler:
                 events.append({"id": hashlib.sha1(line.encode()).hexdigest()[:16], "line": line})
         return events, ""
 
+    def _notify(self, it: dict, last: dict, manual: bool, now: float) -> None:
+        from orbit.services import push
+        due = it.get("next") or now
+        key = f"sched:{it['id']}:" + (f"manual:{now:.3f}" if manual else str(int(due)))
+        r = push.of(self.desk).notify(it["name"], it["text"], it.get("sid") or "", key=key, via="schedule")
+        last["push"] = {"sent": r["sent"], "duplicate": r["duplicate"], "devices": r["devices"], "key": key}
+        if not r["devices"]:
+            raise RuntimeError("no phone has notifications on (Orbit on the phone: Misc → Notifications)")
+        if not r["sent"] and not r["duplicate"]:
+            raise RuntimeError("the push service took it on no device: " + "; ".join(
+                f'{x.get("status") or ""} {x.get("reason") or x["outcome"]}'.strip() for x in r["results"]))
+
     def _today_runs(self, it: dict, now: float) -> int:
         day = datetime.fromtimestamp(now).strftime("%Y-%m-%d")
         if it.get("day") != day:
@@ -481,9 +511,12 @@ class Scheduler:
     def _fire(self, it: dict, late: bool, manual: bool = False, now: float | None = None) -> None:
         now = time.time() if now is None else now
         last: dict[str, Any] = {"at": now, "late": late, "manual": manual}
-        wake, extra = True, ""
+        wake, extra, notified = True, "", False
         try:
-            if it.get("check"):  # a watch: the command decides whether the agent wakes
+            if it.get("notify"):  # a reminder: to the phone, no agent
+                wake, notified = False, True
+                self._notify(it, last, manual, now)
+            elif it.get("check"):  # a watch: the command decides whether the agent wakes
                 events, err = self._run_check(it)
                 if err:
                     raise RuntimeError(err)
@@ -538,7 +571,7 @@ class Scheduler:
                 it["last"] = last
             else:
                 it["checked"] = {"at": now, "events": last.get("events", 0)}  # a quiet check: the last run stays
-            if wake:
+            if wake or (notified and not last.get("error")):
                 it["runs"] = it.get("runs", 0) + 1
             if not manual:
                 if it["spec"]["kind"] == "once":

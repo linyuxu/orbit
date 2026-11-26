@@ -31,6 +31,13 @@
                                       pin something worth keeping to your group's home page (a decision, a
                                       conclusion, a key fact or link; not progress): the user sees it there
     orbit-agent wake WHEN TEXT               wake this session later with TEXT (WHEN: 30m, 2h, tomorrow 9am)
+    orbit-agent notify TITLE [BODY…] [--session S] [--key K]
+                                      a notification on the user's phone (lock screen), pointing at this session (or
+                                      S); a tap opens it. For a finished report or a needed decision, not progress.
+                                      --key K: sent once per K (a retry sends nothing twice)
+    orbit-agent remind WHEN TEXT [--title T] [--session S | --no-session]
+                                      a reminder to the phone at WHEN (in 30m, tomorrow 9am, daily 08:00, weekdays
+                                      9:00, cron …): sent by the server, no agent wakes; a tap opens this session
     orbit-agent schedule [list]              the schedules
     orbit-agent schedule add WHEN TEXT [--name N] [--session S | --folder DIR | --fleet] [--max N] [--until HH:MM]
                                       send TEXT at WHEN (every 2h, daily 09:00, mon,wed 18:00, in 30m, cron 0 9 * * 1-5)
@@ -574,6 +581,43 @@ def add(when: str, text: str, name: str = "", session: str = "", folder: str = "
     print(_when_line(call("POST", "/api/schedules", body)))
 
 
+# ------------------------------------------------------------------ the phone: notifications
+def _notify_line(r: dict) -> str:
+    if not r["devices"]:
+        return "no phone has notifications on (Orbit on the phone: Misc → Notifications)"
+    bad = [x for x in r["results"] if x["outcome"] not in ("accepted", "duplicate")]
+    out = f"sent to {r['sent']} of {r['devices']} device(s)" + (f", {r['duplicate']} had it already" if r.get("duplicate") else "")
+    return out + "".join(f"\n  {x['sub']}: {x['outcome']} {x.get('status') or ''} {x.get('reason') or ''}".rstrip() for x in bad)
+
+
+def cmd_notify(a: argparse.Namespace) -> None:
+    sid = call("POST", "/api/resolve-session", {"ref": a.session})["id"] if a.session else me()
+    body = read_text(a.body) if a.body else ""
+    r = call("POST", "/api/push/send", {"title": a.title, "body": body, "sid": sid, "key": a.key, "via": "orbit-agent"})
+    line = _notify_line(r)
+    if not r["sent"] and not r.get("duplicate"):
+        sys.exit("orbit-agent: " + line)
+    print(line)
+
+
+def cmd_remind(a: argparse.Namespace) -> None:
+    from orbit.services import schedule as sched
+    when = a.when
+    try:
+        sched.parse(when)
+    except ValueError:
+        when = "in " + when  # (30m, 2h: as wake takes them)
+    text = read_text(a.text)
+    if not text.strip():
+        sys.exit("orbit-agent: say what the reminder says")
+    body: dict = {"when": when, "text": text, "name": a.title or text[:40], "by": me(), "notify": True}
+    if a.session:
+        body["sid"] = call("POST", "/api/resolve-session", {"ref": a.session})["id"]
+    elif me() and not a.no_session:
+        body["sid"] = me()
+    print(_when_line(call("POST", "/api/schedules", body)))
+
+
 def cmd_wake(a: argparse.Namespace) -> None:
     if not me():
         sys.exit("orbit-agent: wake works inside an Orbit session; use orbit-agent schedule add --session")
@@ -738,6 +782,21 @@ def main(argv: list[str] | None = None) -> None:
     w.add_argument("text", nargs="*", help="what to do then (- or none: stdin)")
     w.add_argument("--name", default="")
     w.set_defaults(func=cmd_wake)
+
+    nt = sub.add_parser("notify", help="a notification on the user's phone, pointing at this session")
+    nt.add_argument("title")
+    nt.add_argument("body", nargs="*", help="its text (- : stdin)")
+    nt.add_argument("--session", default="", help="the session a tap opens (default: this one)")
+    nt.add_argument("--key", default="", help="sent once per key (a retry with the same key sends nothing again)")
+    nt.set_defaults(func=cmd_notify)
+
+    rm = sub.add_parser("remind", help="a reminder to the user's phone at a time (once or repeating); no agent wakes")
+    rm.add_argument("when", help="in 30m, tomorrow 9am, daily 08:00, weekdays 9:00, every 2h, cron …")
+    rm.add_argument("text", nargs="*", help="what it says (- or none: stdin)")
+    rm.add_argument("--title", default="", help="its title (default: the text's start)")
+    rm.add_argument("--session", default="", help="the session a tap opens (default: this one)")
+    rm.add_argument("--no-session", action="store_true", help="a tap opens Orbit, no session")
+    rm.set_defaults(func=cmd_remind)
 
     sc = sub.add_parser("schedule", help="list, add or change schedules")
     sc.add_argument("action", nargs="?", help="list (default), add, watch, check, journal, rm, run, pause, resume")

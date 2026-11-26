@@ -687,6 +687,126 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
         finally:
             self.req("POST", "/api/settings", {"live_budget": 0})
 
+    def test_phone_turns_notifications_on_and_a_tap_opens_the_session(self):
+        """Misc → Notifications with the browser's push parts stubbed (no real push service): the switch asks, subscribes
+        with the server's key, the server keeps it; Send a test reaches the (local, fake) push service encrypted; a
+        notification's tap (sw.js's message) opens its session, and a cold start at /m/#s/<id> does too."""
+        import test_push
+        from orbit.services import push, webpush as wp
+        fake = test_push.FakePushService()
+        push.ALLOW_EXTRA = (fake.base,)
+        sid = self.new_session("pushed")["id"]
+        try:
+            for name, b in self.browsers.items():
+                sub, d = test_push.device(fake.base, name=name)
+                stub = """(() => {
+                  const SUB = %s, st = { sub: null, opts: null };
+                  window.__push = st;
+                  Object.defineProperty(navigator, "standalone", { get: () => true, configurable: true });
+                  let perm = "default";
+                  if (!window.Notification) window.Notification = function () {};
+                  Object.defineProperty(Notification, "permission", { get: () => perm, configurable: true });
+                  Notification.requestPermission = async () => (perm = "granted");
+                  if (!window.PushManager) window.PushManager = function () {};
+                  const fsub = { endpoint: SUB.endpoint, options: {}, toJSON: () => SUB, unsubscribe: async () => { st.sub = null; return true; } };
+                  const reg = { pushManager: { getSubscription: async () => st.sub,
+                    subscribe: async o => { st.opts = o; fsub.options = o; st.sub = fsub; return fsub; } } };
+                  Object.defineProperty(navigator.serviceWorker, "ready", { get: () => Promise.resolve(reg), configurable: true });
+                  navigator.serviceWorker.getRegistration = async () => reg;
+                })()""" % json.dumps(sub)
+                ctx = b.new_context(viewport={"width": 390, "height": 844}, has_touch=True)
+                ctx.add_init_script(stub)
+                page = ctx.new_page()
+                errors = []
+                page.on("pageerror", lambda e: errors.append(str(e)))
+                try:
+                    page.goto(f"http://127.0.0.1:{self.port}/m/")
+                    page.wait_for_function("() => typeof S !== 'undefined' && S.sessions && S.sessions.size > 0", timeout=15000)
+                    page.evaluate("switchTab('misc')")
+                    page.wait_for_selector("[data-open=push]")
+                    page.wait_for_timeout(400)
+                    self.assertIn("off", page.inner_text("[data-open=push]"), name)
+                    page.click("[data-open=push]")
+                    page.wait_for_selector("[data-push-toggle]")
+                    page.screenshot(path=f"/tmp/orbit-push-off-{name}.png")
+                    page.click("[data-push-toggle]")
+                    page.wait_for_selector("[data-push-test]", timeout=8000)
+                    key = self.req("GET", "/api/push")[1]["publicKey"]
+                    self.assertEqual(page.evaluate("bytesB64u(__push.opts.applicationServerKey)"), key)
+                    self.assertEqual(page.evaluate("__push.opts.userVisibleOnly"), True)
+                    subs = self.req("GET", "/api/push")[1]["subscriptions"]
+                    self.assertEqual([s["label"] for s in subs], ["browser" if name == "chromium" else page.evaluate("deviceLabel()")])
+                    n = len(fake.got)
+                    page.click("[data-push-test]")
+                    for _ in range(80):
+                        if len(fake.got) > n:
+                            break
+                        page.wait_for_timeout(100)
+                    self.assertEqual(len(fake.got), n + 1, (name, page.evaluate("[PUSH.err, document.querySelector('#toast') && document.querySelector('#toast').textContent]")))
+                    page.wait_for_function("() => /accepted/.test((document.querySelector('.plog') || {}).textContent || '')", timeout=8000)
+                    msg = json.loads(wp.decrypt(fake.got[-1]["body"], d, sub["keys"]["auth"]))
+                    self.assertEqual(msg["title"], "Orbit")
+                    self.assertIn("accepted", page.inner_text(".plog"))
+                    page.fill("#pr-text", "Call the dentist")
+                    page.fill("#pr-when", "30m")
+                    page.click("[data-push-remind]")
+                    page.wait_for_selector(".prem", timeout=8000)
+                    it = next(x for x in self.desk.scheduler.items if x["text"] == "Call the dentist")
+                    self.assertEqual((it["notify"], it["spec"]["kind"]), (True, "once"))
+                    page.screenshot(path=f"/tmp/orbit-push-on-{name}.png")
+                    # turn off: the server forgets this device
+                    page.click("[data-push-toggle]")
+                    page.wait_for_function("() => !document.querySelector('[data-push-test]')", timeout=8000)
+                    self.assertEqual(self.req("GET", "/api/push")[1]["subscriptions"], [])
+                    self.desk.scheduler.delete(it["id"])
+                    # a tap while the app runs: sw.js posts {t: "open", sid}
+                    page.evaluate(f"navigator.serviceWorker.dispatchEvent(new MessageEvent('message', {{ data: {{ t: 'open', sid: {json.dumps(sid)} }} }})); 0")
+                    page.wait_for_timeout(300)
+                    self.assertEqual(page.evaluate("[S.current, AREA.cur, location.hash]"), [sid, "sessions", "#s/" + sid])
+                    # a tap with the app closed: it starts at /m/#s/<sid>
+                    cold = ctx.new_page()
+                    cold.goto(f"http://127.0.0.1:{self.port}/m/#s/{sid}")
+                    cold.wait_for_function(f"() => typeof S !== 'undefined' && S.current === {json.dumps(sid)}", timeout=15000)
+                finally:
+                    ctx.close()
+                self.assertEqual(errors, [], name)
+        finally:
+            push.ALLOW_EXTRA = ()
+            fake.stop()
+
+    def test_the_service_worker_shows_and_routes_notifications(self):
+        """sw.js's push and notificationclick handlers, run in a sandbox (a fake `self`): the notification it shows, a
+        tap with no window (opens /m/#s/<id>), with one (focus, then {t: "open"}), and a payload naming another site."""
+        b = next(iter(self.browsers.values()))
+        ctx = b.new_context()
+        page = ctx.new_page()
+        try:
+            page.goto(f"http://127.0.0.1:{self.port}/api/version")
+            r = page.evaluate("""async () => {
+              const src = await (await fetch('/m/sw.js')).text();
+              const L = {}, shown = [], opened = [], posted = []; let wins = [], focused = 0;
+              const self_ = { addEventListener: (t, f) => { L[t] = f; }, registration: { showNotification: async (t, o) => { shown.push([t, o]); } },
+                clients: { matchAll: async () => wins, openWindow: async u => { opened.push(u); }, claim: async () => {} }, skipWaiting: async () => {} };
+              new Function('self', 'caches', 'location', src)(self_, {}, { origin: 'https://orbit.test' });
+              const run = async (type, extra) => { const ps = []; L[type]({ waitUntil: p => ps.push(p), ...extra }); await Promise.all(ps); };
+              const pushed = d => run('push', { data: { json: () => d, text: () => JSON.stringify(d) } });
+              await pushed({ title: 'Report ready', body: 'Q3', sid: 'abc 1', tag: 'sched:x:1', url: '/m/#s/abc%201' });
+              await pushed({ title: 'Evil', sid: '//evil.example', url: 'https://evil.example/' });
+              await pushed(null);
+              const tap = n => run('notificationclick', { notification: { data: n.data, close() {} } });
+              await tap(shown[0][1]);
+              await tap(shown[1][1]);
+              wins = [{ url: 'https://orbit.test/m/#s/old', focus: async () => { focused++; }, postMessage: m => posted.push(m) }];
+              await tap(shown[0][1]);
+              return { shown, opened, posted, focused };
+            }""")
+            self.assertEqual(r["shown"][0], ["Report ready", {"body": "Q3", "tag": "sched:x:1", "data": {"sid": "abc 1", "url": "/m/#s/abc%201"}, "icon": "/m/icon-192.png"}])
+            self.assertEqual(r["shown"][2][0], "Orbit")  # (an empty payload: still a notification, as iOS requires)
+            self.assertEqual(r["opened"], ["/m/#s/abc%201", "/m/#s/%2F%2Fevil.example"])  # (this app's pages only)
+            self.assertEqual((r["posted"], r["focused"]), ([{"t": "open", "sid": "abc 1"}], 1))
+        finally:
+            ctx.close()
+
     def test_phone_side_shows_a_website_without_the_token(self):
         sid = self.new_session("phone side")["id"]
         site = f"http://localhost:{self.port}/api/version"  # (another origin than the page's 127.0.0.1)

@@ -809,3 +809,16 @@ img.gicon { border-radius:4px; object-fit:cover; }
 /* a website in the Side view (m-side.js): where it is, Open in Safari (an http one on an https Orbit: only there) */
 #sideview .sweb { flex:none; display:flex; align-items:center; gap:8px; padding:6px var(--pr, 16px) 6px var(--pl, 16px); border-bottom:var(--hair) solid var(--line); font-size:var(--fs-meta, 13px); color:var(--ink-2); }
 #sideview .sweb .h { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+
+/* Misc → Notifications (m-push.js) */
+.prow { width:100%; min-height:52px; text-align:left; color:var(--accent); }
+.prow .nm { font-size:16px; }
+.pform { display:flex; flex-direction:column; gap:8px; padding:12px var(--pr) 12px var(--pl); }
+.pform .prline { display:flex; gap:8px; align-items:center; }
+.pform .prline .tinput { flex:1; min-width:0; }
+.mrow.prem, .mrow.plog { min-height:52px; }
+.mrow.prem::after, .mrow.plog::after { left:var(--pl); }
+.mrow.prem.off .nm { color:var(--ink-3); }
+.mrow .t2 .err, .note.err { color:var(--err); }
+.po.ok { color:var(--ok); } .po.err { color:var(--err); }
+.psec { padding:0 var(--pr) 0 var(--pl); }
