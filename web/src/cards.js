@@ -418,12 +418,17 @@ function notifications() {
 /* ===================================================================== scrolling */
 const conv = $("#conv");
 $("#cards").addEventListener("click", e => { if (e.target.closest("[data-earlier]")) showEarlier(); });
-conv.addEventListener("scroll", () => {  // near the top: the earlier ones come in (once per frame)
-  if (CONV.from > 0 && conv.scrollTop < 400 && !showEarlier.busy) {
-    showEarlier.busy = true;
-    requestAnimationFrame(() => { showEarlier.busy = false; if (conv.scrollTop < 400) showEarlier(); });
-  }
-}, { passive: true });
+/* Near the top (two screens or less): the earlier ones come in, once the user's scrolling has stopped. Cards put in
+   above move what is on screen, and showEarlier puts it back with scrollTop; WebKit (the app's WKWebView) scrolls on
+   its own thread during a trackpad's momentum or a wheel's animation and drops that write, so the view landed on the
+   cards just put in, near the top again, which pulled in the next ones: up to the first request. */
+const earlierNear = () => conv.scrollTop < Math.max(1200, 2 * conv.clientHeight);
+function earlierSoon() {
+  clearTimeout(earlierSoon.t);
+  if (CONV.from <= 0 || !earlierNear()) return;
+  earlierSoon.t = setTimeout(() => { if (userScrolling()) earlierSoon(); else if (earlierNear()) showEarlier(); }, 150);
+}
+conv.addEventListener("scroll", earlierSoon, { passive: true });
 /* Where the conversation is, per session, kept across resizes, new answers and reloads: either stuck to its end (it
    follows every new line), or held where the user scrolled to (the card at the top of the view and its offset). Only
    the user changes which: their own scrolling (wheel, trackpad, the scroll bar, page keys), ⌘L or Latest (the end

@@ -969,6 +969,40 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.dblclick(frow)
             page.wait_for_function("() => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.cm-editor'))", timeout=5000)
 
+    def test_earlier_cards_come_in_only_when_the_scrolling_stops(self):
+        """A long conversation draws its latest 40 requests; the earlier ones come in above once the user's scrolling
+        stops, the view kept where it was. Never during the scroll: WebKit drops a scrollTop written during a
+        trackpad's momentum, and the view ran up to the first request."""
+        sid = self.new_session("long-scroll")["id"]
+        for i in range(56):
+            c = self.req("POST", f"/api/sessions/{sid}/send", {"text": f"request {i} " + " ".join(f"w{k}" for k in range(120))})[1]
+            self.wait_card(sid, c["id"], ("completed",))
+        first_in_view = """(() => { const t = conv.getBoundingClientRect().top;
+            const el = [...document.querySelectorAll('#cards .card')].find(c => c.getBoundingClientRect().bottom > t + 1); return el && el.id })()"""
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"switchTo({json.dumps(sid)}); 0")
+            page.wait_for_function("() => CONV.from === 16", timeout=5000)
+            page.evaluate("""(() => {  // every scrollTop written while the user scrolls, counted
+                const d = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop'); window.WRITES = 0;
+                Object.defineProperty(conv, 'scrollTop', { get() { return d.get.call(this); },
+                    set(v) { if (CONVL.userScrolling()) WRITES++; d.set.call(this, v); }, configurable: true }); })()""")
+            page.mouse.move(700, 400)
+            for _ in range(80):  # up past the top of what is drawn, without a pause
+                page.mouse.wheel(0, -600)
+                page.wait_for_timeout(20)
+                if page.evaluate("conv.scrollTop") < 50:
+                    break
+            self.assertEqual(page.evaluate("CONV.from"), 16, name)  # (still scrolling: nothing put in above)
+            self.assertLess(page.evaluate("conv.scrollTop"), 50, name)
+            seen = page.evaluate(first_in_view)
+            where = "document.getElementById(%r).getBoundingClientRect().top - conv.getBoundingClientRect().top" % seen
+            y = page.evaluate(where)
+            page.wait_for_function("() => CONV.from === 0", timeout=3000)  # stopped: the earlier ones in
+            self.assertLess(abs(page.evaluate(where) - y), 2, name)  # (the same card in the same place)
+            self.assertGreater(page.evaluate("conv.scrollTop"), 1000, name)
+            self.assertEqual(page.evaluate("WRITES"), 0, name)
+
     def wait_disk(self, p, timeout=8):
         end = time.time() + timeout
         while time.time() < end and not Path(p).exists():
