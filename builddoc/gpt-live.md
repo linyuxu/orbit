@@ -307,8 +307,14 @@ Built: `orbit/services/live/` (`session.py` the call, `ws.py` the websocket clie
   30 s connected); 404 / 410 after an attach, or 401 / 403, ends the call; never attached within 30 s ends it too.
 - **Transcripts.** `start_ms` inclusive, `end_ms` exclusive, ms from the session's start. A delegation takes the
   user's fragments not taken before that start before its `offset_ms` (a straddling one included) and end after the
-  previous delegation's offset, joined exactly as received, after the 400 ms grace. Words that come after a
-  delegation's offset belong to the next one. The voice's last reply (its last run of fragments, pauses under 1.5 s)
+  previous delegation's offset, joined exactly as received. GPT Live delegates on its own, often while the user is
+  still talking (258 real delegations: the pause before one had a median of 200 ms; in 67 the user went on within
+  2 s, and the rest of the sentence became a second request), so a request waits for the user to finish: until no
+  fragment of theirs came for 1.2 s (at most 8 s); their run of fragments after the offset with no gap over 1.2 s is
+  part of it, and a delegation made meanwhile joins it (one card; its result is said for the latest, the earlier is
+  superseded, as a correction's is). Words after a pause over 1.2 s belong to the next one. Logged `turn_waited`.
+  A request's silent status is never sent after its result (it said "don't state the answer until the result
+  arrives"); a result's detail and commentary go together. The voice's last reply (its last run of fragments, pauses under 1.5 s)
   goes along, marked as context, only when the words refer to something (that, it, this, the second one …).
 - **Sending.** In-process, `desk.send(sid, text, origin, client_id)`: the same code as the route. The card shows the
   words as said; the `[orbit] voice` marker is Orbit's existing `[orbit]` line, which for a `Voice` origin tells the

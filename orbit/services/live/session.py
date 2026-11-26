@@ -33,6 +33,13 @@ from orbit.services.live import ws as wsock
 
 ACK_DELAY_MS = 800  # time to cancel the automatic spoken acknowledgement with an empty thinking append (§5)
 GRACE_S = 0.4  # after a delegation, late transcript fragments still join its request
+# GPT Live delegates on its own (no turn-detection setting) and often while the user is still talking: in 258 real
+# delegations the pause before it had a median of 200 ms, and in 67 the user went on within 2 s (the rest of the
+# sentence became a second request). So a request waits for the user to finish: until no fragment of theirs came for
+# USER_HOLD_S (they arrive every ~200 ms while someone talks), at most TURN_WAIT_S; their words up to then (a run of
+# fragments with no gap over TURN_GAP_MS after the delegation's offset) are its words, and a delegation GPT Live makes
+# meanwhile joins it (the request is answered once, for the latest).
+TURN_GAP_MS, TURN_WAIT_S = 1200, 8.0
 SPEAKING_HOLD_S = 1.2  # "speaking" this long after the last fragment of the voice's speech
 # The session's state, told silently (§6): changes within COALESCE_S go out as one snapshot; one that only moves the
 # agent's step on, at most every STEP_EVERY_S (each append is a chance for the voice to speak: real calls answered a
@@ -545,6 +552,19 @@ def assemble(frags: list[dict], offset_ms: int, since_ms: int, used: set) -> tup
     return "".join(f["text"] for f in take).strip(), [f["key"] for f in take]
 
 
+def turn_end(frags: list[dict], offset_ms: int, used: set, gap_ms: int = TURN_GAP_MS) -> int:
+    """Where the user's turn ends after a delegation at offset_ms: the end of their run of fragments (not taken yet)
+    that goes on from before it with no gap over gap_ms; offset_ms when they stopped before it."""
+    end = offset_ms
+    for f in ordered(frags):
+        if f["who"] != "user" or f["key"] in used or f["end"] <= end:
+            continue
+        if f["start"] - end > gap_ms:
+            break
+        end = f["end"]
+    return end
+
+
 def last_reply(frags: list[dict], before_ms: int, gap_ms: int = 1500) -> str:
     """The voice's last spoken reply before before_ms: its last run of fragments with no pause longer than gap_ms."""
     out = [f for f in ordered(frags) if f["who"] == "voice" and f["start"] < before_ms]
@@ -628,6 +648,8 @@ class Call:
         self.id = "call-" + uuid.uuid4().hex[:10]
         self.t0 = time.time()
         self.lock = threading.RLock()
+        self.say_lock = threading.Lock()  # a result's appends go together; a request's status never after its result
+        self.said: set = set()  # the cards whose result was sent
         self.phase = "connecting"
         self.live_id = ""
         self.key = self.key_label = ""  # (the key that made the session: its sideband attaches with it)
@@ -1080,25 +1102,55 @@ class Call:
             if did in self.dels or self.ended:
                 return
             self.dels[did] = {"offset": int(ev.get("offset_ms") or 0), "at": time.time()}
+            waiting = next((x for x in reversed(self.order) if self.dels[x].get("waiting")), None)
+            if waiting:  # the user still talking for an earlier one: these words join it
+                self.dels[waiting].setdefault("joined", []).append(did)
+                self.dels[did]["into"] = waiting
+            else:
+                self.dels[did]["waiting"] = True
             self.order.append(did)
-        self.log("delegation", event_id=ev.get("event_id"), delegation=did, offset_ms=self.dels[did]["offset"])
+        self.log("delegation", event_id=ev.get("event_id"), delegation=did, offset_ms=self.dels[did]["offset"],
+                 **({"joins": waiting} if waiting else {}))
         # At once: an empty thinking append cancels the automatic spoken acknowledgement (§5.1), unless the user
         # wants it (Settings → Voice: "Say when a task starts").
         if not self.cfg["live_ack"]:
             self._send({"type": "session.thinking.append", "event_id": f"quiet_{did}", "delegation_id": did, "content": ""})
-        tm = threading.Timer(GRACE_S, self._dispatch, args=(did,))
+        if not waiting:
+            self._later(GRACE_S, self._await_turn, did)
+
+    def _later(self, secs: float, fn, *args) -> None:
+        tm = threading.Timer(secs, fn, args=args)
         tm.daemon = True
         tm.start()
 
+    def _await_turn(self, did: str) -> None:
+        """The request waits while the user is still talking (TURN_WAIT_S at most), then goes."""
+        with self.lock:
+            if self.ended:
+                return
+            wait = self._talking() and time.time() - self.dels[did]["at"] < TURN_WAIT_S
+        if wait:
+            self._later(0.2, self._await_turn, did)
+        else:
+            self._dispatch(did)
+
     def _dispatch(self, did: str) -> None:
-        """After the grace window: the request, from the transcript, into the bound session."""
+        """After the user's turn ended: the request, from the transcript, into the bound session."""
         with self.lock:
             if self.ended:
                 return
             d = self.dels[did]
-            words, keys_ = assemble(self.frags, d["offset"], self.cut_ms, self.used)
+            d["waiting"] = False
+            joined = list(d.get("joined") or [])
+            upto = turn_end(self.frags, max([d["offset"]] + [self.dels[j]["offset"] for j in joined]), self.used)
+            words, keys_ = assemble(self.frags, upto, self.cut_ms, self.used)
             self.used.update(keys_)
-            self.cut_ms = max(self.cut_ms, d["offset"])
+            self.cut_ms = max(self.cut_ms, upto)
+            if upto > d["offset"] or joined:
+                self.log("turn_waited", delegation=did, offset_ms=d["offset"], to_ms=upto, joined=joined,
+                         ms_waited=int((time.time() - d["at"]) * 1000))
+            for j in joined:  # (answered through this one's request: the latest of them gets the result)
+                self.dels[j].update(how="joined", done=True)
             reply = last_reply(self.frags, d["offset"]) if words and REFERS.search(words) else ""
             prev = next((self.dels[x] for x in reversed(self.order) if x != did and self.dels[x].get("cid")), None)
         if words:
@@ -1152,6 +1204,11 @@ class Call:
             self.card_del[c["id"]] = did
             if prev is not None and prev.get("cid") == c["id"]:
                 prev["superseded"] = did
+            if joined:  # its result is said for the latest delegation that joined it
+                last = joined[-1]
+                self.dels[last].update(cid=c["id"], done=False)
+                self.card_del[c["id"]] = last
+                d["superseded"] = last
         self.log("request", delegation=did, cid=c["id"], how=how, state=c["state"], words=words,
                  ms_delegation_to_card=int((time.time() - d["at"]) * 1000), duplicate=bool(c.get("duplicate")))
         self._tell("delegation", delegation=did, cid=c["id"], how=how, sid=self.sid, offset=d["offset"])
@@ -1301,7 +1358,12 @@ class Call:
         else:
             fact = f"Orbit sent this as request #{c['id']}; your backend started on it." + wait_
         ev = {"type": "session.thinking.append", "event_id": f"status_{did}", "delegation_id": did, "content": fact}
-        out = (lambda: self._say([ev])) if speak else (lambda: self._send(ev))
+
+        def send_now() -> None:
+            with self.say_lock:
+                if c["id"] not in self.said:  # (its result went first: the status is stale)
+                    self._send(ev)
+        out = (lambda: self._say([ev])) if speak else send_now
         wait = ACK_DELAY_MS / 1000 + 0.3 - (time.time() - self.dels[did]["at"]) if self.cfg["live_ack"] else 0
         if wait > 0:  # (any append cancels the spoken acknowledgement the user asked for: after its moment)
             tm = threading.Timer(wait, lambda: None if self.ended else out())
@@ -1430,8 +1492,11 @@ class Call:
             fin = result.get("finished") or time.time()
             self.log("result", **{k: v for k, v in result.items() if k != "finished"},
                      ms_card_to_result=int((time.time() - fin) * 1000), **({"held_ms": held_ms} if held_ms else {}))
-        for ev in evs:
-            self._send(ev)
+        with self.say_lock:  # (together: nothing between a result's detail and its commentary)
+            if result is not None and result.get("cid") is not None:
+                self.said.add(result["cid"])
+            for ev in evs:
+                self._send(ev)
 
     def _release(self) -> None:
         with self.lock:

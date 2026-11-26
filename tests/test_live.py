@@ -335,7 +335,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.fake.emit(t_in("nightly build", 1400, 2000, "e2"), t_in("check the ", 1000, 1400, "e1"),
                        t_in(" now", 2100, 2400, "e3"), delegation("del_1", 2200, "ed1"))
         time.sleep(0.1)
-        self.fake.emit(t_in("please ", 600, 1000, "e0"), t_in("Also, ", 2600, 3000, "e4"),
+        self.fake.emit(t_in("please ", 600, 1000, "e0"), t_in("Also, ", 3700, 4000, "e4"),  # (after a 1.3 s pause: the next one's)
                        delegation("del_1", 2200, "ed1b"))  # (the same delegation again: nothing new)
         quiet = self.fake.wait_got("session.thinking.append")
         self.assertEqual(quiet[0]["content"], "")
@@ -367,6 +367,32 @@ class LiveTest(test_skeleton.SkeletonTest):
         c2 = self.wait_card(s["id"], 2, ("completed",))
         self.assertTrue(c2["text"].startswith("Also, retry that\n\n(Context, not an instruction: the voice had just said: "
                                               '"The build failed on step two.")'), c2["text"])
+
+    def test_a_request_waits_for_the_user_to_finish(self):
+        """GPT Live delegates while the user is still talking (a 200 ms pause): the request waits until they stop, and
+        takes the rest of what they said; a delegation it makes meanwhile joins it: one card, answered once, for the
+        latest."""
+        s, r = self.start_call("Turn")
+        self.fake.emit(t_in("look at whether ", 1000, 1600, "u1"), delegation("del_a", 1800, "da"))
+        time.sleep(0.5)
+        self.fake.emit(t_in("our system ", 1800, 2600, "u2"))  # (still talking, 0.5 s later)
+        time.sleep(0.5)
+        self.fake.emit(t_in("can make money", 2700, 3300, "u3"), delegation("del_b", 3400, "db"))
+        c = self.wait_card(s["id"], 1, ("completed",))
+        self.assertEqual(c["text"], "look at whether our system can make money")
+        time.sleep(0.6)
+        self.assertEqual(len(self.cards(s["id"])), 1)
+        self.assertTrue(wait(lambda: self.commentary("del_b")))
+        self.assertEqual(self.commentary("del_a"), [])  # (answered once, for the latest)
+        log = Path(self.state, "live", r["call"] + ".jsonl").read_text()
+        self.assertIn('"turn_waited"', log)
+        # a pause longer than TURN_GAP_MS ends the turn: the words after it are the next request's
+        self.fake.emit(t_in("check the build", 6000, 6600, "u4"), delegation("del_c", 6700, "dc"))
+        time.sleep(1.6)
+        self.fake.emit(t_in("and the tests", 8200, 8800, "u5"), delegation("del_d", 8900, "dd"))
+        c3 = self.wait_card(s["id"], 2, ("completed",))
+        self.assertEqual(c3["text"], "check the build")
+        self.assertEqual(self.wait_card(s["id"], 3, ("completed",))["text"], "and the tests")
 
     def test_one_call_at_a_time(self):
         """A second call, from any session or device, is refused while one is on (409, saying which); after the first
@@ -531,7 +557,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         """A request in an idle session is "queued" only for the moment before its agent takes it: the voice is told it
         runs now, never that it waits (a real call said "it is queued behind another request" with nothing running)."""
         s, r = self.start_call("Idle")
-        self.fake.emit(t_in("check the logs", 500, 1500, "i1"), delegation("del_i", 1600, "di"))
+        self.fake.emit(t_in("slow check of the logs", 500, 1500, "i1"), delegation("del_i", 1600, "di"))  # (slow: a status after the result is never sent)
         st = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "status_del_i"])
         self.assertEqual(st[0]["content"], "Orbit sent this as request #1; your backend started on it. Don't state the "
                                            "answer until the result arrives.")  # ("nothing else runs before it" was read back)
@@ -818,6 +844,18 @@ class LiveTest(test_skeleton.SkeletonTest):
         finally:
             talking.clear()
             live.HOLD_MAX_S = old
+
+    def test_a_status_after_the_result_is_not_sent(self):
+        """A request done before its status goes (an idle agent, quick): the status is stale ("don't state the answer
+        until the result arrives" after the result) and is not sent; the result's detail and commentary stay together."""
+        s, _ = self.start_call("Quick")
+        self.fake.emit(t_in("quick one", 500, 1500, "q1"), delegation("del_k", 1600, "dk"))
+        self.wait_card(s["id"], 1, ("completed",))
+        self.assertTrue(wait(lambda: self.commentary("del_k")))
+        time.sleep(live.ACK_DELAY_MS / 1000 + 0.6)
+        ids = [e.get("event_id") for e in self.fake.got() if e.get("delegation_id") == "del_k"]
+        if "status_del_k" in ids:
+            self.assertLess(ids.index("status_del_k"), ids.index("result_del_k"), ids)
 
     def test_result_detail_goes_silently_with_it(self):
         """R4: a long answer: the spoken part in the commentary, the next part as a silent thinking append on the same
