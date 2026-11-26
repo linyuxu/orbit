@@ -647,13 +647,19 @@ function folderMenu(dir, where, rootRow = null, treeRoot = null) {
   const inVault = S.vault && (dir === S.vault || dir.startsWith(S.vault + "/"));
   const lazy = (rootRow && rootRow.place) || (!rootRow && !treeRoot && S.left.tab === "files");  // (a place's folder: listed a level at a time)
   const real = rootRow && rootRow.place ? ((FILES.dirs.get(dir) || {}).real || dir) : dir;
+  const top = treeRoot || (rootRow && rootRow.root) || panelRoot(), here = !/^\/@/.test(real);  // (another machine's folder: no Terminal here)
   menu([
     inVault ? { label: "New note…", run: () => newNote(relTo(S.vault, dir) === dir ? "" : relTo(S.vault, dir)) }
             : { label: "New file…", run: () => newFileIn(real) },
-    { label: "Refresh", run: () => lazy ? loadDir(dir, true) : refreshTree(treeRoot || (rootRow && rootRow.root) || panelRoot(), true) },
+    { label: "New folder…", run: () => newFolderIn(real) },
+    EMBED ? null : { label: "New session here…", run: () => newSessionIn(real) },
+    here ? { label: "Open in Terminal", run: () => api("POST", "/api/open-external", { path: real, how: "terminal" }).then(r => toast(`Opened in ${r.app}`)).catch(e => toast(e.message)) } : null,
+    { sep: true },
+    { label: "Refresh", run: () => lazy ? loadDir(dir, true) : refreshTree(top, true) },
     rootRow && rootRow.added ? { label: "Remove from Places", run: () => { FILES.places = FILES.places.filter(p => p !== dir); LS.set("filesPlaces", FILES.places); renderLeft(); } } : null,
     { sep: true },
     { label: "Copy path", run: () => copyText(real) },
+    top && real.startsWith(top + "/") ? { label: "Copy relative path", run: () => copyText(relTo(top, real)) } : null,
     { label: "Open in Finder", run: () => openExternal(real, "finder") },
     isRoot ? null : { label: "Rename…", run: () => renamePath(dir) },
     isRoot ? null : { label: "Delete…", danger: true, run: () => trashPath(dir) },

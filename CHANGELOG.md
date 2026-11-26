@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A folder's menu in the Files tree: New file…, New folder…, New session here… (the New session dialog with that
+  folder, and its machine for another machine's folder), Open in Terminal (iTerm, else Terminal; this machine's
+  folders), Copy relative path, besides Refresh, Copy path, Open in Finder, Rename, Delete.
 - Emacs motion keys everywhere: ⌃F ⌃B ⌃P ⌃N are → ← ↑ ↓ (⇧ too) in every list, tree, menu, picker and view (the
   left panel folds with ⌃B / ⌃F, Schedules, ⌘O, menus and their submenus, dialogs' lists). Where text is edited they
   stay the editor's own: a one-line field's ⌃F ⌃B move its caret, the code and Markdown editors and the composer bind

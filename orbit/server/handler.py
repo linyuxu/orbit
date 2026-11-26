@@ -1322,6 +1322,10 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     raise ValueError(f"no such file: {target}")
                 how = b.get("how", "editor")
                 line = b.get("line")
+                if how == "terminal":  # a folder in iTerm (else Terminal): the Files tree's folder menu
+                    if not target.is_dir():
+                        raise ValueError(f"not a folder: {target}")
+                    return self._json({"ok": True, "app": open_terminal_app(str(target))})
                 if how == "finder":
                     cmd = ["open", "-R", str(target)]
                 elif how == "default":  # the file's default app, whatever the setting

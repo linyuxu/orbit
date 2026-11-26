@@ -728,6 +728,39 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             for it in list(self.desk.scheduler.items):
                 self.desk.scheduler.delete(it["id"])
 
+    def test_a_folders_menu_makes_folders_and_sessions(self):
+        """The Files tree's folder menu: New file, New folder, New session here (the dialog with that folder), Open in
+        Terminal, Copy relative path."""
+        base = Path(self.work) / "menu-dir"
+        base.mkdir(exist_ok=True)
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"folderMenu({json.dumps(str(base))}, {{ at: {{ x: 300, y: 200 }} }}); 0")
+            page.wait_for_selector(".menu .row")
+            page.screenshot(path=f"/tmp/orbit-foldermenu-{name}.png", clip={"x": 250, "y": 150, "width": 360, "height": 420})
+            labels = page.eval_on_selector_all(".menu .row .lbl", "els => els.map(e => e.textContent)")
+            for want in ("New file…", "New folder…", "New session here…", "Open in Terminal", "Copy path", "Open in Finder"):
+                self.assertIn(want, labels, name)
+            page.click(".menu >> text=New folder…")
+            page.wait_for_selector(".dialog input")
+            page.fill(".dialog input", f"made-{name}")
+            page.keyboard.press("Enter")
+            for _ in range(50):
+                if (base / f"made-{name}").is_dir():
+                    break
+                page.wait_for_timeout(100)
+            self.assertTrue((base / f"made-{name}").is_dir(), name)
+            page.evaluate(f"folderMenu({json.dumps(str(base))}, {{ at: {{ x: 300, y: 200 }} }}); 0")
+            page.click(".menu >> text=New session here…")
+            page.wait_for_selector(".dialog")
+            page.wait_for_timeout(300)
+            cwd = page.evaluate("[...document.querySelectorAll('.dialog input')].map(i => i.value).find(v => v.includes('menu-dir'))")
+            self.assertTrue(cwd and cwd.rstrip("/").endswith("menu-dir"), (name, cwd))
+            page.keyboard.press("Escape")
+            # another machine's folder: that machine and its path written as there
+            self.assertEqual(page.evaluate("(() => { let got; const old = newSession; newSession = (g, p) => { got = p; }; newSessionIn('/@gpu-box/home/me/proj'); newSession = old; return got; })()"),
+                             {"machine": "gpu-box", "cwd": "~/proj"})
+
     def test_phone_usage_has_openai(self):
         self.new_session("usage")
         code, e = self.req("POST", "/api/settings", {"live_budget": 10})

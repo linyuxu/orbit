@@ -17,7 +17,7 @@ const MODE_LABELS_BY = { opencode: {
   bypassPermissions: "bypass · every ask approved" } };
 const modeLabel = (harness, m) => (MODE_LABELS_BY[harness] || {})[m] || MODE_LABELS[m] || m;
 const modeOptions = id => modesFor(id).map(value => ({ value, label: modeLabel(id, value) }));
-async function newSession(gidArg) {
+async function newSession(gidArg, preset = {}) {  // preset: {cwd, machine} (a folder's menu: "New session here…")
   try { const d = await api("GET", "/api/harnesses"); if (d.harnesses && d.harnesses.length) S.harnesses = d.harnesses; } catch {}  // what "Default" ran last
   const last = LS.get("lastNew", { cwd: "~/", model: "", mode: "acceptEdits", harness: "claude" });
   // Folders are written as the chosen machine writes them (~/proj there), and listed per machine: the recent ones
@@ -32,6 +32,7 @@ async function newSession(gidArg) {
   // Which machine: this one, or another (its folders, its harnesses); the group is this server's either way.
   const ups = (S.machines || []).filter(m => m.ok);
   let machine = cur() && cur().remote && ups.some(m => m.name === cur().remote) ? cur().remote : (S.machine && S.machine !== "local" && ups.some(m => m.name === S.machine) ? S.machine : "");
+  if (preset.cwd) machine = preset.machine && ups.some(m => m.name === preset.machine) ? preset.machine : "";
   const completeDir = q => api("GET", (machine ? `/api/remote/${machine}` : "") + "/api/complete-dir?q=" +
     encodeURIComponent(q.replace(/^\/@[^/]+/, ""))).then(d => d.dirs);
   const hereOn = m => cur() && onIt(cur(), m) ? folderOf(cur()) : "";
@@ -53,7 +54,7 @@ async function newSession(gidArg) {
           if (!opts.some(o => o.value === harnessNow)) { harnessNow = opts[0].value; ctls.model.setOptions(modelsFor(harnessNow), ""); ctls.effort.setOptions(effortsFor(harnessNow), ""); }
           ctls.harness.setOptions(opts, harnessNow);
         } }] : []),
-      { key: "cwd", label: "Folder", value: defaultFolder(machine), recent, complete: completeDir },
+      { key: "cwd", label: "Folder", value: preset.cwd || defaultFolder(machine), recent, complete: completeDir },
       { key: "harness", label: "Harness", type: "dropdown", value: harness, options: harnessOpts(machine),
         onChange: h => { harnessNow = h; ctls.model.setOptions(modelsFor(h), ""); ctls.effort.setOptions(effortsFor(h), ""); ctls.mode.setOptions(modeOptions(h), ctls.mode.get()); } },
       { key: "model", label: "Model", type: "dropdown", value: harness === last.harness ? last.model : "", options: modelsFor(harness) },

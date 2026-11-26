@@ -439,6 +439,24 @@ async function newFileIn(dir) {
     if (!folder) openFile(path, { pinned: true });
   } catch (e) { toast(e.message); }
 }
+async function newFolderIn(dir) {
+  const v = await dialog({ title: "New folder", fields: [{ key: "name", label: `In ${tilde(dir)} (a/b makes both)` }], ok: "Create",
+    validate: v => v.name.trim().replace(/\/+$/, "") ? null : "Give it a name." });
+  if (!v) return;
+  const path = dir.replace(/\/$/, "") + "/" + v.name.trim().replace(/\/+$/, "");
+  try {
+    await api("POST", "/api/files/create", { path, folder: true });
+    if (typeof loadDir === "function" && FILES.dirs && FILES.dirs.has(dir)) loadDir(dir, true);
+    await refreshTree(ctxRoot(), true);
+    toast(`Made ${tilde(path)}/`);
+  } catch (e) { toast(e.message); }
+}
+/* A new session in this folder (the Files tree's folder menu): the New session dialog with it filled in; another
+   machine's folder (/@NAME/…) picks that machine too. */
+function newSessionIn(dir) {
+  const m = /^\/@([^/]+)(\/.*)?$/.exec(dir);
+  newSession(undefined, m ? { machine: m[1], cwd: (m[2] || "/").replace(/^\/(?:home\/[^/]+|Users\/[^/]+|root)(?=\/|$)/, "~") } : { cwd: tilde(dir) });
+}
 async function renamePath(path) {
   const v = await dialog({ title: "Rename", fields: [{ key: "name", label: "New name (or a/relative/path)", value: basename(path) }],
     validate: v => v.name.trim() ? null : "Give it a name." });
