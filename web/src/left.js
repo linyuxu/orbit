@@ -869,6 +869,7 @@ $("#pfbox").addEventListener("mousedown", e => { e.preventDefault(); plist.focus
 plist.addEventListener("mousedown", e => {
   const el = e.target.closest(".prow[data-k]");
   if (!el || e.button !== 0) return;
+  if (e.detail >= 2 && !e.metaKey && !e.shiftKey && rowDoubleClick(PROWS.find(x => x.k === el.dataset.k))) { e.preventDefault(); return; }
   if (S.left.tab === "files" && !S.filter && typeof filesMouseDown === "function" && filesMouseDown(e, el)) return;  // (a row that can be dragged: fileops.js)
   e.preventDefault();
   S.pcursor = el.dataset.k;
@@ -877,16 +878,21 @@ plist.addEventListener("mousedown", e => {
   if (e.target.closest(".fold") && r.fold && r.gid) { plist.focus(); setFolded(r.gid, !r.shut); return; }
   const rs = e.target.closest("[data-resume]"); if (rs) { sessionAction(rs.dataset.resume, "resume"); return; }  // the chevron folds; the rest of the row opens the group
   if (r.kind === "pgrp") { plist.focus(); renderLeft(); return; }
+  // A click opens the row and the keyboard stays in the panel (↑↓, ⏎, ⌥W… go on here); a double-click (or ⏎) goes
+  // into what it opened; Esc goes back to the main pane.
   byMouse = true;
-  try { if (r.kind === "group" || r.kind === "dir" || S.left.tab === "misc") { plist.focus(); openRow(r, { focus: false }); } else openRow(r); }
+  try { plist.focus(); openRow(r, { focus: false }); if (document.activeElement !== plist) plist.focus({ preventScroll: true }); }
   finally { byMouse = false; }
 });
-plist.addEventListener("dblclick", e => {
-  const el = e.target.closest(".prow[data-k]");
-  if (!el || S.left.tab === "sessions") return;
-  const r = PROWS.find(x => x.k === el.dataset.k);
-  if (r && (r.kind === "file" || r.kind === "lfile")) pinFile(rowPath(r));
-});
+/* A double-click: into what the click opened (the keyboard leaves the panel); a file pinned too. Told by the press's
+   click count (e.detail), not by dblclick: the first click redraws the rows, and two clicks on two nodes make none. */
+function rowDoubleClick(r) {
+  if (!r) return false;
+  if (S.left.tab === "sessions") { if (r.kind !== "session" && r.kind !== "ftab") return false; openRow(r); focusMain(); return true; }
+  if (r.kind !== "file" && r.kind !== "lfile") return false;
+  pinFile(rowPath(r)); openRow(r, { pinned: true }); focusMain();
+  return true;
+}
 plist.addEventListener("contextmenu", e => {
   e.preventDefault();
   const el = e.target.closest(".prow[data-k]");

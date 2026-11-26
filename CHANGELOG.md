@@ -8,6 +8,10 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A click in the left panel opens the row and the keyboard stays in the panel (↑↓, ⏎, ⌥W… go on there; Esc goes to
+  the main pane); a double-click goes into what it opened (the session's input, the file's editor; a file pinned). The
+  double-click is told by the press's click count: the first click redraws the rows, and the browser's dblclick never
+  came (Files' double-click to pin did not work either).
 - Fork to… (a session's menu) opens the New session dialog as a fork: machine, folder, harness, model, effort, mode,
   group, from the session's. The same machine and folder: the fork as before (another harness: a hand-over). Another
   machine or folder: a hand-over there (orbit/desk/forkto.py): this server writes the session's latest 60 turns to a

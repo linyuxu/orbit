@@ -937,6 +937,38 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
                 page.screenshot(path="/tmp/orbit-forkto.png")
                 page.keyboard.press("Escape")
 
+    def test_a_click_in_the_left_panel_keeps_the_keyboard_there(self):
+        """A click on a row of the left panel opens it and the keyboard stays in the panel (↓ moves there); a
+        double-click goes into what it opened (the session's input, the file's editor)."""
+        gid = self.group("Clicks")
+        a, b = self.session_in(gid, "click-a"), self.session_in(gid, "click-b")
+        d = Path(self.work) / "clicks"; d.mkdir(exist_ok=True); (d / "k.txt").write_text("one\ntwo\n"); (d / "l.txt").write_text("x")
+        files_sid = self.req("POST", "/api/sessions", {"cwd": str(d), "name": "click-files"})[1]["id"]
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate("S.left.shown = true; applyLeft(); setPanelTab('sessions'); 0")
+            page.evaluate(f"switchGroup({json.dumps(gid)}); renderLeft(); 0")
+            row = f"#plist .prow[data-k='s:{gid}:{b}']"
+            page.wait_for_selector(row)
+            page.click(row)
+            page.wait_for_function(f"() => S.current === {json.dumps(b)}", timeout=5000)
+            self.assertEqual(page.evaluate("document.activeElement && document.activeElement.id"), "plist", name)
+            before = page.evaluate("S.pcursor")
+            page.keyboard.press("ArrowUp")
+            self.assertNotEqual(page.evaluate("S.pcursor"), before)  # (the key went to the panel)
+            page.dblclick(row)
+            page.wait_for_timeout(300)
+            self.assertNotEqual(page.evaluate("document.activeElement && document.activeElement.id"), "plist", name)
+            # the Files tab: a click opens the file, the keyboard stays; a double-click goes into its editor
+            page.evaluate(f"switchTo({json.dumps(files_sid)}); setPanelTab('files'); focusPanel(); 0")
+            frow = f"#plist .prow[data-k='f:{d}|k.txt']"
+            page.wait_for_selector(frow)
+            page.click(frow)
+            page.wait_for_function(f"() => S.file === {json.dumps(str(d / 'k.txt'))}", timeout=5000)
+            self.assertEqual(page.evaluate("document.activeElement && document.activeElement.id"), "plist", name)
+            page.dblclick(frow)
+            page.wait_for_function("() => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.cm-editor'))", timeout=5000)
+
     def wait_disk(self, p, timeout=8):
         end = time.time() + timeout
         while time.time() < end and not Path(p).exists():

@@ -228,8 +228,8 @@ plist.addEventListener("click", e => {
   if (Date.now() - (FDRAG.dragged || 0) < 300) return;  // (the end of a drag)
   const r = PROWS.find(x => x.k === el.dataset.k); if (!r) return;
   if (FSEL.keys.size > 1) selClear();
-  byMouse = true;
-  try { if (r.kind === "dir" || r.kind === "ldir" || r.kind === "root") { plist.focus(); openRow(r, { focus: false }); } else { openRow(r); renderLeft(); } }
+  byMouse = true;  // (opened, the keyboard kept in the panel: left.js's mousedown, the same)
+  try { plist.focus(); openRow(r, { focus: false }); renderLeft(); if (document.activeElement !== plist) plist.focus({ preventScroll: true }); }
   finally { byMouse = false; }
 });
 /* Files dragged in from Finder: each put in the folder (here or another machine's). A folder from Finder: copy it
