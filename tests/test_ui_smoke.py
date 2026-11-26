@@ -843,6 +843,78 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
         finally:
             ctx.close()
 
+    def test_schedules_are_cards_active_first(self):
+        """The Schedules tab: one card per job, the active ones first; "Paused and finished" and "Archived" folded
+        until opened (remembered); a card's grid says When / Wakes / Next / Runs; Task and journal unfold (the journal
+        read then); the keyboard moves card to card and opens a fold."""
+        sid = self.new_session("sched-cards")["id"]
+        mk = lambda **b: self.req("POST", "/api/schedules", {"sid": sid, **b})[1]
+        a1 = mk(when="every 2h", text="Check **CI** and summarize", name="CI digest")
+        a2 = mk(when="daily 08:20", text="Morning news", name="Morning news", done_notify={"title": "早间新闻总结已完成"})
+        w = mk(when="every 5m", text="new PRs", name="PR watch", check="echo hi")
+        p_ = mk(when="weekdays 9am", text="paused one", name="Paused job")
+        self.req("POST", f"/api/schedules/{p_['id']}/update", {"enabled": False})
+        gone = mk(when="every 1h", text="old job", name="Old job")
+        j = Path(self.desk.scheduler.journal(gone))
+        j.write_text(j.read_text() + "\n- 2026-11-25: did the **thing**\n")
+        self.req("POST", f"/api/schedules/{gone['id']}/delete")
+        try:
+            for name, b in self.browsers.items():
+                ctx = b.new_context(viewport={"width": 1280, "height": 900})
+                page = ctx.new_page()
+                errors = []
+                page.on("pageerror", lambda e: errors.append(str(e)))
+                try:
+                    page.add_init_script("try { localStorage.removeItem('orbit.schedFold'); } catch (e) {}")
+                    self.open(page)
+                    page.evaluate("openFile('orbit:schedules', { pinned: true }); 0")
+                    page.wait_for_selector("#xbody .scard", timeout=8000)
+                    page.wait_for_timeout(200)
+                    page.screenshot(path=f"/tmp/orbit-sched-top-{name}.png")
+                    names = page.eval_on_selector_all("#xbody .scards > .scard .snm", "els => els.map(e => e.textContent)")
+                    self.assertEqual(set(names), {"CI digest", "Morning news", "PR watch"}, name)  # (the active ones; the rest folded)
+                    folds = page.eval_on_selector_all("#xbody .sfold", "els => els.map(e => e.textContent.replace(/\\s+/g, ' ').trim())")
+                    self.assertEqual(folds[0], "Paused and finished 1")
+                    self.assertRegex(folds[1], r"^Archived \d+$")  # (other tests' removed jobs are archived too)
+                    card = page.locator(f"#xbody .scard[data-xk='{a1['id']}']")
+                    grid = card.locator(".sgrid").inner_text()
+                    for k in ("WHEN", "WAKES", "NEXT", "RUNS", "ID"):
+                        self.assertIn(k, grid.upper())
+                    self.assertIn("every 2h", grid)
+                    self.assertIn("sched-cards", grid)
+                    self.assertIn("早间新闻总结已完成", page.locator(f"#xbody .scard[data-xk='{a2['id']}'] .sgrid").inner_text())
+                    self.assertIn("no agent", page.locator(f"#xbody .scard[data-xk='{w['id']}'] .sgrid").inner_text())
+                    self.assertEqual(card.locator(".spill").inner_text(), "active")
+                    # Task and journal
+                    card.locator("summary").click()
+                    page.wait_for_function(f"() => document.querySelector(\"#xbody .scard[data-xk='{a1['id']}'] .stask strong\")")
+                    # the folds: a click opens one (remembered); the keyboard too
+                    page.click("#xbody .sfold[data-fold=off]")
+                    page.wait_for_selector(f"#xbody .scard[data-xk='{p_['id']}']")
+                    self.assertEqual(page.locator(f"#xbody .scard[data-xk='{p_['id']}'] .spill").inner_text(), "paused")
+                    self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('orbit.schedFold')).off"), False)
+                    page.evaluate("XV.cur = 'fold:arch'; renderX(); document.querySelector('#xbody').focus(); 0")
+                    page.keyboard.press("Enter")
+                    arch = page.locator(f"#xbody .scard[data-xk='a:{gone['id']}']")
+                    arch.wait_for(timeout=5000)
+                    self.assertEqual(arch.locator(".spill").inner_text(), "archived")
+                    self.assertIn("REMOVED", arch.locator(".sgrid").inner_text().upper())
+                    arch.locator("summary").click()
+                    page.wait_for_function(f"() => /did the/.test((document.querySelector(\"#xbody .scard[data-xk='a:{gone['id']}'] .stask\") || {{}}).textContent || '')", timeout=5000)
+                    page.wait_for_timeout(200)
+                    page.screenshot(path=f"/tmp/orbit-sched-cards-{name}.png", full_page=False)
+                    # ↓ from the first card goes to the next
+                    page.evaluate(f"XV.cur = {json.dumps(a1['id'])}; renderX(); document.querySelector('#xbody').focus(); 0")
+                    first = page.evaluate("XV.rows.map(r => r.k)")
+                    page.keyboard.press("ArrowDown")
+                    self.assertEqual(page.evaluate("XV.cur"), first[first.index(a1["id"]) + 1], (first, a1["id"], page.evaluate("document.activeElement.id || document.activeElement.className")))
+                finally:
+                    ctx.close()
+                self.assertEqual(errors, [], name)
+        finally:
+            for it in list(self.desk.scheduler.items):
+                self.desk.scheduler.delete(it["id"])
+
     def test_phone_side_shows_a_website_without_the_token(self):
         sid = self.new_session("phone side")["id"]
         site = f"http://localhost:{self.port}/api/version"  # (another origin than the page's 127.0.0.1)

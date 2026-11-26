@@ -14,7 +14,7 @@ $("#findbar [data-f='close']").innerHTML = I("x", 12);
 setZoom(S.zoom, false);
 (async () => {
   try { const d = await api("GET", "/api/sessions"); S.machines = d.machines || []; setSessions(d.sessions, d.groups); } catch {}
-  try { S.schedules = (await api("GET", "/api/schedules")).schedules; S.settings = await api("GET", "/api/settings"); } catch {}
+  try { const sc = await api("GET", "/api/schedules"); S.schedules = sc.schedules; S.schedArchived = sc.archived || []; S.settings = await api("GET", "/api/settings"); } catch {}
   api("GET", "/api/harnesses").then(d => { if (d.harnesses && d.harnesses.length) { S.harnesses = d.harnesses; renderStatus(); } }).catch(() => {});
   if (!EMBED && S.settings.calendar) loadCalToday();
   await loadVault();

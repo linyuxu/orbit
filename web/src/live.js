@@ -54,7 +54,7 @@ function connect() {
       const list = S.cards.get(m.sid);
       onCardPatch(m, list && list.find(x => x.id === m.id), upsertCard);
     } else if (m.t === "schedules") {
-      S.schedules = m.schedules; schedulesChanged();
+      S.schedules = m.schedules; if (m.archived) S.schedArchived = m.archived; schedulesChanged();
     } else if (m.t === "plugin-badges") {
       PUI.badges = m.badges || {}; renderLeft();
     } else if (m.t === "plugin-open-tab") {

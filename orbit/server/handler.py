@@ -673,7 +673,13 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
         if p == "/api/ctx":
             return self._json(self.desk.get_ctx())
         if p == "/api/schedules":
-            return self._json({"schedules": self.desk.scheduler.list(), "now": time.time()})
+            return self._json({"schedules": self.desk.scheduler.list(), "archived": self.desk.scheduler.list_archived(), "now": time.time()})
+        m = re.fullmatch(r"/api/schedules/([\w-]+)/journal", p)
+        if m:  # a job's journal, also a removed one's (the Schedules cards' Task and journal)
+            try:
+                return self._json({"text": self.desk.scheduler.journal_text(m.group(1))})
+            except KeyError:
+                return self._json({"error": "no such schedule"}, 404)
         if p == "/api/push":  # the phone's notifications: the VAPID public key, the devices, the last sends
             from orbit.services import push
             return self._json(push.of(self.desk).status())

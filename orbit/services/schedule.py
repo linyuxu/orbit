@@ -56,6 +56,7 @@ MAX_A_DAY = 24  # agent runs a day per job, unless the job says otherwise
 WATCH_MIN = 10  # seconds between a watch's checks, at least
 CHECK_TIMEOUT = 120
 EVENTS_SENT = 50  # new events a wake-up lists at most
+ARCHIVED_KEPT = 100  # removed jobs kept (with their journals) for the Archived section
 FOLLOW_MAX = 6 * 3600  # a run followed for its end (done_notify) this long at most
 
 
@@ -252,6 +253,7 @@ class Scheduler:
         self.path = path
         self.lock = threading.RLock()
         self.items: list[dict] = []
+        self.archived: list[dict] = []  # removed jobs (their journals stay), the latest last
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._load()
@@ -259,7 +261,9 @@ class Scheduler:
     # storage
     def _load(self) -> None:
         try:
-            self.items = json.loads(self.path.read_text())["schedules"]
+            data = json.loads(self.path.read_text())
+            self.items = data["schedules"]
+            self.archived = list(data.get("archived") or [])
         except (OSError, ValueError, KeyError):
             self.items = []
         now = time.time()
@@ -274,7 +278,7 @@ class Scheduler:
 
     def save(self) -> None:
         with self.lock:
-            data = json.dumps({"schedules": self.items}, indent=1, ensure_ascii=False)
+            data = json.dumps({"schedules": self.items, "archived": self.archived}, indent=1, ensure_ascii=False)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(data)
@@ -282,7 +286,7 @@ class Scheduler:
 
     def _changed(self) -> None:
         self.save()
-        self.desk.broadcast({"t": "schedules", "schedules": self.list()})
+        self.desk.broadcast({"t": "schedules", "schedules": self.list(), "archived": self.list_archived()})
 
     # thread
     def start(self) -> None:
@@ -338,6 +342,30 @@ class Scheduler:
             return (f"{r['name']} on {r.get('remote', '')}" if r else "(session gone)")
         s = self.desk.sessions.get(sid)
         return s.name if s else ""
+
+    def list_archived(self) -> list[dict]:
+        """Removed jobs, the latest first: what they were, their runs, their journal (kept)."""
+        with self.lock:
+            out = []
+            for it in reversed(self.archived):
+                d = {k: it.get(k) for k in ("id", "name", "when", "text", "created", "removed", "runs", "last", "notify", "check")}
+                d["describe"] = describe(it["spec"]) if it.get("spec") else it.get("when", "")
+                d["target_name"] = self._target_name(it)
+                j = self.journal(it)
+                d["journal"] = str(j) if j.exists() else ""
+                out.append(d)
+            return out
+
+    def journal_text(self, ref: str) -> str:
+        """A job's journal (also a removed one's), '' when it has none."""
+        with self.lock:
+            it = next((x for x in self.items + self.archived if x["id"] == ref), None)
+        if it is None:
+            raise KeyError(ref)
+        try:
+            return self.journal(it).read_text(errors="replace")[-200_000:]
+        except OSError:
+            return ""
 
     def _target_name(self, it: dict) -> str:
         if it.get("notify"):
@@ -476,6 +504,8 @@ class Scheduler:
         with self.lock:
             it = self.get(ref)
             self.items.remove(it)
+            gone = {k: v for k, v in it.items() if k not in ("_running", "seen", "waiting")}
+            self.archived = (self.archived + [{**gone, "removed": time.time(), "enabled": False}])[-ARCHIVED_KEPT:]
         self._changed()
 
     def check(self, ref: str) -> dict:

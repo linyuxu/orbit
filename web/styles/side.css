@@ -164,3 +164,46 @@
 #meetpop .mpfoot { display:flex; align-items:center; gap:8px; margin-top:4px; padding:4px 6px 2px 2px; border-top:1px solid var(--line); }
 #meetpop .mpfoot .k { margin-left:auto; font-size:calc(11px * var(--ui-k)); color:var(--ink-3); white-space:nowrap; }
 #sbmeet.on { background:var(--btn-hover); color:var(--ink); }
+
+/* ---------- Schedules as cards (schedules.js): active first, then folded "Paused and finished" and "Archived" */
+#xhead .shint { color:var(--ink-3); font-size:calc(11.5px * var(--ui-k)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; margin-left:10px; }
+.scards { display:flex; flex-direction:column; gap:10px; padding:8px 2px 0; }
+.sgroup { display:flex; flex-direction:column; gap:10px; }
+.scard { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:11px 14px 10px; cursor:default; }
+.scard.kc { border-color:color-mix(in srgb, var(--focus) 55%, var(--line)); box-shadow:0 0 0 2px color-mix(in srgb, var(--focus) 18%, transparent); }
+.scard.off { background:color-mix(in srgb, var(--surface) 60%, var(--bg)); }
+.scard.arch { opacity:.78; }
+.sch { display:flex; align-items:center; gap:8px; min-width:0; }
+.sic { display:grid; color:var(--ink-3); flex:none; }
+.snm { font-weight:calc(600 + var(--wd)); font-size:calc(14px * var(--ui-k)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.spill { flex:none; font-size:calc(11px * var(--ui-k)); line-height:18px; padding:0 7px; border-radius:9px; font-weight:calc(500 + var(--wd)); }
+.spill.on { color:var(--ok); background:var(--ok-soft); }
+.spill.err { color:var(--err); background:var(--err-soft); }
+.spill.off, .spill.done, .spill.arch { color:var(--ink-3); background:color-mix(in srgb, var(--ink-3) 12%, transparent); }
+.sacts { margin-left:auto; display:flex; gap:4px; flex:none; }
+.sbtn { display:inline-flex; align-items:center; gap:4px; height:24px; padding:0 8px; border:1px solid var(--line); border-radius:6px; background:none; color:var(--ink-2); font-size:calc(12px * var(--ui-k)); cursor:pointer; }
+.sbtn:hover:not(:disabled) { background:var(--btn-hover); color:var(--ink); }
+.sbtn:disabled { opacity:.4; cursor:default; }
+.sbtn.danger { color:var(--err); }
+.sbtn.danger:hover { background:var(--err-soft); color:var(--err); }
+.sgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:6px 18px; margin:10px 0 0 22px; }
+.skv { display:flex; flex-direction:column; min-width:0; }
+.skv.wide { grid-column:1 / -1; }
+.sk { font-size:calc(10.5px * var(--ui-k)); letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); }
+.sv { font-size:calc(12.5px * var(--ui-k)); color:var(--ink); overflow-wrap:anywhere; display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+.sv code { font-size:.92em; }
+.sv .dim, .slast .dim, .stask .dim { color:var(--ink-3); }
+.sv .err, .slast .err { color:var(--err); }
+.slast { margin:8px 0 0 22px; color:var(--ink-3); font-size:calc(12px * var(--ui-k)); overflow-wrap:anywhere; }
+.stask { margin:6px 0 0 22px; }
+.stask > summary { cursor:pointer; color:var(--ink-2); font-size:calc(12px * var(--ui-k)); width:max-content; user-select:none; }
+.stask > summary:hover { color:var(--ink); }
+.stask .ssec { margin:10px 0 4px; font-size:calc(10.5px * var(--ui-k)); letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); }
+.stask .md { font-size:calc(13px * var(--ui-k)); max-height:420px; overflow:auto; padding:8px 10px; border-radius:8px; background:color-mix(in srgb, var(--bg) 70%, var(--surface)); }
+.sfold { display:flex; align-items:center; gap:6px; margin-top:8px; padding:6px 4px; color:var(--ink-2); font-weight:calc(500 + var(--wd)); font-size:calc(12.5px * var(--ui-k)); cursor:pointer; border-radius:6px; }
+.sfold:hover { background:var(--btn-hover); }
+.sfold.kc { box-shadow:inset 3px 0 0 var(--focus); background:color-mix(in srgb, var(--focus) 9%, transparent); }
+.sfold .chev { display:grid; transition:transform .12s; }
+.sfold .chev.open { transform:rotate(90deg); }
+.sfold .dim { color:var(--ink-3); font-weight:400; }
+.snone { color:var(--ink-3); padding:8px 4px; font-size:calc(12.5px * var(--ui-k)); }

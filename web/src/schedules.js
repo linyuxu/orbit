@@ -35,9 +35,9 @@ function schedulesChanged() {
   if (xKind() === "schedules") renderX();
   else if (!EMBED && S.left.shown && S.left.tab === "misc") renderLeft();
 }
-setInterval(() => {  // "in 25m" stays true
+setInterval(() => {  // "in 25m" stays true (not while a job's Task and journal is unfolded: it would redraw under the reader)
   if (document.hidden) return;
-  if (xOn()) renderX();
+  if (xOn() && !(xKind() === "schedules" && XV.open.size)) renderX();
   if (!EMBED_X && S.left.shown && S.left.tab === "misc" && !S.filter) renderLeft();
 }, 30000);
 
@@ -139,8 +139,8 @@ async function toggleSchedule(it) {
 function openJournal(it) { if (it.journal) openFile(it.journal, { pinned: true }); else toast("No journal yet: it starts with the first run"); }
 function openLastRun(it) { const l = it.last || {}; if (l.sid) openUrl(`orbit://session/${l.sid}${l.cid ? "#" + l.cid : ""}`); else toast("It has not run yet"); }
 async function deleteSchedule(it) {
-  const ok = await confirmDialog({ title: `Delete the schedule “${it.name}”?`, body: `${it.describe} → ${it.target_name}. The sessions and requests it made stay.`, ok: "Delete", danger: true });
-  if (ok) try { await api("POST", `/api/schedules/${it.id}/delete`); } catch (e) { toast(e.message); }
+  const ok = await confirmDialog({ title: `Delete the schedule “${it.name}”?`, body: `${it.describe} → ${it.target_name}. It stops and moves to Archived; the sessions, requests and its journal stay.`, ok: "Delete", danger: true });
+  if (ok) try { await api("POST", `/api/schedules/${it.id}/delete`); toast(`Removed: “${it.name}” is under Archived (its journal stays)`); } catch (e) { toast(e.message); }
 }
 
 /* ---------- calendar: data, settings, meetings */
@@ -211,21 +211,87 @@ function renderX() {
 function drawX(head, body, foot) {
   if (xKind() !== "calendar" && typeof calNoteHide === "function") calNoteHide();  // (the meeting note: the Calendar's)
   $("#xhead").innerHTML = head; $("#xbody").innerHTML = body; $("#xfoot").textContent = foot;
-  const el = $("#xbody .xrow.kc"); if (el) el.scrollIntoView({ block: "nearest" });
+  const el = $("#xbody .xrow.kc, #xbody .scard.kc, #xbody .sfold.kc"); if (el) el.scrollIntoView({ block: "nearest" });
+}
+/* Schedules as cards: the active jobs first (soonest next), then "Paused and finished" and "Archived" (removed jobs,
+   their journals kept), each folded until opened (remembered). A card: its name, state and actions; a grid of what it
+   is (When, Wakes, Next, Runs, the phone, Ends, Id; a watch: its check); the last run; Task and journal folded
+   (the journal read when unfolded). The keyboard moves card to card (and onto a fold's head: ⏎ / Space opens it). */
+XV.fold = Object.assign({ off: true, arch: true }, LS.get("schedFold", {}));
+XV.open = new Set(); XV.jtext = new Map(); S.schedArchived = S.schedArchived || [];
+const schedDate = t => { const d = new Date(t * 1000); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${hm24(t)}`; };
+function schedPill(it) {
+  if (it.removed) return `<span class="spill arch">archived</span>`;
+  if (it.enabled) return it.last && it.last.error ? `<span class="spill err" title="${esc(it.last.error)}">active · last failed</span>` : `<span class="spill on">active</span>`;
+  return it.spec && it.spec.kind === "once" && it.runs ? `<span class="spill done">done</span>` : `<span class="spill off">paused</span>`;
+}
+const kv = (k, v, cls = "") => v === "" || v == null ? "" : `<div class="skv${cls ? " " + cls : ""}"><span class="sk">${esc(k)}</span><span class="sv">${v}</span></div>`;
+function schedGrid(it) {
+  const wakes = it.notify ? `${I("bell", 12)} the phone${it.sid ? ` · a tap opens ${esc(it.target_name.replace(/^phone notification → /, ""))}` : ""}`
+    : esc(it.target_name || "");
+  const dn = it.done_notify ? `${I("bell", 12)} when the run ends: “${esc(it.done_notify.title)}”` : "";
+  const next = it.removed ? "" : it.enabled && it.next ? `<b>${esc(fmtNext(it.next))}</b> <span class="dim">${esc(schedDate(it.next))}</span>` : `<span class="dim">—</span>`;
+  const runs = `${it.runs || 0}${it.check || it.notify ? "" : ` <span class="dim">· max ${it.max || 24}/day${it.until ? `, none after ${esc(it.until)}` : ""}</span>`}`;
+  let g = kv("When", `${esc(it.when || "")}${it.describe && it.describe !== it.when ? ` <span class="dim">· ${esc(it.describe)}</span>` : ""}`)
+    + kv(it.notify ? "Sends to" : "Wakes", wakes) + kv("Next", next) + kv("Runs", runs) + kv("Phone", dn)
+    + kv("Ends", it.expires ? esc(schedDate(it.expires)) : "");
+  if (it.removed) g += kv("Created", it.created ? esc(schedDate(it.created)) : "") + kv("Removed", esc(schedDate(it.removed)));
+  if (it.check) {
+    const ck = it.checked || {}, l = it.last || {};
+    g += kv("Check", `<code>${esc(it.check)}</code> <span class="dim">no agent: only new events wake it</span>`, "wide")
+      + kv("Last check", ck.at ? esc(ago(ck.at) + " ago") : l.at ? esc(ago(l.at) + " ago") : "never")
+      + kv("Result", l.error ? `<span class="err">${esc(l.error)}</span>` : `${ck.events ?? l.events ?? 0} new`)
+      + kv("Seen", String((it.seen || []).length));
+  }
+  return g + kv("Id", `<code>${esc(it.id)}</code>`);
+}
+function schedCard(it, k) {
+  const arch = !!it.removed, acts = arch
+    ? `<button class="sbtn" data-sa="journal"${it.journal ? "" : " disabled"}>Journal</button>`
+    : `<button class="sbtn" data-sa="run" title="R">${I("play", 12)}${it.check ? "Check now" : "Run now"}</button>`
+      + `<button class="sbtn" data-sa="toggle" title="Space">${I(it.enabled ? "pause" : "play", 12)}${it.enabled ? "Pause" : "Resume"}</button>`
+      + `<button class="sbtn" data-sa="edit" title="⏎">${I("pencil", 12)}Edit</button>`
+      + `<button class="sbtn" data-sa="journal" title="O"${it.journal ? "" : " disabled"}>Journal</button>`
+      + `<button class="sbtn danger" data-sa="remove" title="⌫">Remove</button>`;
+  const open = XV.open.has(k), jt = XV.jtext.get(it.id);
+  return `<div class="scard${k === XV.cur ? " kc" : ""}${it.enabled ? "" : " off"}${arch ? " arch" : ""}" data-xk="${esc(k)}">`
+    + `<div class="sch"><span class="sic">${I(it.notify ? "bell" : "clock", 14)}</span><span class="snm">${esc(it.name)}</span>${schedPill(it)}<span class="sacts">${acts}</span></div>`
+    + `<div class="sgrid">${schedGrid(it)}</div>`
+    + `<div class="slast">Last: ${lastLine(it)}${it.last && it.last.done ? ` · ${it.last.done.ok ? "finished" : `<span class="err">did not finish${it.last.done.why ? ": " + esc(it.last.done.why) : ""}</span>`}` : ""}${it.waiting ? " · running now" : ""}</div>`
+    + `<details class="stask" data-det="${esc(k)}"${open ? " open" : ""}><summary>Task and journal</summary>`
+    + `<div class="ssec">Task</div><div class="md">${renderMd(it.text || "")}</div>`
+    + `<div class="ssec">Journal</div>${jt == null ? `<div class="dim">${open ? "…" : ""}</div>` : jt ? `<div class="md">${renderMd(jt)}</div>` : `<div class="dim">No journal${it.sid && it.sid.includes("~") ? " here (its session is on another machine)" : it.spec && it.spec.kind === "once" ? " (a one-off job keeps none)" : " yet: it starts with the first run"}.</div>`}`
+    + `</details></div>`;
 }
 function renderSchedulesX() {
-  const xs = S.schedules;
-  XV.rows = xs.map(it => ({ k: it.id, it }));
+  const xs = S.schedules, arch = S.schedArchived || [];
+  const active = xs.filter(x => x.enabled).sort((a, b) => (a.next || Infinity) - (b.next || Infinity));
+  const off = xs.filter(x => !x.enabled);
+  XV.rows = [];
+  let body = "";
+  const cards = (list, pre) => list.map(it => { const k = pre + it.id; XV.rows.push({ k, it }); return schedCard(it, k); }).join("");
+  const fold = (key, label, n, list, pre) => {
+    if (!n) return "";
+    const k = "fold:" + key, shut = XV.fold[key];
+    XV.rows.push({ k, fold: key });
+    return `<div class="sfold${k === XV.cur ? " kc" : ""}" data-xk="${esc(k)}" data-fold="${key}"><span class="chev${shut ? "" : " open"}">${I("chev", 11)}</span>${esc(label)} <span class="dim">${n}</span></div>`
+      + (shut ? "" : `<div class="sgroup">${cards(list, pre)}</div>`);
+  };
+  body += active.length ? cards(active, "") : xs.length ? `<div class="snone">No active schedule.</div>` : "";
+  body += fold("off", "Paused and finished", off.length, off, "");
+  body += fold("arch", "Archived", arch.length, arch, "a:");
   if (!XV.rows.some(r => r.k === XV.cur)) XV.cur = XV.rows.length ? XV.rows[0].k : null;
-  const head = `<span class="s">${xs.length ? `${xs.filter(x => x.enabled).length} on · ${xs.length} in all` : ""}</span><span class="acts"><button class="qbtn" data-x="new" title="New schedule (N)">${I("plus", 13)}New</button></span>`;
-  const body = xs.length ? XV.rows.map(({ k, it }) =>
-    `<div class="xrow${k === XV.cur ? " kc" : ""}${it.enabled ? "" : " off"}" data-xk="${esc(k)}" title="${esc(it.text)}"><span class="dot ${schedState(it)}"></span><div class="m">` +
-    `<div class="l1"><span class="nm">${esc(it.name)}</span><span class="r">${it.enabled ? "next " + esc(fmtNext(it.next)) : "off"}</span>` +
-    `<span class="racts"><button class="ibtn sm" data-sa="run" title="Run now (R)">${I("play", 13)}</button><button class="ibtn sm" data-sa="toggle" title="${it.enabled ? "Pause" : "Resume"} (Space)">${I(it.enabled ? "pause" : "play", 13)}</button><button class="ibtn sm" data-sa="edit" title="Edit (⏎)">${I("pencil", 13)}</button><button class="ibtn sm" data-sa="more" title="More: journal, last run, remove (⌘E)">${I("more", 13)}</button></span></div>` +
-    `<div class="l2">${it.check ? `<span class="watch" title="A watch: ${esc(it.check)}">watch</span> ` : ""}${esc(it.describe)} → ${esc(it.target_name)}${it.max && it.max !== 24 ? ` · ≤${it.max}/day` : ""}${it.until ? ` · until ${esc(it.until)}` : ""} · ${lastLine(it)}${it.journal ? ` · <span class="jl" title="O opens it">journal</span>` : ""}</div></div></div>`).join("")
-    : `<div class="xempty"><h3>No schedules yet</h3>A schedule sends a request to a session at set times: every 2h, weekdays 9am, tomorrow 9am.<br>N makes one. Agents can wake themselves up: <code>orbit-agent wake 30m "check CI"</code>.</div>`;
-  drawX(head, body, "⏎ edit · Space pause · R run now · ⌘E more");
+  if (!xs.length && !arch.length) body = `<div class="xempty"><h3>No schedules yet</h3>A schedule sends a request to a session at set times: every 2h, weekdays 9am, tomorrow 9am.<br>N makes one. Agents can wake themselves up: <code>orbit-agent wake 30m "check CI"</code>.</div>`;
+  const head = `<span class="s">${xs.length ? `${active.length} active of ${xs.length}` : ""}</span><span class="shint">weekdays 9am · every 2h · tomorrow 9am · in 30m</span>`
+    + `<span class="acts"><button class="qbtn" data-x="new" title="New schedule (N)">${I("plus", 13)}New schedule</button></span>`;
+  drawX(head, `<div class="scards">${body}</div>`, "↑↓ move · ⏎ edit · Space pause · R run now · O journal · ⌘E more");
 }
+async function schedJournal(id, k) {
+  try { XV.jtext.set(id, (await api("GET", `/api/schedules/${encodeURIComponent(id)}/journal`)).text || ""); }
+  catch (e) { XV.jtext.set(id, ""); }
+  if (XV.open.has(k) && xKind() === "schedules") renderX();
+}
+function schedFold(key) { XV.fold[key] = !XV.fold[key]; LS.set("schedFold", XV.fold); renderX(); }
 function xMove(how) {
   if (!XV.rows.length) return;
   let i = XV.rows.findIndex(r => r.k === XV.cur);
@@ -234,9 +300,9 @@ function xMove(how) {
   renderX();
 }
 function xMenu(where) {
-  const r = XV.rows.find(x => x.k === XV.cur); if (!r) return;
-  where = where || { anchor: $("#xbody .xrow.kc [data-cmore]") || $("#xbody .xrow.kc") };  // (a meeting: by its ⋯)
-  if (r.it) scheduleMenu(r.it, where); else calMenu(r, where);
+  const r = XV.rows.find(x => x.k === XV.cur); if (!r || r.fold) return;
+  where = where || { anchor: $("#xbody .xrow.kc [data-cmore]") || $("#xbody .kc") };  // (a meeting: by its ⋯)
+  if (r.it) { if (!r.it.removed) scheduleMenu(r.it, where); } else calMenu(r, where);
 }
 function xWeek(d) { XV.week = d === 0 ? 0 : XV.week + d; XV.cur = null; loadX(); }
 /* Keys in the Schedules / Calendar side tab. */
@@ -246,11 +312,13 @@ function xKey(e, combo) {
   const mv = { ArrowDown: 1, ArrowUp: -1, "C:KeyN": 1, "C:KeyP": -1, Home: "home", End: "end", "AS:Comma": "home", "AS:Period": "end",
                PageDown: pg, PageUp: -pg, "C:KeyV": pg, "A:KeyV": -pg }[combo];
   if (mv !== undefined) { xMove(mv); return true; }
-  if (combo === "C:KeyL") { recenter($("#xbody"), $("#xbody .xrow.kc")); return true; }
+  if (combo === "C:KeyL") { recenter($("#xbody"), $("#xbody .kc")); return true; }
   const r = XV.rows.find(x => x.k === XV.cur);
   if (xKind() === "calendar") return calKeyDown(combo);  // calview.js
   if (combo === "KeyN") { scheduleDialog(); return true; }
   if (!r) return false;
+  if (r.fold) { if (combo === "Enter" || combo === "Space" || combo === "ArrowRight" || combo === "ArrowLeft") { schedFold(r.fold); return true; } return false; }
+  if (r.it.removed) { if (combo === "KeyO" || combo === "Enter") { openJournal(r.it); return true; } return false; }
   if (combo === "Enter") { scheduleDialog(r.it); return true; }
   if (combo === "Space") { toggleSchedule(r.it); return true; }
   if (combo === "KeyR") { runSchedule(r.it); return true; }
@@ -270,19 +338,30 @@ $("#xview").addEventListener("click", e => {
     return;
   }
   const row = e.target.closest("[data-xk]");
-  const sa = e.target.closest("[data-sa]");  // a row's own buttons (U11)
+  const fd = e.target.closest("[data-fold]");
+  if (fd) { XV.cur = fd.dataset.xk; schedFold(fd.dataset.fold); return; }
+  if (e.target.closest("summary") || e.target.closest(".stask")) { if (row) XV.cur = row.dataset.xk; return; }  // (Task and journal: its own fold)
+  const sa = e.target.closest("[data-sa]");  // a card's own buttons
   if (sa && row) {
+    if (sa.disabled) return;
     XV.cur = row.dataset.xk; const it = (XV.rows.find(r => r.k === XV.cur) || {}).it; if (!it) return;
     const a = sa.dataset.sa;
     if (a === "run") runSchedule(it); else if (a === "toggle") toggleSchedule(it); else if (a === "edit") scheduleDialog(it);
-    else { renderX(); scheduleMenu(it, { anchor: $("#xbody .xrow.kc [data-sa=more]") || sa }); }
+    else if (a === "journal") openJournal(it); else if (a === "remove") deleteSchedule(it);
+    else { renderX(); scheduleMenu(it, { anchor: $("#xbody .kc [data-sa=more]") || sa }); }
     return;
   }
   if (row) { XV.cur = row.dataset.xk; renderX(); $("#xbody").focus({ preventScroll: true }); }
 });
-$("#xview").addEventListener("dblclick", e => { if (xKind() !== "calendar" && e.target.closest("[data-xk]")) xKey(e, "Enter"); });
+$("#xview").addEventListener("dblclick", e => { if (xKind() === "schedules" && e.target.closest(".stask, button, [data-fold]")) return; if (xKind() !== "calendar" && e.target.closest("[data-xk]")) xKey(e, "Enter"); });
+$("#xview").addEventListener("toggle", e => {  // a card's Task and journal: the journal read when it opens
+  const d = e.target; if (!d.matches || !d.matches("details[data-det]")) return;
+  const k = d.dataset.det, r = XV.rows.find(x => x.k === k);
+  if (d.open) { if (XV.open.has(k)) return; XV.open.add(k); if (r && r.it) schedJournal(r.it.id, k); }  // (a redrawn open one fires too)
+  else if (d.isConnected) XV.open.delete(k);
+}, true);
 $("#xview").addEventListener("contextmenu", e => {
-  const row = e.target.closest("[data-xk]"); if (!row) return;
+  const row = e.target.closest("[data-xk]"); if (!row || row.dataset.fold) return;
   e.preventDefault(); XV.cur = row.dataset.xk; renderX(); xMenu({ at: { x: e.clientX, y: e.clientY } });
 });
 
