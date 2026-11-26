@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The phone shows OpenAI's use too, as the Mac's status bar: Misc → Usage's row ("OpenAI $4.20 left", or this
+  month's cost) and its page (the balance with its bar and the talking time it buys, this month's cost, calls and
+  talking time), from `/api/live/usage`.
 - Fixed: the script guard's false "a page script did not load (an error)": a picture (or stylesheet, video) that
   failed while the page loaded, and errors with no file that are no SyntaxError ("Script error.", a ResizeObserver
   loop), counted as a failed script.

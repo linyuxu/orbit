@@ -640,6 +640,29 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             self.assertFalse(page.query_selector(row))
             self.assertEqual(page.evaluate("S.pcursor"), "g:" + gid)
 
+    def test_phone_usage_has_openai(self):
+        self.new_session("usage")
+        code, e = self.req("POST", "/api/settings", {"live_budget": 10})
+        self.assertEqual(code, 200, e)
+        try:
+            for name, b in self.browsers.items():
+                ctx = b.new_context(viewport={"width": 390, "height": 844}, has_touch=True)
+                page = ctx.new_page()
+                try:
+                    page.goto(f"http://127.0.0.1:{self.port}/m/")
+                    page.wait_for_function("() => typeof S !== 'undefined' && S.sessions && S.sessions.size > 0", timeout=15000)
+                    page.evaluate("loadUsage()")
+                    page.wait_for_timeout(800)
+                    self.assertIn("OpenAI $10.00 left", page.evaluate("usageHint().replace(/<[^>]+>/g, '')"), name)  # (the Misc row)
+                    text = page.evaluate("(() => { const p = usagePage(); return p.body.textContent; })()")  # (the Usage page)
+                    self.assertIn("OpenAI", text)
+                    self.assertIn("$10.00 left", text)
+                    self.assertIn("0 calls", text)
+                finally:
+                    ctx.close()
+        finally:
+            self.req("POST", "/api/settings", {"live_budget": 0})
+
     def test_phone_conversation_wears_its_group_tint(self):
         hued = self.group("Hued", color="#1baf7a")
         plain = self.group("Plain")

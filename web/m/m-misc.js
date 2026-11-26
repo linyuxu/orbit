@@ -232,15 +232,29 @@ function resetsIn(at) {
   const d = Math.floor(m / 1440); m -= d * 1440; const h = Math.floor(m / 60); m -= h * 60;
   return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
 }
-function usageHint() {  // "Claude 9% · Codex 89%" (the hot one in its colour)
+/* OpenAI (GPT Live voice), as the desktop's status bar: what Orbit's calls cost this month (by their own usage: an API
+   key cannot read the account) and the balance left when one was given in Settings → Voice (GET /api/live/usage). */
+const usd = x => "$" + (x < 1000 ? x.toFixed(2) : Math.round(x));
+const vmin = m => { m = Math.round(m); return m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`; };
+function voiceUse() {
+  const u = S.voiceUse; if (!u || !u.month) return null;
+  const m = u.month, b = u.budget && u.budget.given ? u.budget : null;
+  if (!m.calls && !b) return null;
+  return { m, b, pct: b ? Math.min(100, b.spent / b.given * 100) : 0 };
+}
+function usageHint() {  // "Claude 9% · Codex 89% · OpenAI $4.20 left" (the hot one in its colour)
   if (!S.usage) return "";
-  const hs = usageShown();
-  if (!hs.length) return "none";
-  return hs.map(h => { const l = (h.limits || [])[0];
-    return `${esc(h.label)} ${l ? `<span class="${usageHeat(l.used)}">${Math.round(l.used)}%</span>` : esc(h.quota)}`; }).join(" · ");
+  const hs = usageShown(), v = voiceUse();
+  const parts = hs.map(h => { const l = (h.limits || [])[0];
+    return `${esc(h.label)} ${l ? `<span class="${usageHeat(l.used)}">${Math.round(l.used)}%</span>` : esc(h.quota)}`; });
+  if (v) parts.push(`OpenAI ${v.b ? `<span class="${usageHeat(v.pct)}">${usd(v.b.left)} left</span>` : (v.m.estimated ? "≈ " : "") + usd(v.m.cost)}`);
+  return parts.length ? parts.join(" · ") : "none";
 }
 async function loadUsage() {
-  try { S.usage = await api("GET", "/api/usage"); } catch (e) { if (e instanceof NotPaired) return; }
+  try {
+    const [u, v] = await Promise.all([api("GET", "/api/usage"), api("GET", "/api/live/usage").catch(e => { if (e instanceof NotPaired) throw e; return null; })]);
+    S.usage = u; S.voiceUse = v;
+  } catch (e) { if (e instanceof NotPaired) return; }
   miscChanged();
 }
 const ubarHtml = u => `<span class="ubar ${usageHeat(u)}"><i style="width:${Math.min(100, Math.max(0, u))}%"></i></span>`;
@@ -252,8 +266,13 @@ function usagePage() {
   };
   page.refresh = () => {
     if (!S.usage) { page.body.innerHTML = loadingHtml(); return; }
-    const hs = S.usage.harnesses || [];
-    if (!hs.length) { page.body.innerHTML = emptyBox("No usage yet", "No harness has reported its usage yet. Refresh asks them (Claude: its /usage, no model call; Codex: after a turn)."); return; }
+    const hs = S.usage.harnesses || [], v = voiceUse();
+    if (!hs.length && !v) { page.body.innerHTML = emptyBox("No usage yet", "No harness has reported its usage yet. Refresh asks them (Claude: its /usage, no model call; Codex: after a turn)."); return; }
+    const voice = v ? `<section class="usec"><div class="shead"><span class="gn">OpenAI</span><span class="uplan">voice</span><span class="cnt">this month</span></div><div class="rows">` +
+      (v.b ? `<div class="urow"><span class="ul">Balance</span>${ubarHtml(v.pct)}<span class="up wide ${usageHeat(v.pct)}">${usd(v.b.left)} left</span></div>` +
+             `<div class="urow"><span class="ul dim">${usd(v.b.spent)} of ${usd(v.b.given)} · ≈ ${vmin(v.b.active_min)} of talking left</span></div>` : "") +
+      `<div class="urow"><span class="ul">${v.m.estimated ? "≈ " : ""}${usd(v.m.cost)} · ${v.m.calls} call${v.m.calls === 1 ? "" : "s"}</span><span class="ur wide">${vmin((v.m.active_s || 0) / 60)} talking</span></div>` +
+      `</div></section>` : "";
     page.body.innerHTML = hs.map(h => {
       const lims = h.limits || [], first = lims[0];
       const right = first && first.resets_at ? `Resets in ${resetsIn(first.resets_at)}` : h.error ? esc(h.error) : "";
@@ -263,7 +282,7 @@ function usagePage() {
           `${l.resets_at ? `<span class="ur">${resetsIn(l.resets_at)}</span>` : l.resets_text ? `<span class="ur">${esc(l.resets_text)}</span>` : ""}</div>`).join("")
           : h.quota ? "" : `<div class="urow"><span class="ul dim">No figures reported</span></div>`) +
         (h.quota ? `<div class="urow"><span class="ul">${esc(h.quota)}</span></div>` : "") + `</div></section>`;
-    }).join("") + `<div class="note ufoot">Claude: its /usage (no model call) · Codex: its last turn's rate limits${S.usage.at ? " · checked " + esc(ago(S.usage.at)) : ""}</div>`;
+    }).join("") + voice + `<div class="note ufoot">Claude: its /usage (no model call) · Codex: its last turn's rate limits${v ? " · OpenAI: Orbit's voice calls, by their own usage" : ""}${S.usage.at ? " · checked " + esc(ago(S.usage.at)) : ""}</div>`;
   };
   page.onShow = () => loadUsage();
   page.refresh();
