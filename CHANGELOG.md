@@ -33,6 +33,10 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   `GET /api/schedules/ID/journal`). Keys as before; a fold's head takes ⏎ / Space.
   The phone's Misc → Schedules the same: active cards first, the two folds, each card with its switch, grid, last
   run and Task and journal.
+- Notifications from another machine's agents: a server with no phone of its own (`orbit-agent notify` /
+  `remind` there) forwards to the one the phone subscribed to (`orbit push-relay upstream URL TOKEN` there; `orbit
+  push-relay add NAME` here makes the token). The relay token opens `POST /api/push/relay` and nothing else (kept as
+  a hash); the session is named `NAME~ID` there, a key once per machine.
 - Schedules wake another machine's session (`NAME~ID`, through its server, a client id per due time so a re-fired
   run sends once); `done_notify` {title, body, fail_if} pushes to the phone when that run ends, or says it did not
   (failed, stopped, the answer's first line has fail_if, gone, 6 h with no end); a waiting run is followed again

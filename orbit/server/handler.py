@@ -79,7 +79,12 @@ class Handler(Forward, Streams, Watch, BaseHTTPRequestHandler):
                     self._json({"error": f"this server takes requests from other machines over HTTPS: {to}"}, 421)
                 return False
         if self.from_remote:
-            if not remote.valid(self.desk.state_dir, remote.presented(self.headers, urlparse(self.path).query)):
+            given = remote.presented(self.headers, urlparse(self.path).query)
+            self.push_relay = ""
+            if urlparse(self.path).path == "/api/push/relay" and self.command == "POST":  # another machine's relay token
+                from orbit.services import push
+                self.push_relay = push.of(self.desk).relay_name(given)
+            if not self.push_relay and not remote.valid(self.desk.state_dir, given):
                 if self.command == "GET" and "text/html" in (self.headers.get("Accept") or ""):
                     self._unpaired_page()  # a browser (a phone) opened the address without its link
                 else:
@@ -1099,6 +1104,13 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                              "via": str(b.get("how") or "")[:40], "windows": int(b.get("windows") or 0),
                              "v": str(b.get("v") or "")[:20]})
                     return self._json({"ok": True})
+                if p == "/api/push/relay":  # another machine's notification (its relay token): its session as we name it
+                    name = getattr(self, "push_relay", "") or pu.relay_name(remote.presented(self.headers, u.query))
+                    if not name:
+                        return self._json({"error": "a relay token only (orbit push-relay add NAME)"}, 403)
+                    sid = str(b.get("sid") or "")
+                    return self._json(pu.notify(str(b.get("title") or ""), str(b.get("body") or ""), f"{name}~{sid}" if sid else "",
+                                                key=f"{name}:{b['key']}" if b.get("key") else "", via=f"{name}: {str(b.get('via') or '')}"[:60]))
                 if p == "/api/push/send":  # orbit-agent notify; the phone's "Send a test" (to itself: endpoint)
                     sid = str(b.get("sid") or "")
                     if sid and sid not in self.desk.sessions:

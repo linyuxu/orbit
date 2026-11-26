@@ -185,6 +185,36 @@ def cmd_token(rotate: bool) -> int:
     return 0
 
 
+def cmd_push_relay(action: str, a: str, b: str) -> int:
+    """Phone notifications from another machine's agents (orbit/services/push.py): where the phone subscribed,
+    `add NAME` makes a relay token for that machine; there, `upstream URL TOKEN` forwards its notifications here."""
+    from orbit.services.push import Push
+    p = Push(_state())
+    try:
+        if action == "add":
+            if not a:
+                sys.exit("orbit: usage: orbit push-relay add NAME   (NAME: what this server calls that machine)")
+            tok = p.relay_add(a)
+            from orbit.machines import https
+            url = https.saved_url(_state()) or "https://THIS-MACHINE:8443"
+            print(f"relay token for {a} (it opens POST /api/push/relay only). On {a}:")
+            print(f"  orbit push-relay upstream {url} {tok}")
+        elif action == "rm":
+            print("removed" if p.relay_remove(a) else f"no relay token for {a}")
+        elif action == "upstream":
+            p.set_upstream(a, b)
+            print(f"notifications with no phone here go to {a}" if a else "no upstream: notifications stay here")
+        else:  # ls
+            import json
+            rel = json.loads((p.dir / "relays.json").read_text()) if (p.dir / "relays.json").exists() else {}
+            print("relay tokens here: " + (", ".join(sorted(v["name"] for v in rel.values())) or "none"))
+            up = p.upstream()
+            print("upstream: " + (up["url"] if up else "none"))
+    except ValueError as e:
+        sys.exit(f"orbit: {e}")
+    return 0
+
+
 def cmd_remote(action: str, name: str, url: str) -> int:
     from orbit.machines import remote
     st = _state()
@@ -476,6 +506,11 @@ def main(argv: list[str] | None = None) -> None:
     hs.add_argument("--port", type=int, default=8443, help="the HTTPS port on the tailnet (default 8443)")
     tk = sub.add_parser("token", help="print (or --rotate) the token other machines need")
     tk.add_argument("--rotate", action="store_true")
+    pr = sub.add_parser("push-relay", help="phone notifications from another machine's agents: add NAME (here, where the phone "
+                                           "subscribed) · upstream URL TOKEN (there) · rm NAME · ls")
+    pr.add_argument("action", choices=["add", "rm", "upstream", "ls"])
+    pr.add_argument("a", nargs="?", default="")
+    pr.add_argument("b", nargs="?", default="")
     rm = sub.add_parser("remote", help="servers on other machines")
     rm.add_argument("action", choices=["add", "ls", "rm"])
     rm.add_argument("name", nargs="?", default="")
@@ -525,6 +560,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(cmd_https(a.action, a.port))
     if a.cmd == "remote":
         sys.exit(cmd_remote(a.action, a.name, a.url))
+    if a.cmd == "push-relay":
+        sys.exit(cmd_push_relay(a.action, a.a, a.b))
     if a.cmd == "harness-server":
         sys.exit(cmd_harness_server(a.action))
     if a.cmd == "stop":

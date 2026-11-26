@@ -7,6 +7,11 @@ opens it (web/m/sw.js). Two senders:
   a reminder   a schedule with `notify` (orbit-agent remind): at its time the server sends it, no agent wakes
   an agent     orbit-agent notify TITLE BODY: "the report is ready", pointing at its own session
 
+Another machine's server (its agents: orbit-agent notify / remind there) has no phone of its own: the phone
+subscribed here. It forwards to this server (upstream.json there: {url, token}), which sends it, its session named
+NAME~ID as this server lists that machine. The token is a relay token (relays.json here, `orbit push-relay add
+NAME`): it opens POST /api/push/relay and nothing else, never this server's own token.
+
 Files in <state>/push/ (0600): vapid.json (this server's key pair, made once; the private key never leaves it),
 subscriptions.json, sent.json (keys already delivered, per subscription: a reminder retried, or fired again after a
 restart before its next time was saved, is not sent twice) and log.jsonl (each send: the push service's answer,
@@ -16,7 +21,9 @@ accepted / gone / error, never the body).
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import secrets
 import os
 import threading
 import time
@@ -150,6 +157,69 @@ class Push:
         except OSError:
             pass
 
+    # ---------- other machines: a relay token here, an upstream there
+    def relay_add(self, name: str) -> str:
+        """A relay token for machine `name` (what this server calls it: its sessions are name~ID here)."""
+        from orbit.machines import remote
+        if not remote.NAME_RE.match(name or ""):
+            raise ValueError("a machine name: letters, digits, - and _")
+        tok = secrets.token_urlsafe(32)
+        with self.lock:
+            rel = {k: v for k, v in _read(self.dir / "relays.json", {}).items() if v.get("name") != name}
+            rel[hashlib.sha256(tok.encode()).hexdigest()] = {"name": name, "created": time.time()}
+            _write(self.dir / "relays.json", rel)
+        return tok
+
+    def relay_remove(self, name: str) -> bool:
+        with self.lock:
+            rel = _read(self.dir / "relays.json", {})
+            keep = {k: v for k, v in rel.items() if v.get("name") != name}
+            _write(self.dir / "relays.json", keep)
+            return len(keep) != len(rel)
+
+    def relay_name(self, token: str) -> str:
+        """The machine a relay token belongs to, or ''."""
+        if not token:
+            return ""
+        h = hashlib.sha256(token.encode()).hexdigest()
+        rel = _read(self.dir / "relays.json", {})
+        hit = next((v for k, v in rel.items() if hmac.compare_digest(k, h)), None) if isinstance(rel, dict) else None
+        return str(hit.get("name") or "") if isinstance(hit, dict) else ""
+
+    def upstream(self) -> dict:
+        u = _read(self.dir / "upstream.json", {})
+        return u if isinstance(u, dict) and u.get("url") and u.get("token") else {}
+
+    def set_upstream(self, url: str, token: str) -> None:
+        if not url:
+            (self.dir / "upstream.json").unlink(missing_ok=True)
+            return
+        if not str(url).startswith(("https://", "http://127.0.0.1", "http://localhost")):
+            raise ValueError("the upstream's HTTPS address (its `orbit https` URL)")
+        _write(self.dir / "upstream.json", {"url": str(url).rstrip("/"), "token": str(token)})
+
+    def _forward(self, up: dict, title: str, body: str, sid: str, key: str, via: str) -> dict:
+        import urllib.error
+        import urllib.request
+        req = urllib.request.Request(up["url"] + "/api/push/relay", method="POST",
+                                     data=json.dumps({"title": title, "body": body, "sid": sid, "key": key, "via": via}).encode(),
+                                     headers={"Content-Type": "application/json", "Authorization": f"Bearer {up['token']}"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                out = json.loads(r.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            try:
+                why = json.loads(e.read()).get("error") or e.reason
+            except ValueError:
+                why = e.reason
+            out = {"sent": 0, "duplicate": 0, "devices": 0, "results": [], "error": f"upstream {e.code}: {why}"}
+        except (urllib.error.URLError, OSError) as e:
+            out = {"sent": 0, "duplicate": 0, "devices": 0, "results": [], "error": f"upstream unreachable: {getattr(e, 'reason', e)}"}
+        out["via_upstream"] = up["url"]
+        self._log({"at": time.time(), "key": key, "outcome": "forwarded" if out.get("sent") or out.get("duplicate") else "error",
+                   "status": 0, "title": title[:TITLE_MAX], "sid": sid, "via": via, **({"reason": out["error"]} if out.get("error") else {})})
+        return out
+
     # ---------- sending
     def origin(self) -> str:
         """This server's HTTPS address (the one the phone subscribed from), or '' when HTTPS is off."""
@@ -186,6 +256,10 @@ class Push:
         title = (str(title or "").strip() or "Orbit")[:TITLE_MAX]
         body = str(body or "").strip()[:BODY_MAX]
         payload = self.payload(title, body, sid, key)
+        if not sub and not self._subs():  # no phone here: the server it subscribed to sends it, if this one forwards
+            up = self.upstream()
+            if up:
+                return self._forward(up, title, body, sid, key, via)
         vapid = self.vapid()
         with self.sending:
             return self._send_all(title, body, sid, key, sub, via, payload, vapid)

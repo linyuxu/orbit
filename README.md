@@ -292,6 +292,9 @@ each with what is next.
   Notifications (iPhone: Orbit added to the Home Screen from its HTTPS address, iOS 18.4+ for a tap to open the
   session); the server sends them itself (Web Push, declarative on an HTTPS server; `<state>/push/`: its VAPID keys,
   the devices, what was sent and the push service's answer).
+- **Another machine's agents to the phone**: on a server with no phone of its own, `orbit-agent notify` and
+  `remind` forward to the server the phone subscribed to: there `orbit push-relay add NAME` prints the command to
+  run here (`orbit push-relay upstream URL TOKEN`); that token opens the relay and nothing else.
 - **Another machine's session**: a schedule here can wake a session on a remote (`NAME~ID`): the request goes
   through that server, once per due time. With `done_notify` {title, body, fail_if} this server tells the phone
   when the run ends (`…未完成` with why when it failed, stopped, or the answer's first line has `fail_if`); a run

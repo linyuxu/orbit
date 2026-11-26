@@ -507,9 +507,61 @@ class AcrossMachinesTest(test_remote.RemoteTest):
             self.req("POST", "/api/remotes/rbox/delete", {})
 
 
+class RelayTest(test_remote.RemoteTest):
+    """Another machine's agents (no phone there) notify through the server the phone subscribed to: its relay token
+    opens POST /api/push/relay and nothing else; the session is named NAME~ID there; once per key."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.fake = FakePushService()
+        push.ALLOW_EXTRA = (cls.fake.base,)
+
+    @classmethod
+    def tearDownClass(cls):
+        push.ALLOW_EXTRA = ()
+        cls.fake.stop()
+        super().tearDownClass()
+
+    def test_a_remote_agent_notifies_through_here(self):
+        sub, d = device(self.fake.base)
+        self.assertEqual(self.req("POST", "/api/push/subscribe", {"subscription": sub})[0], 200)
+        here = push.of(self.desk)
+        tok = here.relay_add("rbox")
+        self.assertEqual(here.relay_name(tok), "rbox")
+        self.assertNotIn(tok, (self.state / "push" / "relays.json").read_text())  # (kept as a hash)
+        there = push.of(self.rdesk)
+        there.set_upstream(f"http://127.0.0.1:{self.port}", tok)
+        rs = self.rdesk.create(cwd=self.rwork, name="assistant-a")["id"]
+        r = there.notify("Report ready", "see it", rs, key="k1", via="orbit-agent")  # (orbit-agent notify there)
+        self.assertEqual((r["sent"], r["devices"]), (1, 1), r)
+        msg = read(self.fake.got[-1], d, sub)
+        self.assertEqual((msg["title"], msg["sid"]), ("Report ready", f"rbox~{rs}"))
+        r2 = there.notify("Report ready", "", rs, key="k1")
+        self.assertEqual(r2["duplicate"], 1)
+        self.assertEqual(len(self.fake.got), 1)
+        self.assertEqual(there.log()[-1]["outcome"], "forwarded")
+        # the relay token is no token for anything else, from another machine
+        h = {"Authorization": f"Bearer {tok}", "Host": "orbit.example.ts.net"}
+        self.assertEqual(self.req("GET", "/api/sessions", headers=h)[0], 401)
+        self.assertEqual(self.req("POST", "/api/push/send", {"title": "x"}, headers=h)[0], 401)
+        self.assertEqual(self.req("POST", "/api/push/relay", {"title": "x"}, headers={**h, "Authorization": "Bearer nope"})[0], 401)
+        self.assertEqual(self.req("POST", "/api/push/relay", {"title": "x"})[0], 403)  # (no relay token: refused)
+        # a reminder there (its own scheduler) goes the same way
+        x = self.rdesk.scheduler.create({"when": "in 5m", "text": "Stretch", "notify": True, "sid": rs})
+        self.rdesk.scheduler.tick(x["next"] + 1)
+        self.assertEqual(read(self.fake.got[-1], d, sub)["title"], "Stretch")
+        # removed: refused
+        here.relay_remove("rbox")
+        r3 = there.notify("after")
+        self.assertEqual(r3["sent"], 0)
+        self.assertIn("upstream 403", r3["error"])
+        there.set_upstream("", "")
+
+
 def load_tests(loader, tests, pattern):  # (their own tests only: not the skeleton's again)
     suite = unittest.TestSuite()
-    for cls in (VectorsTest, PushTest, AcrossMachinesTest):
+    for cls in (VectorsTest, PushTest, AcrossMachinesTest, RelayTest):
         suite.addTests(cls(n) for n in loader.getTestCaseNames(cls) if n in vars(cls))
     return suite
 
