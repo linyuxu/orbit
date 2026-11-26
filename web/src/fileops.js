@@ -268,7 +268,6 @@ function filesOpsKey(combo) {
     FSEL.keys.clear(); selRange(FSEL.anchor, S.pcursor); renderLeft();
     return true;
   }
-  if (combo === "Escape" && selClear()) { renderLeft(); return true; }
   if (combo === "M:Backspace" || combo === "M:Delete") { filesTrash(); return true; }
   if (["ArrowDown", "ArrowUp", "Home", "End", "PageDown", "PageUp"].includes(combo) && FSEL.keys.size) selClear();  // (a plain move: one row again)
   if (combo === "A:KeyW" || combo === "M:KeyC") { filesClip(false); return true; }

@@ -127,5 +127,6 @@ $("#reviewview").addEventListener("keydown", e => {
   const ta = e.target.closest && e.target.closest(".cbox textarea");
   if (!ta || e.isComposing || e.keyCode === 229) return;
   if (e.key === "Enter" && e.metaKey) { e.preventDefault(); e.stopPropagation(); commitComment(ta.closest(".cbox").dataset.cbox); }
-  else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); RV.open = null; renderReview(); $("#rvbody").focus(); }
+  // (⌃G: Esc, as everywhere)
+  else if (e.key === "Escape" || (e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "g")) { e.preventDefault(); e.stopPropagation(); RV.open = null; renderReview(); $("#rvbody").focus(); }
 }, true);

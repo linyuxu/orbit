@@ -866,6 +866,43 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
         finally:
             transfer._jxa, wfiles.trash = old_jxa, old_trash
 
+    def test_ctrl_g_cancels_like_esc(self):
+        """⌃G is Esc (Emacs keyboard-quit): it closes a menu and a dialog, clears the Files selection; in an editor it is
+        the editor's own (the selection dropped, the keyboard kept)."""
+        d = Path(self.work) / "ctrlg"
+        d.mkdir(exist_ok=True)
+        for f in ("one.txt", "two.txt"):
+            (d / f).write_text("line one\nline two\n")
+        s = self.req("POST", "/api/sessions", {"cwd": str(d), "name": "ctrl-g"})[1]
+        root, f = str(d), str(d / "one.txt")
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"folderMenu({json.dumps(root)}, {{ at: {{ x: 300, y: 200 }} }}); 0")
+            page.wait_for_selector(".menu .row")
+            page.keyboard.press("Control+g")
+            page.wait_for_function("() => !document.querySelector('.menu')", timeout=3000)
+            page.evaluate(f"newFolderIn({json.dumps(root)}); 0")
+            page.wait_for_selector(".dialog input")
+            page.fill(".dialog input", "never-made")
+            page.keyboard.press("Control+g")
+            page.wait_for_function("() => !document.querySelector('.dialog')", timeout=3000)
+            self.assertFalse((d / "never-made").exists(), name)
+            # the Files selection
+            page.evaluate(f"switchTo({json.dumps(s['id'])}); S.left.shown = true; applyLeft(); setPanelTab('files'); focusPanel(); 0")
+            page.wait_for_function(f"() => PROWS.some(r => r.k === 'f:{root}|one.txt')", timeout=8000)
+            page.locator(f".prow[data-k='f:{root}|one.txt']").click(modifiers=["Meta"])
+            page.locator(f".prow[data-k='f:{root}|two.txt']").click(modifiers=["Meta"])
+            self.assertEqual(page.evaluate("FSEL.keys.size"), 2)
+            page.keyboard.press("Control+g")
+            self.assertEqual(page.evaluate("FSEL.keys.size"), 0, name)
+            # an editor: its own ⌃G (the selection dropped), the keyboard stays there
+            page.evaluate(f"openFile({json.dumps(f)}, {{pinned: true}}); 0")
+            page.wait_for_function(f"() => EDITORS.get({json.dumps(f)}) && EDITORS.get({json.dumps(f)}).ed", timeout=8000)
+            page.evaluate(f"(() => {{ const v = EDITORS.get({json.dumps(f)}).ed.view; v.focus(); v.dispatch({{selection: {{anchor: 0, head: 8}}}}); }})()")
+            page.keyboard.press("Control+g")
+            self.assertEqual(page.evaluate(f"(() => {{ const m = EDITORS.get({json.dumps(f)}).ed.view.state.selection.main; return m.empty; }})()"), True, name)
+            self.assertTrue(page.evaluate("!!(document.activeElement && document.activeElement.closest('.cm-editor'))"), name)
+
     def wait_disk(self, p, timeout=8):
         end = time.time() + timeout
         while time.time() < end and not Path(p).exists():

@@ -32,6 +32,18 @@ function emacsArrow(combo) {
   if (typeof shellFocused === "function" && shellFocused()) return combo;
   return to;
 }
+/* ⌃G is Esc everywhere (Emacs keyboard-quit: cancel what is going on): a menu, a dialog, ⌘O, the find bar, the image
+   viewer, the Files selection, the panel. An editor keeps its own ⌃G (the code / Markdown editors and the composer:
+   drop the selection or the mark) and the terminal its shell's, unless a menu, a dialog or the image viewer is open
+   (they close first). */
+function emacsQuit(combo) {
+  if (combo !== "C:KeyG") return combo;
+  if ((typeof modal !== "undefined" && modal) || (typeof lbOn === "function" && lbOn())) return "Escape";
+  const a = document.activeElement;
+  if (a && a.closest && a.closest(".cm-editor, .xterm, .terminal")) return combo;
+  if (typeof shellFocused === "function" && shellFocused()) return combo;
+  return "Escape";
+}
 /* The arrow a key means for a listener of its own (e.key): an arrow, or ⌃F ⌃B ⌃P ⌃N as one; else "". */
 function arrowOf(e) {
   if (/^Arrow/.test(e.key)) return e.key;
@@ -43,6 +55,7 @@ function handleEsc() {
   if ($("#lightbox").classList.contains("show")) { closeLightbox(); return; }       // 1
   if (modal) { modal.close(); return; }                                              // 2
   if (FIND.open) { closeFind(); return; }                                            // 3
+  if (panelFocused() && S.left.tab === "files" && typeof selClear === "function" && selClear()) { renderLeft(); return; }  // 4 (the Files selection first)
   if (panelFocused()) { S.filter = ""; renderLeft(); focusMain(); return; }          // 4 (the panel stays)
   if (pviewEsc()) return;                                                            // 5 (a plugin's thread: its editor → its messages)
   if (document.activeElement === input) { conv.focus({ preventScroll: true }); return; } // 5
@@ -55,7 +68,7 @@ let ctrlX = 0;  // ⌃X prefix (Emacs): the next key within 1.5 s completes it
 function onKey(e) {
   if (e.isComposing || e.keyCode === 229) return;  // IME: ⏎ / Esc only confirm a candidate
   if (["Meta", "Control", "Alt", "Shift"].includes(e.key)) return;
-  let combo = comboOf(e);
+  let combo = emacsQuit(comboOf(e));  // ⌃G: Esc (not an editor's or the terminal's own)
   const consume = () => { e.preventDefault(); e.stopPropagation(); };
   // The image viewer first: every key stops there while it shows (a view with keys of its own never sees Esc).
   if (typeof lbOn === "function" && lbOn()) { consume(); e.stopImmediatePropagation(); lightboxKey(combo); return; }
