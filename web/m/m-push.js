@@ -70,7 +70,7 @@ function notifPage() {
         `<div class="mrow prem${it.enabled ? "" : " off"}"><span class="tx"><span class="nm">${esc(it.name)}</span><span class="t2">${esc(it.describe)} · ${it.enabled ? "next " + esc(fmtNext(it.next) || "—") : "done"}${it.last && it.last.error ? ` · <span class="err">${esc(it.last.error)}</span>` : ""}</span></span>` +
         `<button class="mjoin" data-push-del="${esc(it.id)}" aria-label="Delete ${esc(it.name)}">${I("x", 14)}</button></div>`).join("") + `</div>`;
     }
-    const log = (st && st.log || []).slice(-6).reverse();
+    const log = (st && st.log || []).filter(l => l.outcome !== "tap").slice(-6).reverse();
     if (log.length) h += `<div class="sec psec">Last sent</div><div class="rows">` + log.map(l =>
       `<div class="mrow plog"><span class="tx"><span class="nm">${esc(l.title || "")}</span><span class="t2">${esc(ago(l.at))} · ${outcomeHtml(l.outcome)}${l.status ? " " + l.status : ""}${l.reason ? " · " + esc(l.reason) : ""}${l.via ? " · " + esc(l.via) : ""}</span></span></div>`).join("") + `</div>`;
     if (st && st.subscriptions && st.subscriptions.length) h += `<div class="note psec">${st.subscriptions.length} device${st.subscriptions.length === 1 ? "" : "s"} subscribed on this server. Agents send with <code>orbit-agent notify</code>, reminders with <code>orbit-agent remind</code>.</div>`;
@@ -122,10 +122,39 @@ function notifPage() {
   pushLoad();
   return page;
 }
-/* A tap on a notification while the app runs (sw.js posts it): open its session. */
-if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => {
-  const d = e.data || {};
-  if (d.t !== "open") return;
-  const sid = String(d.sid || "");
-  if (sid && S.sessions) openSession(sid);  // (closed since: it says so)
-});
+/* A tap on a notification: open its session. sw.js writes it to a cache entry (iOS may give the tap no window, or
+   hold the message back) and posts it too; whichever comes first opens it, the entry is taken once. A cold start
+   waits for the sessions. */
+const PUSH_OPEN = { box: "orbit-push", key: "/m/__open" };
+function pushOpen(sid) {
+  if (!sid) return;
+  const tries = Date.now() + 15000;
+  const go = () => {
+    if (S.sessions && S.sessions.size) { openSession(sid); return; }
+    if (Date.now() < tries) setTimeout(go, 200);
+  };
+  go();
+}
+async function pushTakeOpen() {
+  if (!window.caches) return;
+  try {
+    const c = await caches.open(PUSH_OPEN.box), r = await c.match(PUSH_OPEN.key);
+    if (!r) return;
+    await c.delete(PUSH_OPEN.key);
+    const d = await r.json();
+    if (d && typeof d.sid === "string" && Date.now() - (d.at || 0) < 120000) pushOpen(d.sid);
+  } catch {}
+}
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", e => {
+    const d = e.data || {};
+    if (d.t !== "open") return;
+    pushOpen(String(d.sid || ""));
+    if (window.caches) caches.open(PUSH_OPEN.box).then(c => c.delete(PUSH_OPEN.key)).catch(() => {});
+  });
+  try { navigator.serviceWorker.startMessages(); } catch {}  // (WebKit: messages flow from now, not from DOMContentLoaded)
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pushTakeOpen(); });
+addEventListener("focus", pushTakeOpen);
+addEventListener("pageshow", pushTakeOpen);
+pushTakeOpen();

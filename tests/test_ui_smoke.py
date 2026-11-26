@@ -763,6 +763,20 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
                     page.evaluate(f"navigator.serviceWorker.dispatchEvent(new MessageEvent('message', {{ data: {{ t: 'open', sid: {json.dumps(sid)} }} }})); 0")
                     page.wait_for_timeout(300)
                     self.assertEqual(page.evaluate("[S.current, AREA.cur, location.hash]"), [sid, "sessions", "#s/" + sid])
+                    # iOS: a tap with no window (the app only comes to the front) or a held-back message: the entry sw.js wrote
+                    other = self.new_session(f"other-{name}")["id"]
+                    page.evaluate("loadAll()")
+                    page.wait_for_function(f"() => S.sessions.has({json.dumps(other)})", timeout=8000)
+                    page.evaluate(f"openSession({json.dumps(other)}); 0")
+                    put = f"caches.open('orbit-push').then(c => c.put('/m/__open', new Response(JSON.stringify({{ sid: {json.dumps(sid)}, at: Date.now() }}))))"
+                    page.evaluate(f"{put}.then(() => document.dispatchEvent(new Event('visibilitychange')))")
+                    page.wait_for_function(f"() => S.current === {json.dumps(sid)}", timeout=8000)
+                    self.assertFalse(page.evaluate("caches.open('orbit-push').then(c => c.match('/m/__open')).then(r => !!r)"))  # (taken once)
+                    page.evaluate(f"openSession({json.dumps(other)}); 0")
+                    page.evaluate(put)
+                    cold0 = ctx.new_page()  # (a cold start at the app's own address: the entry opens it once the sessions are in)
+                    cold0.goto(f"http://127.0.0.1:{self.port}/m/")
+                    cold0.wait_for_function(f"() => typeof S !== 'undefined' && S.current === {json.dumps(sid)}", timeout=15000)
                     # a tap with the app closed: it starts at /m/#s/<sid>
                     cold = ctx.new_page()
                     cold.goto(f"http://127.0.0.1:{self.port}/m/#s/{sid}")
@@ -784,10 +798,11 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.goto(f"http://127.0.0.1:{self.port}/api/version")
             r = page.evaluate("""async () => {
               const src = await (await fetch('/m/sw.js')).text();
-              const L = {}, shown = [], opened = [], posted = []; let wins = [], focused = 0;
+              const L = {}, shown = [], opened = [], posted = [], box = {}; let wins = [], focused = 0;
+              const caches_ = { open: async name => ({ put: async (k, r) => { box[name + " " + k] = JSON.parse(await r.text()); } }), keys: async () => [] };
               const self_ = { addEventListener: (t, f) => { L[t] = f; }, registration: { showNotification: async (t, o) => { shown.push([t, o]); } },
                 clients: { matchAll: async () => wins, openWindow: async u => { opened.push(u); }, claim: async () => {} }, skipWaiting: async () => {} };
-              new Function('self', 'caches', 'location', src)(self_, {}, { origin: 'https://orbit.test' });
+              new Function('self', 'caches', 'location', src)(self_, caches_, { origin: 'https://orbit.test' });
               const run = async (type, extra) => { const ps = []; L[type]({ waitUntil: p => ps.push(p), ...extra }); await Promise.all(ps); };
               const pushed = d => run('push', { data: { json: () => d, text: () => JSON.stringify(d) } });
               await pushed({ title: 'Report ready', body: 'Q3', sid: 'abc 1', tag: 'sched:x:1', url: '/m/#s/abc%201' });
@@ -797,13 +812,17 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
               await tap(shown[0][1]);
               await tap(shown[1][1]);
               wins = [{ url: 'https://orbit.test/m/#s/old', focus: async () => { focused++; }, postMessage: m => posted.push(m) }];
+              const first = JSON.parse(JSON.stringify(box));
               await tap(shown[0][1]);
-              return { shown, opened, posted, focused };
+              return { shown, opened, posted, focused, first };
             }""")
             self.assertEqual(r["shown"][0], ["Report ready", {"body": "Q3", "tag": "sched:x:1", "data": {"sid": "abc 1", "url": "/m/#s/abc%201"}, "icon": "/m/icon-192.png"}])
             self.assertEqual(r["shown"][2][0], "Orbit")  # (an empty payload: still a notification, as iOS requires)
             self.assertEqual(r["opened"], ["/m/#s/abc%201", "/m/#s/%2F%2Fevil.example"])  # (this app's pages only)
             self.assertEqual((r["posted"], r["focused"]), ([{"t": "open", "sid": "abc 1"}], 1))
+            self.assertEqual(r["first"]["orbit-push /m/__open"]["sid"], "//evil.example")  # (the last tap's session, for the page)
+            taps = [l for l in self.req("GET", "/api/push")[1]["log"] if l["outcome"] == "tap"]
+            self.assertEqual([(t["sid"], t["via"], t["windows"]) for t in taps[-3:]], [("abc 1", "open", 0), ("//evil.example", "open", 0), ("abc 1", "focus", 1)])
         finally:
             ctx.close()
 

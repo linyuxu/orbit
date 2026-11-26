@@ -1088,6 +1088,10 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 if p == "/api/push/unsubscribe":
                     gone = pu.unsubscribe(str(b.get("endpoint") or ""), str(b.get("id") or ""))
                     return self._json({"removed": gone, **pu.status()})
+                if p == "/api/push/tap":  # sw.js: a notification was tapped (the device's record of how it went)
+                    pu._log({"at": time.time(), "outcome": "tap", "sid": str(b.get("sid") or "")[:200],
+                             "via": str(b.get("how") or "")[:40], "windows": int(b.get("windows") or 0)})
+                    return self._json({"ok": True})
                 if p == "/api/push/send":  # orbit-agent notify; the phone's "Send a test" (to itself: endpoint)
                     sid = str(b.get("sid") or "")
                     if sid and sid not in self.desk.sessions:
