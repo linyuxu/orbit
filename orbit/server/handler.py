@@ -1500,7 +1500,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                         r = self.desk.update(r["id"], group=b["group"])
                     return self._json(r)
                 if action == "update":
-                    return self._json(self.desk.update(sid, group=b.get("group"), favorite=b.get("favorite")))
+                    return self._json(self.desk.update(sid, group=b.get("group")))
                 if action == "move":
                     self.desk.move(sid, b.get("before"))
                     return self._json({"ok": True})

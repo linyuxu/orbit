@@ -1,6 +1,6 @@
 "use strict";
 /* ===================================================================== Sessions (home)
-   The desktop's left panel for a phone: the user's groups in their order (Favorites first, the Fleet last), each
+   The desktop's left panel for a phone: the user's groups in their order (the Fleet last), each
    session a two-line row (mark · agent · name · machine · when; then what it last said or is doing). A "Working now"
    strip on top while any session works; pull down to refresh; a dot for an answer not seen yet. */
 
@@ -35,8 +35,6 @@ const elapsedOf = sid => { const c = S.active.get(sid); return c && c.started ? 
 function listViews() {
   const all = [...S.sessions.values()];
   const views = [];
-  const favs = all.filter(s => s.favorite && !s.fleet);
-  if (favs.length) views.push({ gid: "fav", name: "Favorites", star: true, ss: favs });
   for (const g of groupKids("")) {  // the top groups; a subgroup is a row in its parent, opened as a page of its own
     const ss = all.filter(s => s.group === g.id && !s.fleet);
     views.push({ gid: g.id, name: g.name, ss, kids: groupKids(g.id) });  // (an empty group too: it is the user's)
@@ -152,7 +150,7 @@ function rowHtml(s) {
   const pv = sessionPreview(s), unread = isUnread(s), stopped = s.state === "stopped";
   return `<button class="srow${unread ? " unread" : ""}${stopped ? " stopped" : ""}" data-open="${esc(s.id)}">` +
     `<span class="c-mark">${stateMark(s)}</span><span class="c-icon">${harnessIcon(s.harness, 16)}</span>` +
-    `<span class="l1"><span class="nm">${esc(sessionTitle(s))}</span>${s.favorite ? `<span class="star">${I("star", 12)}</span>` : ""}${machineTag(s)}` +
+    `<span class="l1"><span class="nm">${esc(sessionTitle(s))}</span>${machineTag(s)}` +
     `${unread ? '<span class="udot" aria-label="New answer"></span>' : ""}<span class="tm">${esc(lastMoved(s))}</span></span>` +
     `<span class="l2${pv.dim ? " dim" : ""}">${esc(pv.text)}</span></button>`;
 }
@@ -215,7 +213,7 @@ function renderList() {
     const all = v.kids ? [...S.sessions.values()].filter(s => !s.fleet && groupSubtree(v.gid).includes(s.group)) : v.ss;  // (its count: its whole subtree)
     const working = all.filter(isMoving).length;
     return `<section class="grp${shut ? " shut" : ""}"><button class="shead" data-fold="${esc(v.gid)}" aria-expanded="${!shut}">` +
-      `${v.star ? `<span class="gstar">${I("star", 12)}</span>` : v.fleet ? `<span class="gstar">${I("zap", 12)}</span>` : groupIcon(S.groups.find(g => g.id === v.gid), 14)}<span class="gn"${v.kids ? ` data-home="${esc(v.gid)}"` : ""}>${esc(v.name)}</span>` +
+      `${v.fleet ? `<span class="gstar">${I("zap", 12)}</span>` : groupIcon(S.groups.find(g => g.id === v.gid), 14)}<span class="gn"${v.kids ? ` data-home="${esc(v.gid)}"` : ""}>${esc(v.name)}</span>` +
       `<span class="chev">${I("chevd", 12)}</span><span class="cnt">${working ? `${working}/` : ""}${all.length}</span></button>` +
       (shut ? "" : `<div class="rows">${groupRowsHtml(v.ss, v.gid)}</div>`) + `</section>`;
   }).join("") + (none ? `<div class="empty"><h2>No session yet</h2>Start one with <b>+</b> above: pick a folder, an agent and what to ask.</div>` : "");

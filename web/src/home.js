@@ -37,13 +37,12 @@ function homeSoon() {
 }
 
 /* ---------- a group's look */
-const groupStyleOf = gid => gid === FAV ? { icon: "", color: "", cover: "" } : (groupOf(gid) || {});
+const groupStyleOf = gid => groupOf(gid) || {};
 /* Its icon: an emoji (or a few letters), or a picture; "" when it has none. */
 function groupIconHtml(gid, size = 16) { return iconHtml(groupStyleOf(gid).icon, size); }
 /* A group's mark wherever a group is listed (the title bar's pill, the Groups panel, the group menu, ⌘O, ⌘R): its own
-   icon, else a folder in its colour (a subgroup: its parent's); Favorites: the star. One look tells a group anywhere. */
+   icon, else a folder in its colour (a subgroup: its parent's). One look tells a group anywhere. */
 function groupMark(gid, size = 14) {
-  if (gid === FAV) return `<span class="gicon gstar">${I("star", size - 1)}</span>`;
   const g = groupStyleOf(gid), color = g.color || (g.parent && (groupOf(g.parent) || {}).color) || "";
   return iconHtml(g.icon, size) || `<span class="gicon dflt"${color ? ` style="color:${esc(color)}"` : ""}>${I("folder", size - 1)}</span>`;
 }
@@ -57,7 +56,6 @@ function iconHtml(icon, size = 16) {
 /* ---------- the layout */
 function homeWidgets(gid) {
   const g = groupOf(gid);
-  if (gid === FAV) return [{ id: "sessions", kind: "sessions", span: 6 }, { id: "activity", kind: "activity", span: 6 }];
   return (g && g.home && Array.isArray(g.home.widgets)) ? g.home.widgets : DEFAULT_HOME;
 }
 async function saveHome(gid, widgets) {
@@ -71,8 +69,8 @@ const newWidgetId = () => "w" + Math.random().toString(36).slice(2, 9);
 /* ---------- what it shows */
 function groupSessions(gid) { return [...S.sessions.values()].filter(s => inView(s, gid) && !s.fleet); }
 function subtreeSessions(gid) {
-  const ids = new Set(gid === FAV ? [] : [gid, ...groupDescendants(gid)]);
-  return [...S.sessions.values()].filter(s => !s.fleet && (gid === FAV ? s.favorite : ids.has(s.group)));
+  const ids = new Set([gid, ...groupDescendants(gid)]);
+  return [...S.sessions.values()].filter(s => !s.fleet && ids.has(s.group));
 }
 function homeSummary(gid) {
   const ss = subtreeSessions(gid), w = ss.filter(s => s.state === "working" || s.agents > 0).length, attn = ss.filter(s => s.attention).length;
@@ -129,12 +127,12 @@ function widgetBody(gid, w) {
       : `<div class="hempty">No session here yet: ⌘N starts one in this group.</div>`;
   }
   if (w.kind === "groups") {
-    const kids = gid === FAV ? [] : groupKids(gid);
+    const kids = groupKids(gid);
     return kids.length ? `<div class="hcards">${kids.map(groupCard).join("")}</div>`
       : `<div class="hempty">No subgroup. ${groupDepth(gid) < GROUP_DEPTH ? `<button class="btn sm" data-hact="subgroup">New subgroup…</button>` : ""}</div>`;
   }
   if (w.kind === "tabs") {
-    const ts = gid === FAV ? [] : groupFileTabs(gid);
+    const ts = groupFileTabs(gid);
     return ts.length ? `<div class="hlist">${ts.map(t => `<button class="hrow" data-hfile="${esc(t.path)}">` +
         `<span class="ic">${isView(t.path) ? I(viewInfo(t.path).icon, 13) : fileIcon(t.path)}</span><span class="nm">${esc(ftabTitle(t.path))}</span>` +
         `<span class="wh">${isView(t.path) ? "" : esc(tilde(dirname(t.path)))}</span></button>`).join("")}</div>`
@@ -173,8 +171,8 @@ function widgetBody(gid, w) {
 function widgetTitle(w) { return w.title || (w.kind === "md" ? basename(w.path).replace(/\.md$/i, "") : WIDGET_TITLE[w.kind] || w.kind); }
 function widgetCount(gid, w) {
   if (w.kind === "sessions") return groupSessions(gid).length || "";
-  if (w.kind === "groups") return gid === FAV ? "" : groupKids(gid).length || "";
-  if (w.kind === "tabs") return gid === FAV ? "" : groupFileTabs(gid).length || "";
+  if (w.kind === "groups") return groupKids(gid).length || "";
+  if (w.kind === "tabs") return groupFileTabs(gid).length || "";
   return "";
 }
 
@@ -182,23 +180,23 @@ function widgetCount(gid, w) {
 function renderHome() {
   if (!homeOn()) return;
   if (DRAG.active) { DRAG.pending.add(renderHome); return; }  // (a widget is being dragged: drawn after it, or it would let go of it)
-  const gid = S.group, g = groupStyleOf(gid), name = gid === FAV ? "Favorites" : (groupOf(gid) || {}).name || "?";
+  const gid = S.group, g = groupStyleOf(gid), name = (groupOf(gid) || {}).name || "?";
   $("#xview").classList.add("home");
   const crumbs = [];
-  for (let p = gid !== FAV && groupOf(gid) && groupOf(gid).parent; p; p = (groupOf(p) || {}).parent) crumbs.unshift(p);
+  for (let p = groupOf(gid) && groupOf(gid).parent; p; p = (groupOf(p) || {}).parent) crumbs.unshift(p);
   const head = `<div class="hhead${g.cover ? " cover" : ""}" style="${g.color ? `--gc:${esc(g.color)};` : ""}${g.cover ? `--cover:url('${esc(rawUrl(g.cover))}')` : ""}">` +
     `<div class="hhi">${crumbs.length ? `<div class="hcrumbs">${crumbs.map(c => `<a data-hgroup="${esc(c)}">${esc(groupOf(c).name)}</a>`).join(" › ")} ›</div>` : ""}` +
-    `<div class="htitle">${groupIconHtml(gid, 30) || (gid === FAV ? `<span class="gicon">${I("star", 24)}</span>` : "")}<h1>${esc(name)}</h1></div>` +
+    `<div class="htitle">${groupIconHtml(gid, 30)}<h1>${esc(name)}</h1></div>` +
     `<div class="hsum">${esc(homeSummary(gid))}</div></div>` +
-    (gid === FAV ? "" : `<div class="hacts"><button class="btn sm" data-hact="style">${I("pencil", 12)} Look</button><button class="btn sm" data-hact="add">${I("plus", 12)} Widget</button></div>`) + `</div>`;
-  const ws = homeWidgets(gid).filter(w => !w.hidden && !(w.kind === "groups" && !groupKids(gid).length && gid === FAV));
+    (`<div class="hacts"><button class="btn sm" data-hact="style">${I("pencil", 12)} Look</button><button class="btn sm" data-hact="add">${I("plus", 12)} Widget</button></div>`) + `</div>`;
+  const ws = homeWidgets(gid).filter(w => !w.hidden);
   const grid = ws.map(w => `<section class="hw${w.kind === "md" ? " mdw" : ""}${w.h ? " sized" : ""}${w.color ? " wtint" : ""}${w.bg ? " wpic" : ""}${H.editing && H.editing.id === w.id ? " editing" : ""}" data-w="${esc(w.id)}" ` +
     `style="--span:${w.span || 6}${w.h ? `;--wh:${w.h}px` : ""}${w.color ? `;--wc:${esc(w.color)}` : ""}${w.bg ? `;--wbg:url('${esc(rawUrl(w.bg))}')` : ""}">` +
     `<header title="Drag to move"><span class="grip">⋮⋮</span>${iconHtml(w.icon, 15)}<span class="t">${esc(widgetTitle(w))}</span><span class="cnt">${widgetCount(gid, w)}</span>` +
     (w.kind === "md" ? `<button class="btn sm quiet" data-hedit="${esc(w.id)}">${H.editing && H.editing.id === w.id ? "Done" : "Edit"}</button>` : "") +
-    (gid === FAV ? "" : `<button class="ibtn sm" data-wmenu="${esc(w.id)}" title="Width, icon and background, hide, remove">${I("more", 13)}</button>`) + `</header>` +
+    (`<button class="ibtn sm" data-wmenu="${esc(w.id)}" title="Width, icon and background, hide, remove">${I("more", 13)}</button>`) + `</header>` +
     `<div class="wb">${widgetBody(gid, w)}</div>` +
-    (gid === FAV ? "" : `<span class="hrz x" data-rz="x" title="Drag: its width"></span><span class="hrz y" data-rz="y" title="Drag: its height (double-click: as tall as what it shows)"></span><span class="hrz xy" data-rz="xy"></span>`) +
+    (`<span class="hrz x" data-rz="x" title="Drag: its width"></span><span class="hrz y" data-rz="y" title="Drag: its height (double-click: as tall as what it shows)"></span><span class="hrz xy" data-rz="xy"></span>`) +
     `</section>`).join("");
   $("#xhead").innerHTML = ""; $("#xfoot").textContent = "";
   $("#xbody").innerHTML = head + `<div class="hgrid">${grid}</div>`;
@@ -414,7 +412,7 @@ function pictureField(box, st, key, noneLabel) {
 /* A widget's own look: its icon (before its title), a colour that tints the card, a picture behind it (washed out
    under the text so it stays readable). */
 async function widgetLookDialog(wid, gid = S.group) {
-  const ws = homeWidgets(gid), w = ws.find(x => x.id === wid); if (!w || gid === FAV) return;
+  const ws = homeWidgets(gid), w = ws.find(x => x.id === wid); if (!w) return;
   const st = { icon: w.icon || "", color: w.color || "", bg: w.bg || "" };
   const v = await dialog({ title: `“${widgetTitle(w)}”: icon and background`, ok: "Save", wide: true, focus: "",
     render: box => {
@@ -432,7 +430,7 @@ async function widgetLookDialog(wid, gid = S.group) {
 
 /* ---------- pins */
 async function pinToGroup(text, { gid = S.group, sid = "", cid = "", by = "" } = {}) {
-  if (!gid || gid === FAV) { const s = S.sessions.get(sid); gid = s ? s.group : (topGroups()[0] || {}).id; }
+  if (!gid) { const s = S.sessions.get(sid); gid = s ? s.group : (topGroups()[0] || {}).id; }
   try { await api("POST", `/api/groups/${gid}/pin`, { text, sid, cid, by }); toast(`Pinned to ${groupPath(gid)}'s home`); }
   catch (e) { toast(e.message); }
 }
@@ -476,7 +474,7 @@ function homeKey(e, combo) {
    its bottom edge its height (what it shows then scrolls inside), the corner both; a double-click on the bottom edge
    gives it back its natural height. The page is not redrawn meanwhile (DRAG.active), and the size is saved at the end. */
 $("#xbody").addEventListener("mousedown", e => {
-  const rz = e.target.closest(".hrz"); if (!rz || e.button !== 0 || !homeOn() || S.group === FAV || H.editing) return;
+  const rz = e.target.closest(".hrz"); if (!rz || e.button !== 0 || !homeOn() || H.editing) return;
   e.preventDefault(); e.stopPropagation();
   const el = rz.closest(".hw"), grid = el.parentNode, wid = el.dataset.w, how = rz.dataset.rz, body = el.querySelector(".wb");
   const k = typeof rectScale === "function" ? rectScale() : 1;
@@ -507,7 +505,7 @@ $("#xbody").addEventListener("mousedown", e => {
   document.addEventListener("mousemove", move, true); document.addEventListener("mouseup", up, true);
 }, true);
 $("#xbody").addEventListener("dblclick", e => {
-  const rz = e.target.closest(".hrz.y, .hrz.xy"); if (!rz || !homeOn() || S.group === FAV) return;
+  const rz = e.target.closest(".hrz.y, .hrz.xy"); if (!rz || !homeOn()) return;
   const wid = rz.closest(".hw").dataset.w;
   saveHome(S.group, homeWidgets(S.group).map(x => x.id === wid ? { ...x, h: 0 } : x));
 });
@@ -518,7 +516,7 @@ $("#xbody").addEventListener("mousedown", e => {
 dragSort({
   box: $("#xbody"), item: ".hw", axis: "x",
   keyOf: el => el.dataset.w, byKey: k => $(`#xbody .hw[data-w="${CSS.escape(k)}"]`),
-  canDrag: el => homeOn() && S.group !== FAV && !H.editing && !!H.press,
+  canDrag: el => homeOn() && !H.editing && !!H.press,
   unit: el => [el],
   peers: el => [...$("#xbody").querySelectorAll(".hw")].filter(x => x !== el).map(x => [x]),
   redraw: () => renderHome(),

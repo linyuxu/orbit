@@ -55,7 +55,7 @@ function connect() {
     } else if (m.t === "groups") {
       S.groups = m.groups;
       if (EMBED) return;
-      if (S.group !== FAV && !S.groups.some(g => g.id === S.group)) switchGroup(S.groups[0].id, { quiet: true, focus: false });
+      if (!S.groups.some(g => g.id === S.group)) switchGroup(S.groups[0].id, { quiet: true, focus: false });
       else renderAll();
     } else if (m.t === "card") {
       upsertCard(m.card);
@@ -143,7 +143,7 @@ function reportCtx() {
     const s = cur();
     const ctx = {
       session: s ? { id: s.id, name: s.name, cwd: s.cwd } : null,
-      group: S.group === FAV ? "Favorites" : S.group ? groupPath(S.group) : "",
+      group: S.group ? groupPath(S.group) : "",
       files: fileTabs().map(t => t.path),
       side: S.side ? sideTitle(S.side) + (S.side.path ? ` (${S.side.path})` : S.side.url ? ` (${S.side.url})` : "") : "",
       selection: ctxSelection().slice(0, 20000),

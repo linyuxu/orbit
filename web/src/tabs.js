@@ -78,7 +78,7 @@ function switchTo(sid, { focus = true, rec = true, group } = {}) {
   showCurrent(focus);
 }
 function switchGroup(gid, { focus = true, quiet = false } = {}) {
-  if (gid !== FAV && !S.groups.some(g => g.id === gid)) return;
+  if (!S.groups.some(g => g.id === gid)) return;
   saveDraft();
   S.group = gid;
   const want = String(S.lastTab[gid] || "");
@@ -93,10 +93,9 @@ function switchGroup(gid, { focus = true, quiet = false } = {}) {
   showCurrent(focus);
 }
 function groupByIndex(n) {
-  if (n === 1) return switchGroup(FAV);
-  const g = topGroups()[n - 2];  // (the top groups: a subgroup is reached in its parent)
+  const g = topGroups()[n - 1];  // (the top groups: a subgroup is reached in its parent)
   if (g && g.id === S.group && S.file !== HOME) { openHome(g.id); return; }  // (its key again: its home)
-  if (g) switchGroup(g.id); else toast(`No group ${n - 1}: ⌘\` → Sessions to make one`);
+  if (g) switchGroup(g.id); else toast(`No group ${n}: ⌘\` → Sessions to make one`);
 }
 /* The tab row: sessions and files are tabs alike, in one order per group (S.tabOrder; ⌘⌃H ⌘⌃L move any tab past
    any other). A tab never arranged yet goes after those that were: sessions in the server's order, then files. */
@@ -122,7 +121,7 @@ function cycleTab(d) {
 function histOk(e) {
   if (!e || typeof e !== "object") return false;
   if (e.k.startsWith("s:")) { const s = S.sessions.get(e.k.slice(2)); return !!s && !s.closed && !s.fleet; }
-  return e.k.startsWith("f:") && (e.g === FAV || S.groups.some(g => g.id === e.g)) && (e.k === "f:" + HOME || fileTabs(e.g).some(t => t.path === e.k.slice(2)));
+  return e.k.startsWith("f:") && S.groups.some(g => g.id === e.g) && (e.k === "f:" + HOME || fileTabs(e.g).some(t => t.path === e.k.slice(2)));
 }
 function histGo(d) {
   let p = S.histPos + d;
@@ -199,17 +198,12 @@ async function reopenLast() {
   const f = S.closedFiles[0];
   if (f && (!closed.length || f.t >= (closed[0].closed_at || 0))) {
     S.closedFiles.shift();
-    if (f.gid && f.gid !== S.group && (f.gid === FAV || S.groups.some(g => g.id === f.gid))) { saveDraft(); S.group = f.gid; }  // (back in its own group)
+    if (f.gid && f.gid !== S.group && S.groups.some(g => g.id === f.gid)) { saveDraft(); S.group = f.gid; }  // (back in its own group)
     openFile(f.path, { pinned: true });
     return;
   }
   if (!closed.length) { toast("No closed tab to reopen"); return; }
   reopen(closed[0].id);
-}
-async function toggleFavorite(sid = S.current) {
-  const s = S.sessions.get(sid); if (!s) return;
-  try { await api("POST", `/api/sessions/${sid}/update`, { favorite: !s.favorite }); toast(s.favorite ? "Removed from Favorites" : "Added to Favorites"); }
-  catch (e) { toast(e.message); }
 }
 async function moveToGroup(sid, gid) {
   const s = S.sessions.get(sid); if (!s) return;
@@ -240,28 +234,16 @@ async function sessionAction(sid, action) {
     else if (action === "restart") toast("Restarted");
   } catch (e) { toast(`${action} failed: ${e.message}`); }
 }
-/* ⌘W: the side tab, else the file tab, else the session tab (in Favorites: off the favorites, nothing closed). */
+/* ⌘W: the side tab, else the file tab, else the session tab (asked first). */
 function closeWhatHasKeyboard() {
   if (sideFocused()) return closeSide();
   if (S.file) return closeFile(S.file);
-  return closeOrUnfavorite();
-}
-/* In the Favorites view a session's ⌘W and × only take it off the favorites: nothing is closed (it stays open in its
-   own group), so nothing is asked. Elsewhere they close it, asked first. */
-function closeOrUnfavorite(sid = S.current, gid = S.group) {
-  const s = S.sessions.get(sid); if (!s) return;
-  if (gid === FAV && s.favorite) return unfavorite(sid);
-  return closeSession(sid);
-}
-async function unfavorite(sid) {
-  const s = S.sessions.get(sid); if (!s) return;
-  try { await api("POST", `/api/sessions/${sid}/update`, { favorite: false }); toast(`Removed “${s.name}” from Favorites: still open in ${groupPath(s.group)} (⌘⌃P stars it again)`); }
-  catch (e) { toast(e.message); }
+  if (S.current) return closeSession(S.current);
 }
 $("#tabs").addEventListener("mousedown", e => {
   if (e.button !== 0) return;
   const x = e.target.closest("[data-close]");
-  if (x) { e.preventDefault(); closeOrUnfavorite(x.dataset.close); return; }
+  if (x) { e.preventDefault(); closeSession(x.dataset.close); return; }
   const xf = e.target.closest("[data-closefile]");
   if (xf) { e.preventDefault(); closeFile(xf.dataset.closefile); return; }
   if (e.target.closest("#addtab")) { e.preventDefault(); newSession(); return; }
@@ -281,8 +263,7 @@ $("#tabs").addEventListener("contextmenu", e => {
 });
 $("#grouppill").addEventListener("click", e => {
   if (!e.target.closest(".gcaret")) { openHome(); return; }  // the pill is the group's home tab; its ▾: another group
-  menu([{ label: "Favorites", iconHtml: groupMark(FAV, 14), key: "⌘1", run: () => switchGroup(FAV) },
-        ...groupMenuItems(gid => switchGroup(gid), { current: S.group }),
+  menu([...groupMenuItems(gid => switchGroup(gid), { current: S.group }),
         { sep: true }, { label: "New group…", run: () => newGroup() }], { anchor: $("#grouppill") });
 });
 

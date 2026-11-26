@@ -1,14 +1,13 @@
 "use strict";
 /* ===================================================================== state */
-const FAV = "fav";  // the ★ Favorites view (⌘1): every favorite session, whatever its group
 const S = {
   sessions: new Map(),            // open sessions, in tab order (the server's order)
-  groups: [],                     // [{id, name}] in left-panel order: ⌘2…⌘9
+  groups: [],                     // [{id, name}] in left-panel order: ⌘1…⌘9
   cards: new Map(),               // sid → [card], loaded on first view
   cardState: new Map(),           // "sid:cid" → last seen state (notifications)
   current: LS.get("current", null),   // the session tab of this group (the folder files belong to)
   file: LS.get("file", null),         // the main tab is this file (null: the session)
-  group: LS.get("group", null),   // the group whose tabs the title bar shows (or FAV)
+  group: LS.get("group", null),   // the group whose tabs the title bar shows
   lastTab: LS.get("lastTab", {}), // group → "s:<sid>" | "f:<path>"
   ftabs: LS.get("ftabs", {}),     // group → [{path, pinned}]
   tabOrder: LS.get("tabOrder", {}), // group → ["s:<sid>" | "f:<path>"]: sessions and files mixed, as the user arranged them
@@ -48,9 +47,9 @@ const cur = () => S.sessions.get(S.current);
 Object.defineProperty(S, "side", { get() { const e = sideEntry(); return e && !e.hidden && e.list[e.i] || null; } });  // (hidden: kept, not shown)
 const harnessLabel = id => (S.harnesses.find(h => h.id === id) || { label: id }).label;
 const ACTIVE = new Set(["thinking", "running"]);
-const groupName = gid => gid === FAV ? "Favorites" : (S.groups.find(g => g.id === gid) || { name: "?" }).name;
+const groupName = gid => (S.groups.find(g => g.id === gid) || { name: "?" }).name;
 /* Groups are a tree (orbit/desk/groups.py): {id, name, parent?}; a group's children are those whose parent it is, in
-   list order. GROUP_DEPTH levels at most. ⌘2…⌘9 are the top groups'. */
+   list order. GROUP_DEPTH levels at most. ⌘1…⌘9 are the top groups'. */
 const GROUP_DEPTH = 3;
 const groupOf = gid => S.groups.find(g => g.id === gid);
 const groupKids = parent => S.groups.filter(g => (g.parent || "") === (parent || ""));
@@ -58,21 +57,20 @@ const topGroups = () => groupKids("");
 function groupDepth(gid) { let n = 0, g = groupOf(gid); while (g) { n++; g = g.parent ? groupOf(g.parent) : null; } return n; }
 function groupHeight(gid) { return 1 + Math.max(0, ...groupKids(gid).map(c => groupHeight(c.id))); }
 function groupDescendants(gid) { return groupKids(gid).flatMap(c => [c.id, ...groupDescendants(c.id)]); }
-/* "Work › Orbit › Release" (Favorites as is). */
+/* "Work › Orbit › Release". */
 function groupPath(gid, sep = " › ") {
-  if (gid === FAV) return "Favorites";
   const names = []; let g = groupOf(gid);
   while (g && names.length < 8) { names.unshift(g.name); g = g.parent ? groupOf(g.parent) : null; }
   return names.length ? names.join(sep) : "?";
 }
 /* Every group, a parent before its children: [{g, depth (0 = top)}]. */
 function groupTree(parent = "", depth = 0) { return groupKids(parent).flatMap(g => [{ g, depth }, ...groupTree(g.id, depth + 1)]); }
-/* Menu items for every group, indented under its parent (⌘2… on the top ones). */
+/* Menu items for every group, indented under its parent (⌘1… on the top ones). */
 function groupMenuItems(run, { current = "", disabled = () => false } = {}) {
   const tops = topGroups();
   return groupTree().map(({ g, depth }) => {
     const i = depth ? -1 : tops.indexOf(g);
-    return { label: g.name, iconHtml: (depth ? `<span style="display:inline-block;width:${depth * 16}px"></span>` : "") + groupMark(g.id, 14), key: g.id === current ? "current" : i >= 0 && i < 8 ? `⌘${i + 2}` : "",
+    return { label: g.name, iconHtml: (depth ? `<span style="display:inline-block;width:${depth * 16}px"></span>` : "") + groupMark(g.id, 14), key: g.id === current ? "current" : i >= 0 && i < 9 ? `⌘${i + 1}` : "",
              disabled: g.id === current || disabled(g), run: () => run(g.id) };
   });
 }
@@ -81,7 +79,7 @@ function groupMenuItems(run, { current = "", disabled = () => false } = {}) {
 const machineOk = s => !S.machine || (S.machine === "local" ? !s.remote : s.remote === S.machine);
 const machineUp = name => !(S.machines || []).some(m => m.name === name && !m.ok);
 const machineTag = s => s && s.remote ? `<span class="mtag${machineUp(s.remote) ? "" : " off"}" title="${machineUp(s.remote) ? `On ${esc(s.remote)}` : `${esc(s.remote)} is unreachable`}">${esc(s.remote)}</span>` : "";
-const inView = (s, gid = S.group) => gid === FAV ? s.favorite : s.group === gid;
+const inView = (s, gid = S.group) => s.group === gid;
 function tabIds(gid = S.group) { return [...S.sessions.values()].filter(s => inView(s, gid)).map(s => s.id); }
 const fileTabs = (gid = S.group) => (S.ftabs[gid] = S.ftabs[gid] || []);
 const tabKey = () => S.file ? "f:" + S.file : S.current ? "s:" + S.current : null;
@@ -141,7 +139,7 @@ function setSessions(list, groups) {
     setSessions.done = true;
     S.group = S.sessions.get(asked).group || S.group; S.current = asked;
   }
-  if (S.group !== FAV && !S.groups.some(g => g.id === S.group)) S.group = S.groups[0] ? S.groups[0].id : null;
+  if (!S.groups.some(g => g.id === S.group)) S.group = S.groups[0] ? S.groups[0].id : null;
   if (!S.sessions.has(S.current) || !inView(S.sessions.get(S.current))) {
     const want = String(S.lastTab[S.group] || "");
     const sid = want.startsWith("s:") ? want.slice(2) : want.startsWith("f:") ? null : want;

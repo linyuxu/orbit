@@ -119,7 +119,7 @@ One term per concept; use these names in code, UI text and docs.
 | answer | The agent's final text for a request; follow-up = text the agent writes after it, before the next request, in a turn of its own that runs no tool (one that does is an `auto` card) |
 | driver | The adapter between the server and one harness (create, send, progress, history, stop, close) |
 | Desk | The server's harness-independent layer above the drivers: request queue, cards, groups, history, agent mail |
-| group | A named set of session tabs; ⌘1 is ★ Favorites, ⌘2… the groups in left-panel order |
+| group | A named set of session tabs; ⌘1…⌘9 the groups in left-panel order (another group's session beside: a side tab) |
 | main tab | What the main panel shows: a session, a file, a note, Calendar |
 | side tab | Another tab shown beside the main tab, inside the main panel (an embedded page). Kinds: session, file / note, review (± Review of a session's folder), web page (`orbit-agent show`: an agent's page, or a website by its URL, also typed in ⌘O / ⌘⌃O), Calendar, Schedules |
 | embed | A page loaded inside a side tab (`/?embed=<session>`, `/?embedtab=<spec>`); never writes the main page's state |

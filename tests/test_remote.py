@@ -201,9 +201,9 @@ class RemoteTest(test_skeleton.SkeletonTest):
             self.assertEqual(order(), [s["id"], local["id"]])
             self.assertIn(s["id"], json.loads((self.state / "sessions.json").read_text())["order"])  # kept
             self.req("POST", f"/api/sessions/{local['id']}/close", {})
-            # any of this server's groups (kept here, not on box), and starred
-            code, moved = self.req("POST", f"/api/sessions/{s['id']}/update", {"group": "projects", "favorite": True})
-            self.assertEqual((code, moved["group"], moved["favorite"]), (200, "projects", True))
+            # any of this server's groups (kept here, not on box)
+            code, moved = self.req("POST", f"/api/sessions/{s['id']}/update", {"group": "projects"})
+            self.assertEqual((code, moved["group"]), (200, "projects"))
             listed = {x["id"]: x for x in self.req("GET", "/api/sessions")[1]["sessions"]}
             self.assertEqual(listed[s["id"]]["group"], "projects")
             self.assertEqual(json.loads((self.state / "remote-placement.json").read_text())[s["id"]]["group"], "projects")

@@ -321,7 +321,7 @@ async function attachTo(x) {
     body: `A process still runs it (pid ${x.live.pid}${x.live.status ? ", " + x.live.status : ""}). If both go on, both write to it: quit it there first, or resume anyway.`, ok: "Resume anyway" }))) return;
   try {
     const s = await api("POST", "/api/attach-session", { harness: x.harness, id: x.id, cwd: x.cwd, machine: x.machine || "", name: x.name || "",
-                                                         group: S.group !== FAV ? S.group : "" });
+                                                         group: S.group || "" });
     S.sessions.set(s.id, s); S.cards.delete(s.id);
     switchTo(s.id);
     toast(`Resumed: ${s.name} (${harnessLabel(s.harness)}${x.machine ? " on " + x.machine : ""}), the next request continues it`);
@@ -331,8 +331,8 @@ function openRecent() {
   if (modal && modal.kind === "finder" && modal.opener === "M:KeyR") { closeModal(); return; }
   finder({ title: "Recent", opener: "M:KeyR", tabs: [{ name: "Recent", empty: "Nothing seen yet.", items: async () => {
     const all = new Map((await api("GET", "/api/sessions?closed=1")).sessions.map(s => [s.id, s]));
-    const here = tabKey(), seenG = new Set([S.group, FAV]), groups = [], out = [];
-    const gname = g => g && g !== FAV && S.groups.some(x => x.id === g) ? groupPath(g) : "";
+    const here = tabKey(), seenG = new Set([S.group]), groups = [], out = [];
+    const gname = g => g && S.groups.some(x => x.id === g) ? groupPath(g) : "";
     // The groups visited (not the one in front), latest first, above the tabs: back to a group as it was left
     for (const r of S.recent.filter(r => r.id !== here)) {
       const s = r.id.startsWith("s:") && all.get(r.id.slice(2)), it = item(r), g = r.g || (s && s.group) || "";

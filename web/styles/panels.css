@@ -96,8 +96,6 @@
 .prow.dir .nm { color:var(--ink); }
 .prow .stl { margin-left:auto; }
 .prow .dd2 { width:5px; height:5px; border-radius:50%; background:var(--ink-3); flex:none; margin-left:auto; margin-right:4px; }
-.star { color:#d4a017; display:inline-flex; align-items:center; }
-.star svg { fill:currentColor; }
 .udot { display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--ink); margin-left:5px; vertical-align:middle; flex:none; }
 .pempty { color:var(--ink-3); text-align:center; padding:40px 16px; line-height:1.7; }
 .pempty h3 { font-size:calc(12px * var(--ui-k)); font-weight:calc(600 + var(--wd)); color:var(--ink-2); margin:0 0 2px; }

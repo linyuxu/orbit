@@ -233,7 +233,7 @@ function sessionRows() {
     const scored = ss.map(s => ({ s, sc: q ? Math.max(fuzzy(q, s.name), fuzzy(q, tilde(s.cwd)) - 1, fuzzy(q, v.path) - 2) : 0 })).filter(x => x.sc >= 0);
     // its other tabs (files, notes, views; the server's layout, every screen's), smaller, after its sessions, in the tab row's order
     const tabs = groupFileTabs(v.gid).filter(t => !q || fuzzy(q, ftabTitle(t.path)) >= 0 || fuzzy(q, tilde(t.path)) - 1 >= 0);
-    const kids = v.gid === FAV ? [] : groupKids(v.gid).map(g => block({ gid: g.id, name: g.name, path: groupPath(g.id), ix: "", key: "" }, depth + 1));
+    const kids = groupKids(v.gid).map(g => block({ gid: g.id, name: g.name, path: groupPath(g.id), ix: "", key: "" }, depth + 1));
     const working = ss.filter(s => s.state === "working" || s.agents > 0).length + kids.reduce((n, k) => n + k.working, 0);  // (subagents at work count)
     const total = ss.length + kids.reduce((n, k) => n + k.total, 0);
     const hit = !q || scored.length > 0 || tabs.length > 0 || kids.some(k => k.hit);
@@ -249,8 +249,7 @@ function sessionRows() {
     return { rows: out, hit, working, total };
   };
   const tops = topGroups();
-  const views = [{ gid: FAV, name: "Favorites", path: "Favorites", ix: "★", key: "⌘1" },
-                 ...tops.map((g, i) => ({ gid: g.id, name: g.name, path: g.name, ix: i < 8 ? String(i + 2) : "", key: i < 8 ? `⌘${i + 2}` : "" }))];
+  const views = tops.map((g, i) => ({ gid: g.id, name: g.name, path: g.name, ix: i < 9 ? String(i + 1) : "", key: i < 9 ? `⌘${i + 1}` : "" }));
   for (const v of views) { const b = block(v, 0); if (b.hit) rows.push(...b.rows); }
   // The Fleet: helpers (⌘K quick asks, Prep, `--fleet` schedules, orbit-agent ask). No tab: one opens in the side pane.
   const fleet = [...S.sessions.values()].filter(s => s.fleet && machineOk(s))
@@ -335,8 +334,8 @@ function renderLeft() {
     const fold = r => r.fold ? `<span class="fold" title="${r.shut ? "Unfold" : "Fold"} (Space, → ←)">${I("chev", 10)}</span>` : `<span class="fold" style="visibility:hidden"></span>`;
     if (r.kind === "fleetgrp") return `<div class="prow grp fleetgrp${kc}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" title="Fleet helpers: quick asks (⌘K), meeting Prep, --fleet schedules. One opens beside, in the side pane"><span class="ix">${I("zap", 11)}</span><span class="nm">Fleet</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     if (r.kind === "group") {
-      const gc = r.gid !== FAV && (groupOf(r.gid) || {}).color;
-      return `<div class="prow grp${r.depth ? " sub" : ""}${gc ? " hued" : ""}${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}${gc ? `;--gc:${gc}` : ""}" title="${esc(r.depth ? groupPath(r.gid) : r.key)}"><span class="ix${r.gid === FAV ? " star" : r.ix ? " num" : ""}">${r.gid === FAV ? I("star", 11) : r.depth ? "" : esc(r.ix)}</span>${r.gid === FAV ? "" : groupMark(r.gid, 14)}<span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
+      const gc = (groupOf(r.gid) || {}).color;
+      return `<div class="prow grp${r.depth ? " sub" : ""}${gc ? " hued" : ""}${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}${gc ? `;--gc:${gc}` : ""}" title="${esc(r.depth ? groupPath(r.gid) : r.key)}"><span class="ix${r.ix ? " num" : ""}">${r.depth ? "" : esc(r.ix)}</span>${groupMark(r.gid, 14)}<span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     }
     if (r.kind === "ftab") {
       const isCur = S.file === r.path && r.gid === S.group, m = /^\/@([\w-]+)(\/.*)$/.exec(r.path);
@@ -352,7 +351,7 @@ function renderLeft() {
     const stopped = s.state === "stopped";
     return `<div class="prow ss${kc}${isCur ? " cur" : ""}${stopped ? " stopped" : ""}${unread ? " unread" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}" data-tip="${esc(s.name)}">` +
       `<span class="si ${st.cls}">${st.icon}</span>${harnessIcon(s.harness)}<span class="nm">${esc(sessionTitle(s))}</span>` +
-      `${s.favorite && r.gid !== FAV ? `<span class="star">${I("star", 11)}</span>` : ""}${machineTag(s)}<span class="tm">${esc(lastMoved(s))}</span>${stopped ? `<button class="rsm" data-resume="${esc(s.id)}" title="Start its agent again">Resume</button>` : ""}</div>`;
+      `${machineTag(s)}<span class="tm">${esc(lastMoved(s))}</span>${stopped ? `<button class="rsm" data-resume="${esc(s.id)}" title="Start its agent again">Resume</button>` : ""}</div>`;
   }).join("");
   revealCursor();
   renderPeek();
@@ -442,7 +441,7 @@ function filesRoots() {
   for (const s of S.sessions.values()) {
     if (s.fleet || !s.cwd || !machineOk(s)) continue;
     const t = (s.last && s.last.time) || s.created || 0, f = by.get(s.cwd) || { path: s.cwd, t: 0, remote: s.remote || "", here: false, n: 0 };
-    f.t = Math.max(f.t, t); f.n++; if (S.group === FAV ? s.favorite : inView(s, S.group)) f.here = true; by.set(s.cwd, f);
+    f.t = Math.max(f.t, t); f.n++; if (inView(s, S.group)) f.here = true; by.set(s.cwd, f);
   }
   // The current root: the session folder that holds the context (a file of another session's folder: that folder),
   // else the context itself (a file outside every session's folder: its repo or folder).
@@ -514,7 +513,7 @@ function filesTabRows() {
     }
     if (!c.entries.length) rows.push({ kind: "note", k: "n:" + path, depth, text: "Empty folder" });
   };
-  const gname = S.group === FAV ? "Favorites" : (groupOf(S.group) || {}).name || "This group";
+  const gname = (groupOf(S.group) || {}).name || "This group";
   rows.push({ kind: "fsec", k: "h:here", name: gname, n: R.here.length });
   R.here.forEach(f => rootRow(f));
   if (R.other.length) {
@@ -718,24 +717,24 @@ function closeGroupTab(r) {
    move); a session: close it (its conversation is kept); a file tab: close it (in its group, on every screen). */
 async function deleteRow(r) {
   if (!r) return;
-  if (r.kind === "group" && r.gid !== FAV) {
+  if (r.kind === "group") {
     if (S.groups.length < 2) { toast("The last group cannot be deleted"); return; }
     return deleteGroup(r.gid);
   }
-  if (r.kind === "session") return closeSession(r.sid);  // (asks; from Favorites too: it closes, ⌘W only unstars)
+  if (r.kind === "session") return closeSession(r.sid);  // (asks)
   if (r.kind === "ftab") {
     const ok = await confirmDialog({ title: `Close “${ftabTitle(r.path)}”?`, ok: "Close",
       body: `The tab closes in ${groupPath(r.gid)}, on every screen. ${/^(orbit|plugin):/.test(r.path) ? "" : "The file stays on disk. "}⌘⇧T reopens it.` });
     if (ok) closeGroupTab(r);
     return;
   }
-  toast(r.kind === "group" ? "Favorites is not a group to delete: ⌘⌃P unstars a session" : r.kind === "fleetgrp" ? "The Fleet is Orbit's own: close its helpers one by one" : "Nothing to close here");
+  toast(r.kind === "fleetgrp" ? "The Fleet is Orbit's own: close its helpers one by one" : "Nothing to close here");
 }
 /* ⌘R on a row: rename it. A group, a session, a file tab's file (a view, the Calendar, a plugin's tab has no name to
    change). */
 function renameRow(r) {
   if (!r) return;
-  if (r.kind === "group" && r.gid !== FAV) return renameGroup(r.gid);
+  if (r.kind === "group") return renameGroup(r.gid);
   if (r.kind === "session") return renameSession(r.sid);
   if (r.kind === "ftab" && !/^(orbit|plugin):/.test(r.path)) return renamePath(r.path);
   toast(r.kind === "ftab" ? "A view has no name to change" : "This one cannot be renamed");
@@ -768,11 +767,10 @@ function rowMenu(r, where) {
   if (r.kind === "session") return tabMenu(r.sid, where);
   if (r.kind === "ftab") return menu([
     { label: "Open", run: () => openRow(r) },
-    r.gid !== FAV ? { label: "Move to", sub: () => moveTabItems(r.path, r.gid) } : null,
+    { label: "Move to", sub: () => moveTabItems(r.path, r.gid) },
     { label: "Close the tab", key: "⌘W", run: () => closeGroupTab(r) },
   ].filter(Boolean), where);
   if (r.kind === "newgroup") return newGroup();
-  if (r.gid === FAV) return menu([{ label: "Show Favorites", key: "⌘1", run: () => switchGroup(FAV) }], where);
   groupMenu(r.gid, where);
 }
 function folderMenu(dir, where, rootRow = null, treeRoot = null) {
@@ -846,13 +844,13 @@ async function nestGroup(gid, parent, after = "") {
   } catch (e) { toast(e.message); }
 }
 /* A group's name: given, and no other group's (case and every space ignored: "Invest Assistant" is "InvestAssistant";
-   Favorites and the Fleet count). The server checks the same. */
+   the Fleet counts). The server checks the same. */
 const groupKey = n => String(n || "").replace(/\s+/g, "").toLowerCase();
 function groupNameError(name, gid = "", parent = "") {
   const k = groupKey(name);
   if (!k) return "Give the group a name.";
   if (/[/›]/.test(name)) return "A group's name has no / or › (they separate a subgroup's path).";
-  if (!parent && (k === "favorites" || k === "fleet")) return `“${name.trim()}” is Orbit's own: there is a group named that already.`;
+  if (!parent && k === "fleet") return `“${name.trim()}” is Orbit's own: there is a group named that already.`;
   const same = groupKids(parent).find(g => g.id !== gid && groupKey(g.name) === k);
   if (same) return `There is a group named “${same.name}” there already.`;
   return null;
@@ -951,7 +949,7 @@ function panelKey(e, combo) {
   }
   if (tab === "sessions") {
     if (combo === "M:KeyR" && r && r.kind !== "newgroup") { renameRow(r); return true; }
-    if ((combo === "Tab" || combo === "S:Tab") && r && r.kind === "group" && r.gid !== FAV) {  // into the group above it / out a level
+    if ((combo === "Tab" || combo === "S:Tab") && r && r.kind === "group") {  // into the group above it / out a level
       if (combo === "Tab") indentGroup(r.gid); else outdentGroup(r.gid);
       return true;
     }
@@ -960,11 +958,11 @@ function panelKey(e, combo) {
     if (combo === "C:KeyD" && r && r.kind !== "newgroup" && (!S.filter || filterPos() >= S.filter.length)) { deleteRow(r); return true; }
     if ((combo === "MC:KeyH" || combo === "MC:KeyL") && r) {
       const d = combo === "MC:KeyH" ? -1 : 1;
-      if (r.kind === "group" && r.gid !== FAV) api("POST", `/api/groups/${r.gid}/move`, { delta: d }).catch(err => toast(err.message));
+      if (r.kind === "group") api("POST", `/api/groups/${r.gid}/move`, { delta: d }).catch(err => toast(err.message));
       else if (r.kind === "session") moveSession(r.sid, d);
       return true;
     }
-    if (combo === "M:KeyW" && r && r.kind === "session") { closeOrUnfavorite(r.sid, r.gid); return true; }  // (a Favorites row: off the favorites)
+    if (combo === "M:KeyW" && r && r.kind === "session") { closeSession(r.sid); return true; }
     if (combo === "M:KeyW" && r && r.kind === "ftab") { closeGroupTab(r); return true; }
   }
   // ⌃D in the Files and Notes trees: the row (or the Files selection) to the Trash, asked first; as in the Groups panel,
@@ -1030,7 +1028,7 @@ plist.addEventListener("contextmenu", e => {
   else if (S.left.tab === "misc") menu([{ label: "New schedule…", run: () => scheduleDialog() }, { label: "Settings…", key: "⌘,", run: settingsDialog }], at);
   else if (S.left.tab === "files") menu([{ label: "Go to a folder…", run: gotoFolder }, ctxRoot() ? { label: "Refresh", run: () => refreshTree(ctxRoot(), true) } : null].filter(Boolean), at);
   else if (S.left.tab !== "sessions" && panelRoot()) folderMenu(panelRoot(), at);  // empty space = the folder's menu
-  else if (S.groups.length) groupMenu(S.group === FAV ? S.groups[0].id : S.group, at);
+  else if (S.groups.length) groupMenu(S.group, at);
 });
 plist.addEventListener("focus", () => renderLeft());
 plist.addEventListener("blur", () => setTimeout(() => { if (!panelFocused()) renderLeft(); }, 0));
@@ -1143,16 +1141,15 @@ const parentOf = gid => (groupOf(gid) || {}).parent || "";
 dragSort({
   box: plist, item: ".prow.ss, .prow.ftab, .prow.grp", axis: "y",
   keyOf: el => el.dataset.k, byKey: k => [...plist.querySelectorAll(".prow[data-k]")].find(x => x.dataset.k === k),
-  canDrag: el => { const r = prowOf(el); return S.left.tab === "sessions" && !S.filter && !!r && ((r.kind === "session" && r.gid !== "fleet") || (r.kind === "ftab" && r.gid !== FAV) || (r.kind === "group" && r.gid !== FAV)); },
+  canDrag: el => { const r = prowOf(el); return S.left.tab === "sessions" && !S.filter && !!r && ((r.kind === "session" && r.gid !== "fleet") || r.kind === "ftab" || r.kind === "group"); },
   unit: el => prowOf(el).kind === "group" ? groupBlock(el) : [el],
   peers: el => {
     const src = prowOf(el), rows = [...plist.querySelectorAll(".prow[data-k]")].filter(x => x !== el);
-    if (src.kind === "group") return rows.filter(x => { const r = prowOf(x); return r && r.kind === "group" && r.gid !== FAV && parentOf(r.gid) === parentOf(src.gid); })  // (among its siblings: Tab, ⇧Tab and Move into nest)
+    if (src.kind === "group") return rows.filter(x => { const r = prowOf(x); return r && r.kind === "group" && parentOf(r.gid) === parentOf(src.gid); })  // (among its siblings: Tab, ⇧Tab and Move into nest)
       .map(groupBlock);
     if (src.kind === "ftab")  // (a file or view tab: among the rows of the groups, it lands in the group it is put under)
-      return rows.filter(x => { const r = prowOf(x); return r && r.gid !== FAV && r.gid !== "fleet" && ["session", "ftab", "group"].includes(r.kind); }).map(x => [x]);
-    const fav = src.gid === FAV;
-    return rows.filter(x => { const r = prowOf(x); return r && ((r.kind === "session" && r.gid !== "fleet" && (r.gid === FAV) === fav) || (!fav && r.kind === "group" && r.gid !== FAV)); }).map(x => [x]);
+      return rows.filter(x => { const r = prowOf(x); return r && r.gid !== "fleet" && ["session", "ftab", "group"].includes(r.kind); }).map(x => [x]);
+    return rows.filter(x => { const r = prowOf(x); return r && ((r.kind === "session" && r.gid !== "fleet") || r.kind === "group"); }).map(x => [x]);
   },
   redraw: () => renderLeft(),
   drop: (key, prev, next) => {
@@ -1179,7 +1176,7 @@ async function dropOn(key, el, after) {
     return;
   }
   const sid = src.sid, gid = r.gid;
-  if (gid !== src.gid && gid !== FAV) await moveToGroup(sid, gid);
+  if (gid !== src.gid) await moveToGroup(sid, gid);
   if (r.kind === "group") { renderLeft(); return; }  // (under a group's head with nothing after: into it, at its end)
   const list = [...S.sessions.values()].filter(s => s.id !== sid && (s.id === r.sid || inView(s, gid))).map(s => s.id);
   let i = list.indexOf(r.sid); if (after) i++;

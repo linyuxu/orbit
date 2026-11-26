@@ -28,8 +28,8 @@ class Forward:
             except KeyError:
                 return self._json({"error": "no such session"}, 404)
             return self._json({"ok": True})
-        if action == "update":  # its group and star are kept here (this server's groups), not over there
-            shown = fed.place(sid, group=b.get("group"), favorite=b.get("favorite"))
+        if action == "update":  # its group is kept here (this server's groups), not over there
+            shown = fed.place(sid, group=b.get("group"))
             return self._json(shown or {"ok": True})
         if action in ("fork", "clone"):  # to another machine or folder: a hand-over this server makes (orbit/desk/forkto.py)
             from orbit.desk import forkto

@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- No ★ Favorites view (another group's session beside the one in front is a side tab): ⌘1…⌘9 are the groups in
+  left-panel order, ⌘W closes a session everywhere, ⌘⌃P and the session's star are gone, the phone lists the groups
+  only. The view's file tabs (Calendar, Schedules, …) go to the first group once; "Favorites" is a name a group may have.
 - ⌃D in the Files and Notes panels sends the row (or the Files selection) to the Trash, asked first, as it closes or
   deletes a row in the Groups panel.
 - A file pasted or dropped into a Markdown document (an image or any attachment) goes into the attachments/ folder

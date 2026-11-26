@@ -1229,6 +1229,23 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.evaluate(f"openWiki('missing-{name}.png', {json.dumps(n)})"); page.wait_for_timeout(300)
             self.assertFalse(any(vault.rglob(f"missing-{name}.png.md")), name)
 
+    def test_no_favorites_and_cmd_1_is_the_first_group(self):
+        """No ★ Favorites view: the Groups panel and the group menu list the groups only, ⌘1 is the first group."""
+        for name, page in self.each():
+            self.open(page)
+            first = page.evaluate("topGroups()[0].id")
+            page.evaluate("S.left.shown = true; applyLeft(); setPanelTab('sessions'); 0")
+            page.wait_for_selector("#plist .prow.grp")
+            self.assertNotIn("Favorites", page.inner_text("#plist"), name)
+            self.assertEqual(page.inner_text(f"#plist .prow.grp[data-k='g:{first}'] .ix").strip(), "1", name)
+            page.evaluate(f"switchGroup(topGroups()[1] ? topGroups()[1].id : {json.dumps(first)}); focusMain(); 0")
+            page.keyboard.press("Meta+1")
+            page.wait_for_function(f"() => S.group === {json.dumps(first)}", timeout=3000)
+            page.click("#grouppill .gcaret")
+            page.wait_for_selector(".menu .row")
+            self.assertNotIn("Favorites", page.inner_text(".menu"), name)
+            page.keyboard.press("Escape")
+
     def test_earlier_cards_come_in_only_when_the_scrolling_stops(self):
         """A long conversation draws its latest 40 requests; the earlier ones come in above once the user's scrolling
         stops, the view kept where it was. Never during the scroll: WebKit drops a scrollTop written during a

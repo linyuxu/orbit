@@ -2,7 +2,7 @@
 
 For each remote in <state>/remotes.json a thread keeps that server's open sessions and follows its /api/events. Its
 sessions join this server's list as `NAME~ID` (with "remote": NAME), in whichever of this server's groups the user put
-them (kept here, in <state>/remote-placement.json: group and favorite); their events (cards,
+them (kept here, in <state>/remote-placement.json: its group); their events (cards,
 session changes, closes) are rebroadcast here with those ids. A request for `/api/sessions/NAME~ID/...` goes to that
 server as `/api/sessions/ID/...` and its answer comes back with the ids rewritten. So a client of this server (the
 app, a phone, `orbit-agent`) sees and drives every machine's sessions through one URL.
@@ -116,7 +116,7 @@ class Federation:
         self.cards: dict[tuple, dict] = {}  # (remote, its sid, card id) → the card as it last came (its patches apply to it)
         self.stopped = threading.Event()
         self.placement_path = self.state / "remote-placement.json"
-        try:  # NAME~ID → {"group", "favorite"}: where the user put another machine's session, here
+        try:  # NAME~ID → {"group"}: where the user put another machine's session, here
             self.placement: dict[str, dict] = json.loads(self.placement_path.read_text())
         except (OSError, ValueError):
             self.placement = {}
@@ -355,13 +355,12 @@ class Federation:
         place = self.placement.get(out["id"], {})
         groups = [g["id"] for g in self.desk.groups]
         out["group"] = place.get("group") if place.get("group") in groups else (groups[0] if groups else "")
-        out["favorite"] = bool(place.get("favorite"))
         if isinstance(out.get("cwd"), str):
             out["cwd"] = ours(name, out["cwd"])
         return out
 
-    def place(self, sid: str, group: str | None = None, favorite: bool | None = None) -> dict | None:
-        """Put another machine's session in one of this server's groups (or star it): kept here, not there."""
+    def place(self, sid: str, group: str | None = None) -> dict | None:
+        """Put another machine's session in one of this server's groups: kept here, not there."""
         split_ = split(sid)
         if not split_:
             return None
@@ -372,8 +371,6 @@ class Federation:
             p = self.placement.setdefault(sid, {})
             if group is not None:
                 p["group"] = group
-            if favorite is not None:
-                p["favorite"] = bool(favorite)
             snap = dict(self.placement)
             cur = self.sessions.get(name, {}).get(rid)
         tmp = self.placement_path.with_suffix(".tmp")

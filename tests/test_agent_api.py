@@ -185,6 +185,23 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         st = side()
         self.assertEqual(([x["kind"] for x in st["items"]], st["i"]), (["file"], 0))
 
+    def test_the_favorites_tabs_go_to_the_first_group(self):
+        """The ★ Favorites view is gone: a layout kept with its file tabs gives them to the first group (once, not twice
+        a tab that group has), its tab order goes."""
+        first = next(g["id"] for g in self.desk.groups if not g.get("parent"))
+        cur = self.desk.layout()
+        lay = {"ftabs": {"fav": [{"path": "orbit:calendar", "pinned": True}, {"path": "/tmp/x.md", "pinned": True}],
+                         first: [{"path": "/tmp/x.md", "pinned": True}]},
+               "order": {"fav": ["s:1", "f:orbit:calendar"], first: ["f:/tmp/x.md"]}, "sides": {}}
+        self.desk.set_layout(lay, cur["rev"])
+        got = self.desk.layout()
+        self.assertNotIn("fav", got["layout"]["ftabs"])
+        self.assertNotIn("fav", got["layout"]["order"])
+        self.assertEqual([t["path"] for t in got["layout"]["ftabs"][first]], ["/tmp/x.md", "orbit:calendar"])
+        self.assertEqual(got["rev"], cur["rev"] + 2)  # (written once, as a change pages pick up)
+        self.assertEqual(self.desk.layout()["rev"], got["rev"])
+        self.desk._layout_file().unlink()  # (the next test starts with none kept)
+
     def test_the_tab_layout_is_the_servers(self):
         """The file tabs, the tab row's order and file tabs' side tabs: one layout every page shares, written whole from
         the revision a page had (a page behind gets 409 and the current one), told to all as a layout event."""

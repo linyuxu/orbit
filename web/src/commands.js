@@ -32,7 +32,7 @@ async function newSession(gidArg, preset = {}) {  // preset: {cwd, machine} (a f
   if (src) { preset = { ...preset, machine: src.remote || "", cwd: folderOf(src) }; gidArg = gidArg || src.group; }
   const harness = src && S.harnesses.some(h => h.id === src.harness) ? src.harness : S.harnesses.some(h => h.id === last.harness) ? last.harness : S.harnesses[0].id;
   let ctls = null;
-  const gid = typeof gidArg === "string" ? gidArg : (S.group !== FAV ? S.group : (cur() ? cur().group : (S.groups[0] || {}).id));
+  const gid = typeof gidArg === "string" ? gidArg : (S.group || (cur() ? cur().group : (S.groups[0] || {}).id));
   // Which machine: this one, or another (its folders, its harnesses); the group is this server's either way.
   const ups = (S.machines || []).filter(m => m.ok);
   let machine = cur() && cur().remote && ups.some(m => m.name === cur().remote) ? cur().remote : (S.machine && S.machine !== "local" && ups.some(m => m.name === S.machine) ? S.machine : "");
@@ -89,7 +89,7 @@ async function newSession(gidArg, preset = {}) {  // preset: {cwd, machine} (a f
   const s = newSession.created;
   S.sessions.set(s.id, s);
   S.cards.set(s.id, []);
-  switchTo(s.id, { group: S.group === FAV && !s.favorite ? s.group : undefined });
+  switchTo(s.id);
 }
 async function renameSession(sid = S.current) {
   const s = S.sessions.get(sid); if (!s) return;
@@ -101,7 +101,6 @@ function tabMenu(sid = S.current, where) {
   const working = s.state === "working";
   const groups = () => [...groupMenuItems(gid => moveToGroup(sid, gid), { current: s.group }),
                         { sep: true }, { label: "New group…", run: () => moveToGroup(sid, "__new") }];
-  const inFav = !EMBED && S.group === FAV && s.favorite;  // (in Favorites, Remove from Favorites at the end does it)
   menu([
     { label: "Rename", run: () => renameSession(sid) },
     EMBED ? null : { label: "Fork", key: "/fork-session", run: () => forkSession(sid) },
@@ -110,7 +109,6 @@ function tabMenu(sid = S.current, where) {
     { label: "Copy link", run: () => copyText(`orbit://session/${sid}`) },
     { label: "Copy resume command", run: () => copyResumeCommand(sid) },
     { sep: true },
-    inFav ? null : { label: s.favorite ? "Unfavorite" : "Favorite", key: "⌘⌃P", run: () => toggleFavorite(sid) },
     EMBED ? null : { label: "Shell here", key: "⌘J", run: () => shellHere(sid) },
     { label: "Open folder in a terminal", run: () => api("POST", "/api/open-terminal", { sid }).then(r => toast(`Opened ${tilde(s.cwd)} in ${r.app}`)).catch(e => toast(e.message)) },
     { sep: true },
@@ -127,8 +125,7 @@ function tabMenu(sid = S.current, where) {
     ] },
     EMBED ? null : { label: "More", sub: moreItems },
     { sep: true },
-    inFav ? { label: "Remove from Favorites", key: "⌘W", run: () => unfavorite(sid) } : null,
-    EMBED ? null : { label: "Close", key: inFav ? "" : "⌘W", run: () => closeSession(sid) },
+    EMBED ? null : { label: "Close", key: "⌘W", run: () => closeSession(sid) },
   ].filter(Boolean), where || { anchor: document.querySelector(`.tab[data-sid="${sid}"]`) || $("#tabs") });
 }
 /* Copy resume command: a shell line that continues this conversation in a terminal, in the agent's own UI
@@ -255,12 +252,11 @@ const SHORTCUTS = [
     ["⌃D", "In the Groups panel: close the row's session or tab, or delete its group; in Files and Notes: the row (or the selection) to the Trash (asked first)"],
     ["Space · ← →", "In the Groups panel: fold / unfold the group (on a row in it: its group folds)"],
     ["Tab · ⇧Tab", "In the Groups panel on a group: into the group above it (a subgroup) · out a level. Groups nest 3 deep"],
-    ["⌘1 · ⌘2…⌘9", "Favorites · the groups in left-panel order",
+    ["⌘1…⌘9", "The groups in left-panel order (its key again: its home)",
       ["M:Digit1", "M:Digit2", "M:Digit3", "M:Digit4", "M:Digit5", "M:Digit6", "M:Digit7", "M:Digit8", "M:Digit9"],
       [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => () => groupByIndex(n))],
     ["⌘⇧[ ⌘⇧]", "Previous / next tab, the group's home first (in the left panel or a finder: its tabs)", ["MS:BracketLeft", "MS:BracketRight"], [() => cycleTab(-1), () => cycleTab(1)]],
     ["⌘⌃H ⌘⌃L", "Move the tab left / right, past any tab, session or file (in the Groups panel: move the group up / down)", ["MC:KeyH", "MC:KeyL"], [() => moveCurrentTab(-1), () => moveCurrentTab(1)]],
-    ["⌘⌃P", "Toggle Favorite for the current session", "MC:KeyP", () => toggleFavorite()],
     ["⌘- ⌘=", "Back / forward through visited tabs", ["M:Minus", "M:Equal"], [() => histGo(-1), () => histGo(1)]],
     ["⌘E", "Context menu of what has the keyboard (tab menu; file menu in a file tab)", "M:KeyE", contextMenu],
     ["⌘K", "Quick ask: a one-off request to a Fleet agent or any session", "M:KeyK", () => quickAsk()],

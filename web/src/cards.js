@@ -186,7 +186,6 @@ function cardHtml0(c) {
 function emptyHtml() {
   if (EMBED) return `<div class="empty"><h2>This session is closed</h2>Close the side tab with <kbd>⌘W</kbd>.</div>`;
   if (!S.sessions.size) return `<div class="empty"><h2>No session yet</h2>Press <kbd>⌘N</kbd> to start an agent session in a folder, or <kbd>⌘O</kbd> to reopen one.</div>`;
-  if (!S.current && S.group === FAV) return `<div class="empty"><h2>No favorites yet</h2><kbd>⌘⌃P</kbd> stars the current session. <kbd>⌘2</kbd> goes to your first group.</div>`;
   if (!S.current) return `<div class="empty"><h2>No session in ${esc(groupPath(S.group))}</h2>Press <kbd>⌘N</kbd> to start one here, or <kbd>⌘\`</kbd> for every group.</div>`;
   const s = cur(), model = s && (s.model_seen || s.model);
   return `<div class="empty"><h2>Nothing asked yet</h2>Type a request below and press <kbd>⌘⏎</kbd> to send it.` +  // U14: where it runs, and what to try

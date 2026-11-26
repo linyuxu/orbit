@@ -202,7 +202,7 @@ function pluginTabMenu(path, where) {
     v && v.url && v.url() ? { label: "Open at the source", run: () => openUrl(v.url()) } : null,
     { label: "Reload", run: () => { const w = PVIEWS.get(path); if (w) w.reload(); else showPluginTab(path); } },
     { label: "Open in side tab", run: () => openSide({ kind: "pview", path, title: pluginTabInfo(path).title }) },
-    !EMBED && S.group !== FAV && fileTabs().some(x => x.path === path) ? { label: "Move to", sub: () => moveTabItems(path, S.group) } : null,
+    !EMBED && fileTabs().some(x => x.path === path) ? { label: "Move to", sub: () => moveTabItems(path, S.group) } : null,
     { label: "Close", key: "⌘W", run: () => closeFile(path) },
   ].filter(Boolean), where || { anchor: document.querySelector(`.tab[data-file="${CSS.escape(path)}"]`) || $("#tabs") });
 }

@@ -309,14 +309,12 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
             self._start(s, resume=True)
         return s.public()
 
-    def update(self, sid: str, group: str | None = None, favorite: bool | None = None) -> dict:
+    def update(self, sid: str, group: str | None = None) -> dict:
         s = self.get(sid)
         if group is not None:
             if group not in {g["id"] for g in self.groups}:
                 raise ValueError(f"no such group: {group}")
             s.group, s.fleet = group, False  # a Fleet helper moved to a group becomes an ordinary session
-        if favorite is not None:
-            s.favorite = bool(favorite)
         self.save()
         self._session_changed(s)
         return s.public()

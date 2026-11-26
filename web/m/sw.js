@@ -4,7 +4,7 @@
    (network first: an update shows at the next start, not the one after; the server is the user's own machine), and
    from the cache when it does not (offline, or the tailnet away). /api/* is never cached (live data, the event
    stream, uploads), nor the manifest (it carries the token). */
-const CACHE = "orbit-m-38";
+const CACHE = "orbit-m-39";
 const PUSH_BOX = "orbit-push";  // (a tapped notification's session, for the page to open: kept across versions)
 const WAIT = 2000;
 const SHELL = [

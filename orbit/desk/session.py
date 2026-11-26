@@ -123,7 +123,6 @@ class Session:
         self.closed_at: float | None = meta.get("closed_at")
         self.named: bool = meta.get("named", bool(meta.get("name")))  # a name the user gave: survives close
         self.group: str = meta.get("group", "")
-        self.favorite: bool = meta.get("favorite", False)
         self.fork_from: str = meta.get("fork_from", "")  # a fork starts from this session's conversation
         self.fork_carry: int = meta.get("fork_carry", 0)  # a harness that cannot fork: this many cards go with the first request
         self.fork_harness: str = meta.get("fork_harness", "")  # a fork into another harness: the source's (a hand-over, no harness fork)
@@ -152,7 +151,7 @@ class Session:
     def meta(self) -> dict[str, Any]:
         return {"id": self.id, "name": self.name, "cwd": self.cwd, "model": self.model, "mode": self.mode,
                 "effort": self.effort, "harness": self.harness, "created": self.created, "closed": self.closed,
-                "closed_at": self.closed_at, "named": self.named, "group": self.group, "favorite": self.favorite,
+                "closed_at": self.closed_at, "named": self.named, "group": self.group,
                 "fork_from": self.fork_from, "last": self.last, "fleet": self.fleet, "hidden": self.hidden,
                 **({"origins": dict(list(self.origins.items())[-ORIGINS_KEPT:])} if self.origins else {}),
                 **({"client_ids": dict(list(self.client_ids.items())[-ORIGINS_KEPT:])} if self.client_ids else {}),
@@ -176,7 +175,7 @@ class Session:
                 "effort": self.effort, "commands": self.commands, "steers": bool(getattr(DRIVERS.get(self.harness), "steers", False)),
                 "attention": self.attention, "terminal": self.terminal,
                 "queued": sum(1 for c in self.cards if c["state"] == "queued"), "closed": self.closed,
-                "closed_at": self.closed_at, "named": self.named, "group": self.group, "favorite": self.favorite,
+                "closed_at": self.closed_at, "named": self.named, "group": self.group,
                 "last": self.last, "created": self.created, "fleet": self.fleet, "agents": self.running_agents(),
                 **({"fork_from": self.fork_from, "fork_harness": self.fork_harness} if self.fork_harness else {})}
 

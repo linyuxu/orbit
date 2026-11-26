@@ -1,4 +1,4 @@
-"""Build step 2 (Sessions): groups, favorites, tab order, close / reopen with names, clone, resume.
+"""Build step 2 (Sessions): groups, tab order, close / reopen with names, clone, resume.
 
 Run: uv run python -m unittest discover -s tests -v
 """
@@ -222,7 +222,7 @@ class SessionsTest(test_skeleton.SkeletonTest):
     def test_group_names_are_unique(self):
         _, a = self.req("POST", "/api/groups", {"name": "Research  Notes"})
         self.assertEqual(a["name"], "Research Notes")  # (inner spaces as one)
-        for taken in ("research notes", " RESEARCH   NOTES ", "ResearchNotes", "research notes", "Favorites", "fleet"):
+        for taken in ("research notes", " RESEARCH   NOTES ", "ResearchNotes", "research notes", "fleet"):
             code, r = self.req("POST", "/api/groups", {"name": taken})
             self.assertEqual(code, 400, taken)
             self.assertIn("already", r["error"])
@@ -260,12 +260,12 @@ class SessionsTest(test_skeleton.SkeletonTest):
         self.assertEqual(len(only), 1)
         self.assertEqual(self.req("POST", f"/api/groups/{only[0]['id']}/delete")[0], 400)
 
-    def test_favorite_and_move_group(self):
+    def test_move_group(self):
         s = self.new_session()
         _, g = self.req("POST", "/api/groups", {"name": "Fav"})
-        _, s = self.req("POST", f"/api/sessions/{s['id']}/update", {"favorite": True, "group": g["id"]})
-        self.assertTrue(s["favorite"])
+        _, s = self.req("POST", f"/api/sessions/{s['id']}/update", {"group": g["id"]})
         self.assertEqual(s["group"], g["id"])
+        self.assertNotIn("favorite", s)  # (no ★ Favorites view any more)
         self.assertEqual(self.req("POST", f"/api/sessions/{s['id']}/update", {"group": "nope"})[0], 400)
 
     def test_tab_order(self):

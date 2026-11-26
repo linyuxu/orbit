@@ -2,7 +2,7 @@
 
 Kept as one ordered list of {"id", "name", "parent"?}: a group's children are the groups whose parent is its id, in
 list order (the top: no parent). GROUP_DEPTH levels at most ("Work / Orbit / Release"). A name is unique among its
-siblings (case and every space ignored), and Favorites and Fleet are Orbit's own at the top. Deleting a group moves
+siblings (case and every space ignored), and Fleet is Orbit's own at the top. Deleting a group moves
 what it held (its sessions, its subgroups) up to its parent, so nothing is lost.
 """
 
@@ -150,14 +150,14 @@ class Groups:
 
     def _check_name(self, name: str, gid: str = "", parent: str | None = None) -> str:
         """The name, trimmed (inner runs of spaces as one): ValueError when empty or a sibling has it (case and every
-        space ignored: "Invest Assistant" is "InvestAssistant"); at the top, Favorites and Fleet are Orbit's own."""
+        space ignored: "Invest Assistant" is "InvestAssistant"); at the top, Fleet is Orbit's own."""
         name = " ".join(name.split())
         if not name:
             raise ValueError("a group needs a name")
         if "/" in name or "›" in name:
             raise ValueError("a group's name has no / or › (they separate a subgroup's path)")
         key = "".join(name.split()).casefold()
-        if not parent and key in ("favorites", "fleet"):
+        if not parent and key == "fleet":
             raise ValueError(f"“{name}” is Orbit's own: there is a group named that already")
         same = next((g for g in self._children(parent) if g["id"] != gid and "".join(g["name"].split()).casefold() == key), None)
         if same:

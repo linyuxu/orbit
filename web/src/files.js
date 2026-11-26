@@ -394,7 +394,7 @@ async function openExternal(path, how, line = how === "editor" ? cursorLine(path
    at the end of that one's; the tabs' layout is the server's, so every screen follows. Its side tabs go with it (they
    are the file's). Moved from the group in front while shown: the group shows its session. */
 function moveFileTab(path, from, to) {
-  if (!to || to === from || to === FAV) return;
+  if (!to || to === from) return;
   const src = S.ftabs[from] || [], t = src.find(x => x.path === path); if (!t) return;
   S.ftabs[from] = src.filter(x => x !== t);
   const dst = fileTabs(to); if (!dst.some(x => x.path === path)) dst.push({ ...t, pinned: true });
@@ -435,7 +435,7 @@ function fileMenu(path, where) {
     { sep: true },
     { label: "Rename…", run: () => renamePath(path) },
     { label: "Delete…", danger: true, run: () => trashPath(path) },
-    t && !EMBED && S.group !== FAV ? { label: "Move to", sub: () => moveTabItems(path, S.group) } : null,
+    t && !EMBED ? { label: "Move to", sub: () => moveTabItems(path, S.group) } : null,
     t && !EMBED ? { label: "Close", key: "⌘W", run: () => closeFile(path) } : null,
   ].filter(Boolean), where || { anchor: document.querySelector(`.tab[data-file="${CSS.escape(path)}"]`) || $("#fhead") });
 }
