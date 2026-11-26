@@ -663,6 +663,30 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
         finally:
             self.req("POST", "/api/settings", {"live_budget": 0})
 
+    def test_phone_side_shows_a_website_without_the_token(self):
+        sid = self.new_session("phone side")["id"]
+        site = f"http://localhost:{self.port}/api/version"  # (another origin than the page's 127.0.0.1)
+        self.req("POST", f"/api/sessions/{sid}/side", {"op": "open", "spec": {"kind": "web", "url": site, "title": "Site"}})
+        for name, b in self.browsers.items():
+            ctx = b.new_context(viewport={"width": 390, "height": 844}, has_touch=True)
+            page = ctx.new_page()
+            try:
+                page.goto(f"http://127.0.0.1:{self.port}/m/?token=t0k3n")
+                page.wait_for_function("() => typeof S !== 'undefined' && S.sessions && S.sessions.size > 0", timeout=15000)
+                page.evaluate(f"openSession({json.dumps(sid)})")
+                page.wait_for_timeout(600)
+                page.click("#cseg [data-v=side]")
+                page.wait_for_timeout(1200)
+                fr = page.locator("#sideview iframe.sframe")
+                self.assertEqual(fr.get_attribute("src"), site, name)  # (no ?token= to another site)
+                self.assertIn("allow-same-origin", fr.get_attribute("sandbox"))
+                self.assertEqual(fr.get_attribute("referrerpolicy"), "no-referrer")
+                self.assertIn(f"localhost:{self.port}", page.inner_text("#sideview .sweb"))
+                self.assertEqual(page.evaluate("withToken('https://example.com/x')"), "https://example.com/x")
+                self.assertIn("token=t0k3n", page.evaluate("withToken('/show/abc')"))  # (this server's own: as before)
+            finally:
+                ctx.close()
+
     def test_phone_conversation_wears_its_group_tint(self):
         hued = self.group("Hued", color="#1baf7a")
         plain = self.group("Plain")

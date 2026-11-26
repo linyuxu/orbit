@@ -194,7 +194,8 @@ const TOKEN = (() => {
   const q = new URLSearchParams(location.search).get("token") || "";
   try { if (q) localStorage.setItem("orbit.m.token", q); return q || localStorage.getItem("orbit.m.token") || ""; } catch { return q; }
 })();
-const withToken = url => TOKEN ? url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(TOKEN) : url;
+// (this server's own addresses only, "/…": the token never goes to another site)
+const withToken = url => TOKEN && /^\/(?!\/)/.test(url) ? url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(TOKEN) : url;
 async function api(method, path, body, opts = {}) {  // (opts.keepalive: a request that outlives the page, the voice's hang-up)
   const headers = { "Content-Type": "application/json", ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}) };
   const r = await fetch(path, { method, credentials: "same-origin", headers, body: body ? JSON.stringify(body) : undefined, keepalive: !!opts.keepalive });

@@ -8,6 +8,10 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The phone's Side view shows a website as the Mac does: its own origin in the frame (its storage, its sign-in; no
+  referrer), a bar with Open in Safari; an http site on an https Orbit (which no page can frame) says so instead of
+  showing blank. Fixed: the phone added its token to a website's address (`withToken` now only marks this server's
+  own `/…` addresses).
 - The phone shows OpenAI's use too, as the Mac's status bar: Misc → Usage's row ("OpenAI $4.20 left", or this
   month's cost) and its page (the balance with its bar and the talking time it buys, this month's cost, calls and
   talking time), from `/api/live/usage`.

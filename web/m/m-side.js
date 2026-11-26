@@ -69,7 +69,15 @@ function renderSide() {
   const key = `${S.current}:${it.id}:${it.url || ""}:${it.path || ""}:${it.line || ""}`;
   if (SIDE.shown === key) return;  // (the same page: its frame stays, with its state)
   SIDE.shown = key;
-  if (it.kind === "web") {
+  if (it.kind === "web" && /^https?:\/\//i.test(it.url || "")) {  // a website (orbit-agent show URL): its own origin, its bar
+    let host = it.url; try { host = new URL(it.url).host; } catch {}
+    const mixed = location.protocol === "https:" && /^http:/i.test(it.url);  // (an https page frames no http one: blank)
+    body.innerHTML = `<div class="sweb"><span class="h">${esc(host)}</span><button class="pill" data-webopen="${esc(it.url)}">Open in Safari</button></div>` +
+      (mixed ? emptyBox("Shown only in the browser", `${esc(it.url)}<br>is http, and Orbit here is https: a page cannot show an http page inside it.`)
+             : `<iframe class="sframe" title="${esc(it.title || "Page")}" sandbox="allow-scripts allow-popups allow-forms allow-same-origin allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer" src="${esc(it.url)}"></iframe>`);
+    return;
+  }
+  if (it.kind === "web") {  // an agent's page, served here (sandboxed, its own origin)
     body.innerHTML = `<iframe class="sframe" title="${esc(it.title || "Page")}" sandbox="allow-scripts allow-popups allow-forms" src="${esc(withToken(it.url))}"></iframe>`;
     return;
   }
@@ -115,5 +123,7 @@ $("#sideview").addEventListener("click", e => {
     return;
   }
   const o = e.target.closest("[data-open-sid]");
-  if (o) { SIDE.mode.set(o.dataset.openSid, "chat"); openSession(o.dataset.openSid); }
+  if (o) { SIDE.mode.set(o.dataset.openSid, "chat"); openSession(o.dataset.openSid); return; }
+  const w = e.target.closest("[data-webopen]");
+  if (w) window.open(w.dataset.webopen, "_blank", "noopener");  // (the home-screen app: Safari)
 });

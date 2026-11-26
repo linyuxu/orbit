@@ -806,3 +806,6 @@ img.gicon { border-radius:4px; object-fit:cover; }
 .hsec.wpic.wtint { background:linear-gradient(color-mix(in srgb, color-mix(in srgb, var(--wc) 10%, var(--bg)) 80%, transparent), color-mix(in srgb, var(--bg) 88%, transparent)), var(--wbg) center / cover no-repeat; }
 .hst .gicon { margin-right:5px; vertical-align:-1px; }
 .urow .up.wide, .urow .ur.wide { width:auto; white-space:nowrap; }  /* (OpenAI's dollars, its talking time: not a percentage's width) */
+/* a website in the Side view (m-side.js): where it is, Open in Safari (an http one on an https Orbit: only there) */
+#sideview .sweb { flex:none; display:flex; align-items:center; gap:8px; padding:6px var(--pr, 16px) 6px var(--pl, 16px); border-bottom:var(--hair) solid var(--line); font-size:var(--fs-meta, 13px); color:var(--ink-2); }
+#sideview .sweb .h { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
