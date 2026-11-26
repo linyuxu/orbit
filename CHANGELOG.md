@@ -8,6 +8,10 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- ⌘⇧O comes back from an agent's page beside: the page runs in its own origin, so Orbit never saw the keys pressed
+  in it. Its server now puts a small script in it that passes Orbit's own keys (⌘⇧O, ⌘W, ⌥⇧[ ], ⌘\, ⌘1…9, ⌘O, ⌘K…)
+  to Orbit, which takes only those, only from a web side tab; the page's own keys stay its own. A website beside
+  (another origin, nothing can be put in it) still needs a click back.
 - Follow follows the keyboard: with a side tab focused, the Files panel shows its file (in its own folder, which
   becomes the current root) or its session's folder, and the Groups panel its session; back in the main pane, the
   main tab's again. A file revealed in a folder still being listed gets the cursor once the listing comes.

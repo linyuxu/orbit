@@ -307,7 +307,16 @@ $("#sidetabs").addEventListener("mousedown", e => {
 addEventListener("blur", () => setTimeout(() => { renderSide(); if (sideFocused()) followSoon(); }, 0));  // (into a side frame)
 addEventListener("focus", () => setTimeout(() => { renderSide(); followSoon(); }, 0));  // (back to the main page)
 /* Messages between the page and its side tab (same origin only). */
+/* Orbit's keys from an agent's page beside (its own origin: the server put a small script in it, handler.py
+   SHOW_KEYS): only from a web side tab's frame, only these keys. */
+const WEB_KEYS = new Set(["MS:KeyO", "M:KeyW", "AS:BracketLeft", "AS:BracketRight", "M:Backslash", "MS:BracketLeft", "MS:BracketRight",
+  "M:KeyO", "MC:KeyO", "M:KeyK", "M:KeyJ", "M:KeyN", "M:KeyB", ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => "M:Digit" + i)]);
 addEventListener("message", e => {
+  if (!EMBED && e.data && e.data.orbit === "web-key") {
+    const fr = [...FRAMES.values()].find(f => f.contentWindow === e.source && f.hasAttribute("sandbox"));
+    if (fr && WEB_KEYS.has(String(e.data.combo))) runForwarded(String(e.data.combo));
+    return;
+  }
   if (e.origin !== location.origin || !e.data || !e.data.orbit) return;
   const m = e.data;
   if (EMBED) {

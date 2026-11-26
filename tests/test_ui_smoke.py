@@ -565,6 +565,25 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             self.assertEqual(page.evaluate("S.pcursor"), f"s:{g}:{roots['fo-side'][0]}", name)
             page.evaluate("closeAllSides(); setPanelTab('files')")
 
+    def test_cmd_shift_o_goes_to_an_agent_page_beside_and_back(self):
+        g = self.group("Side keys")
+        sid = self.session_in(g, "main")
+        url = self.req("POST", "/api/show", {"html": "<h1>agent page</h1>", "title": "Agent page"})[1]["url"]
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"switchTo({json.dumps(sid)}); closeAllSides()")
+            page.wait_for_timeout(300)
+            page.evaluate(f"openSide({{kind: 'web', url: {json.dumps(url)}, title: 'Agent page'}}, {{focus: false}})")
+            page.wait_for_timeout(1200)
+            page.evaluate("focusMain()")
+            page.keyboard.press("Meta+Shift+KeyO")
+            page.wait_for_timeout(300)
+            self.assertTrue(page.evaluate("sideFocused()"), name)
+            page.keyboard.press("Meta+Shift+KeyO")  # (pressed in the agent's page: its key bridge brings it to Orbit)
+            page.wait_for_timeout(300)
+            self.assertFalse(page.evaluate("sideFocused()"), name)
+            page.evaluate("closeAllSides()")
+
     def test_space_folds_a_group_in_the_left_panel(self):
         gid = self.group("Foldme")
         sid = self.session_in(gid, "inside")

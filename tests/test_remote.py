@@ -302,7 +302,8 @@ class RemoteTest(test_skeleton.SkeletonTest):
             self.assertEqual(page["url"], f"/api/remote-show/sbox/{ev['id']}")
             self.assertEqual(folder["path"], f"/@sbox{os.path.realpath(self.rwork)}")
             with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{page['url']}", timeout=10) as r:
-                self.assertEqual((r.status, r.read()), (200, b"<h1>far</h1>"))
+                body = r.read()
+                self.assertEqual((r.status, body.endswith(b"<h1>far</h1>"), body.count(b"web-key")), (200, True, 1))  # (its key bridge once)
                 self.assertIn("sandbox", r.headers["Content-Security-Policy"])
             # changed from here, over there
             code, st2 = self.req("POST", f"/api/sessions/{s['id']}/side", {"op": "select", "id": page["id"]})

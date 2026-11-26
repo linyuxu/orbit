@@ -35,6 +35,14 @@ WEB = ROOT / "web"
 DEFAULT_PORT = 8770
 
 
+# Orbit's keys from an agent's page in a side tab (see Handler._show_page; side.js takes the same set, nothing else)
+SHOW_KEYS = ("<script>/* Orbit: its keys from this side tab */(function(){var K=" + json.dumps(
+    ["MS:KeyO", "M:KeyW", "AS:BracketLeft", "AS:BracketRight", "M:Backslash", "MS:BracketLeft", "MS:BracketRight",
+     "M:KeyO", "MC:KeyO", "M:KeyK", "M:KeyJ", "M:KeyN", "M:KeyB"] + [f"M:Digit{i}" for i in range(1, 10)]) +
+    ";addEventListener('keydown',function(e){var m=(e.metaKey?'M':'')+(e.ctrlKey?'C':'')+(e.altKey?'A':'')+(e.shiftKey?'S':'');"
+    "if(!m)return;var c=m+':'+e.code;if(K.indexOf(c)<0)return;e.preventDefault();e.stopPropagation();"
+    "parent.postMessage({orbit:'web-key',combo:c},'*')},true)})();</script>")
+
 class Handler(Forward, Streams, Watch, BaseHTTPRequestHandler):
     server_version = "orbit"
     desk: Desk
@@ -376,6 +384,23 @@ class Handler(Forward, Streams, Watch, BaseHTTPRequestHandler):
             return self._json({"error": str(e)}, 400)
 
     # ------------------------------------------------------------------ helpers
+    def _show_page(self, data: bytes) -> None:
+        """An agent's page (/show/<id>), sandboxed: it runs scripts but in its own origin (no Orbit API). Orbit's
+        own keys still work in it (⌘⇧O back to the main tab, ⌘W, …): a small script passes them to the page around
+        it, which takes only those (side.js); the page's own keys (⌘C, ⌘F, …) stay its own."""
+        bridge = SHOW_KEYS.encode()
+        if b"/* Orbit: its keys from this side tab */" in data[:8192]:
+            bridge = b""  # (another machine's page: its server put it in already; twice would act twice)
+        m = next((x for x in (re.search(pat, data[:4096], re.I) for pat in (rb"<head[^>]*>", rb"<html[^>]*>", rb"<!doctype[^>]*>")) if x), None)  # (in that order)
+        data = data[:m.end()] + bridge + data[m.end():] if m else bridge + data
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", "sandbox allow-scripts allow-popups allow-forms")
+        self.end_headers()
+        self.wfile.write(data)
+
     def _json(self, obj, code: int = 200) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code)
@@ -587,16 +612,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             target = self.desk.show_path(m.group(1))
             if not target:
                 return self._json({"error": "not found"}, 404)
-            data = target.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            # An agent's page runs scripts but in its own origin: it cannot call Orbit's API.
-            self.send_header("Content-Security-Policy", "sandbox allow-scripts allow-popups allow-forms")
-            self.end_headers()
-            self.wfile.write(data)
-            return
+            return self._show_page(target.read_bytes())
         if p == "/api/ctx":
             return self._json(self.desk.get_ctx())
         if p == "/api/schedules":
@@ -746,14 +762,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             st, data = self.desk.federation.raw(m.group(1), f"/show/{m.group(2)}")
             if st != 200:
                 return self._json({"error": "not found"}, st if st in (404, 502) else 502)
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Security-Policy", "sandbox allow-scripts allow-popups allow-forms")
-            self.end_headers()
-            self.wfile.write(data)
-            return
+            return self._show_page(data)
         m = re.fullmatch(r"/api/sessions/([\w-]+)/resume-command", p)
         if m:  # Copy resume command: the session's conversation, continued in a terminal
             try:

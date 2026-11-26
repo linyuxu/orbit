@@ -102,9 +102,17 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         ev = got[0]
         self.assertEqual((ev["title"], ev["sid"]), ("Chart", ""))  # (from a terminal: no session; the page then uses the tab in front)
         with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{ev['url']}") as resp:
-            self.assertEqual(resp.read(), b"<h1>hello</h1>")
+            got = resp.read()
+            self.assertTrue(got.endswith(b"<h1>hello</h1>") and b"web-key" in got, got[:60])  # (the key bridge first: no <head> to go after)
             self.assertIn("sandbox", resp.headers["Content-Security-Policy"])
         self.assertEqual(self.req("GET", "/show/nope")[0], 404)
+        # Orbit's keys from the page (⌘⇧O back to the main tab…): a small script after <head>, the doctype first
+        ev2 = self.req("POST", "/api/show", {"html": "<!doctype html><html><head><title>t</title></head><body>x</body></html>"})[1]
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{ev2['url']}") as resp:
+            body = resp.read().decode()
+        self.assertTrue(body.startswith("<!doctype html><html><head><script>"), body[:80])
+        self.assertIn("web-key", body)
+        self.assertIn("MS:KeyO", body)
         # a non-HTML file goes to the side tab as a file
         md = Path(self.work) / "r.md"
         md.write_text("# r\n")
