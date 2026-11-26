@@ -90,6 +90,8 @@ function tabMenu(sid = S.current, where) {
   menu([
     { label: "Rename", run: () => renameSession(sid) },
     EMBED ? null : { label: "Fork", key: "/fork-session", run: () => forkSession(sid) },
+    EMBED ? null : { label: "Fork to", sub: () => S.harnesses.filter(h => h.id !== s.harness)  // another harness: a hand-over (out of quota, say)
+      .map(h => ({ label: h.label, run: () => forkSession(sid, "", h.id) })) },
     EMBED ? null : { label: "Move to", sub: groups },
     { label: "Copy link", run: () => copyText(`orbit://session/${sid}`) },
     { label: "Copy resume command", run: () => copyResumeCommand(sid) },

@@ -530,6 +530,30 @@ class OpenCodeTest(HarnessCases, unittest.TestCase):
     """OpenCode on `opencode serve`: one HTTP server per session (its own port and password), events over SSE."""
     HARNESS = "opencode"
 
+    def test_a_fork_into_another_harness_hands_over(self):
+        """Fork into another harness (this one out of quota, say): a new session there, nothing copied and no
+        harness fork; its first request, sent at once, points at the source's turns and asks it to report and wait."""
+        code, src = self.req("POST", "/api/sessions", {"cwd": self.work, "name": "src", "harness": "agy"})
+        self.assertEqual(code, 200, src)
+        self.send(src["id"], "remember the word kumquat")
+        self.wait_card(src["id"], 1, ("completed",))
+        code, f = self.req("POST", f"/api/sessions/{src['id']}/fork", {"harness": "opencode"})
+        self.assertEqual(code, 200, f)
+        self.assertEqual((f["name"], f["harness"], f["fork_from"], f.get("fork_harness")),
+                         ("src (OpenCode)", "opencode", src["id"], "agy"))
+        c = self.wait_card(f["id"], 1, ("completed",))
+        self.assertIn(f"orbit-agent history {src['id']} --last 50", c["text"])
+        self.assertIn("等我的指令", c["text"])
+        sent = next(x for x in self.inputs()[self.mark:] if "orbit-agent history" in x["text"])
+        self.assertNotIn("[orbit-fork]", sent["text"])  # (the turns are read, not carried)
+        self.assertNotIn("kumquat", sent["text"])
+        self.assertEqual(self.req("POST", f"/api/sessions/{src['id']}/fork", {"harness": "nope"})[0], 400)
+        type(self)._unserve()
+        type(self)._serve()
+        _, d = self.req("GET", f"/api/sessions/{f['id']}/cards")
+        self.assertEqual([x["id"] for x in d["cards"]], [1])
+        self.assertIn("orbit-agent history", d["cards"][0]["text"])
+
     def http(self):
         f = self.store / "http.log"
         return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []

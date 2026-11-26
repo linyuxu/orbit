@@ -28,7 +28,8 @@ class Driving:
                 self._on_event(s, ev)
 
         holder["d"] = cls(session_id=s.id, cwd=s.cwd, model=s.model, mode=s.mode, resume=resume, emit=emit,
-                          fork_from=s.fork_from, state_dir=str(self.state_dir), effort=s.effort)
+                          fork_from="" if s.fork_harness else s.fork_from,  # (another harness's conversation: nothing to fork)
+                          state_dir=str(self.state_dir), effort=s.effort)
         if self.launcher is not None and isinstance(holder["d"], ProcessDriver):
             holder["d"].launcher = self.launcher  # its processes run in the Harness Server
         return holder["d"]

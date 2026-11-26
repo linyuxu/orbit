@@ -126,6 +126,7 @@ class Session:
         self.favorite: bool = meta.get("favorite", False)
         self.fork_from: str = meta.get("fork_from", "")  # a fork starts from this session's conversation
         self.fork_carry: int = meta.get("fork_carry", 0)  # a harness that cannot fork: this many cards go with the first request
+        self.fork_harness: str = meta.get("fork_harness", "")  # a fork into another harness: the source's (a hand-over, no harness fork)
         self.last: dict | None = meta.get("last")  # preview of the last finished request (⌘R, finder)
         self.pending: list[dict] = meta.get("pending", [])  # queued requests not yet sent: survive restarts
         self.fleet: bool = meta.get("fleet", False)  # a Fleet helper (⌘K quick asks, `orbit-agent ask`)
@@ -159,6 +160,7 @@ class Session:
                 **({"interrupted": True} if self.interrupted else {}),
                 **({"running": True} if (self.current_request() is not None if self.loaded else self.was_running) else {}),
                 **({"fork_carry": self.fork_carry} if self.fork_carry else {}),
+                **({"fork_harness": self.fork_harness} if self.fork_harness else {}),
                 "pending": [c for c in self.cards if c["state"] == "queued"] or self.pending}
 
     def running_agents(self) -> int:
@@ -175,7 +177,8 @@ class Session:
                 "attention": self.attention, "terminal": self.terminal,
                 "queued": sum(1 for c in self.cards if c["state"] == "queued"), "closed": self.closed,
                 "closed_at": self.closed_at, "named": self.named, "group": self.group, "favorite": self.favorite,
-                "last": self.last, "created": self.created, "fleet": self.fleet, "agents": self.running_agents()}
+                "last": self.last, "created": self.created, "fleet": self.fleet, "agents": self.running_agents(),
+                **({"fork_from": self.fork_from, "fork_harness": self.fork_harness} if self.fork_harness else {})}
 
     def next_id(self) -> int:
         """The next request's card id (note cards and turns of the agent's own sit between requests with ids like 4.001

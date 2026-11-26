@@ -263,6 +263,7 @@ orbit-agent new ~/src/api --name api "run the tests"     # start a session (and 
 orbit-agent wait api                                     # until its current request ends; prints the answer
 orbit-agent send gpu-box/trainer "status?" --wait           # a session on another machine (orbit remote add gpu-box URL)
 orbit-agent history api --last 30                        # its turns, also of a closed session
+orbit-agent fork api --harness opencode                  # continue in another harness (out of quota, say): reads api's turns, reports, waits
 orbit-agent search flaky test                            # every session's history and the notes
 orbit-agent groups · orbit-agent continue api · orbit-agent open src/app.py:40-60
 orbit-agent mention helper "the schema changed"        # a note to another agent, not a task (it will not ping back)

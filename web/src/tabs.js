@@ -223,12 +223,14 @@ async function moveToGroup(sid, gid) {
 }
 /* Fork: a new session in the same group continuing this conversation, with all its settings (server-side: every
    harness; also `orbit-agent fork` and /fork-session). It opens in front; the original is untouched. */
-async function forkSession(sid = S.current, name = "") {
+async function forkSession(sid = S.current, name = "", harness = "") {
   const s = S.sessions.get(sid); if (!s) return;
   try {
-    const r = await api("POST", `/api/sessions/${sid}/fork`, { name });
+    const r = await api("POST", `/api/sessions/${sid}/fork`, { name, harness });
     S.sessions.set(r.id, r); switchTo(r.id);
-    toast(`Forked “${s.name}” → “${r.name}”: it continues this conversation (${harnessLabel(r.harness)}${r.model ? " · " + modelName(r.model) : ""}${r.effort ? " · " + r.effort : ""})`);
+    if (harness && r.harness !== harness) { toast(`The server forked it in ${harnessLabel(r.harness)}: it is older than this page (View → Restart Server)`); return; }
+    if (r.fork_harness) toast(`Forked “${s.name}” → “${r.name}” (${harnessLabel(r.harness)}): it reads this session's turns, checks the working tree, reports and waits for you`);
+    else toast(`Forked “${s.name}” → “${r.name}”: it continues this conversation (${harnessLabel(r.harness)}${r.model ? " · " + modelName(r.model) : ""}${r.effort ? " · " + r.effort : ""})`);
   } catch (e) { toast("Fork failed: " + e.message); }
 }
 async function sessionAction(sid, action) {

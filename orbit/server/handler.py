@@ -1419,7 +1419,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 if action == "resume":
                     return self._json(self.desk.resume(sid))
                 if action in ("fork", "clone"):  # (clone: its earlier name)
-                    return self._json(self.desk.fork(sid, str(b.get("name") or "")))
+                    return self._json(self.desk.fork(sid, str(b.get("name") or ""), harness=str(b.get("harness") or ""),
+                                                     model=str(b.get("model") or "")))
                 if action == "update":
                     return self._json(self.desk.update(sid, group=b.get("group"), favorite=b.get("favorite")))
                 if action == "move":

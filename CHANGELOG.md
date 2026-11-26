@@ -10,6 +10,11 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 
 - A session's tab shows its agent's mark after the status (Claude, Codex, agy, OpenCode, a plugin harness's icon), as
   the Groups panel does; the tooltip names the harness.
+- Fork into another harness (a session's menu → Fork to, `orbit-agent fork [SESSION] --harness opencode [--model M]`),
+  e.g. when Claude Code is out of quota: a hand-over, not a copy. The new session (NAME (OpenCode), same folder and
+  group, the mode when the harness has it) starts empty, with no harness fork, and its first request, sent at once,
+  points at the source's turns in Orbit's own record (`orbit-agent history ID`, also for a closed session; Claude
+  Code's transcript path too, for tool details), asks it to check the working tree, report and wait for the user.
 - Notifications on the phone's lock screen (Web Push), sent by Orbit's server itself: Misc → Notifications turns them
   on (a tap: the browser asks, the app subscribes with the server's VAPID key; iPhone: Orbit on the Home Screen from
   its HTTPS address), Send a test, Remind me, the last sends with the push service's answer, Turn off. A tap on a

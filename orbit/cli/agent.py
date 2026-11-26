@@ -446,8 +446,10 @@ def cmd_fork(a: argparse.Namespace) -> None:
     if not ref:
         sys.exit("orbit-agent: name the session to fork (not run inside an Orbit session)")
     t = resolve(ref)
-    s = t.call("POST", f"/api/sessions/{t.s['id']}/fork", {"name": a.name})
+    s = t.call("POST", f"/api/sessions/{t.s['id']}/fork", {"name": a.name, "harness": a.harness, "model": a.model})
     print(f"forked {t.label} → {s['name']} ({s['id']}): {s['harness']}{' · ' + s['model'] if s.get('model') else ''}, in its group")
+    if s.get("fork_harness"):
+        print("another harness: it reads this session's turns, checks the working tree, reports and waits for you")
     text = " ".join(a.text).strip()
     if text:
         card = t.call("POST", f"/api/sessions/{s['id']}/send", {"text": text})
@@ -745,7 +747,10 @@ def main(argv: list[str] | None = None) -> None:
     fk = sub.add_parser("fork", help="fork a session (default: this one): a new session in its group, continuing its conversation with all its settings")
     fk.add_argument("session", nargs="?", default="", help="the session to fork (default, or \".\": $ORBIT_SESSION, the one you run in)")
     fk.add_argument("text", nargs="*", help="the fork's first request (optional)")
-    fk.add_argument("--name", default="", help="the fork's name (default: NAME (fork))")
+    fk.add_argument("--name", default="", help="the fork's name (default: NAME (fork), or NAME (HARNESS))")
+    fk.add_argument("--harness", default="", help="continue in another harness (claude, codex, agy, opencode), e.g. when "
+                    "this one is out of quota: a hand-over, its first request reads this session's turns and waits")
+    fk.add_argument("--model", default="", help="with --harness: its model (default: the harness's own)")
     fk.set_defaults(func=cmd_fork)
     wt = sub.add_parser("wait", help="wait for a session's current request; print its answer")
     wt.add_argument("session")

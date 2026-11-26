@@ -35,6 +35,26 @@ from orbit.services.shell import Shells
 from orbit.workspace import notes
 
 
+def hand_over_text(src: Session) -> str:
+    """The first request of a fork into another harness: where the source session's turns are (Orbit's own record,
+    harness-neutral, also for a closed session), check the working tree, report, then wait (the user says what next)."""
+    label = getattr(DRIVERS.get(src.harness), "label", src.harness)
+    record = ""
+    if src.harness == "claude":  # (its own transcript, for the tool details Orbit's record leaves out)
+        try:
+            from types import SimpleNamespace
+            record = DRIVERS["claude"].transcript(SimpleNamespace(session_id=src.id)) or ""
+        except Exception:  # noqa: BLE001 (only a pointer)
+            record = ""
+    return "\n".join([
+        f'你在接续 Orbit session "{src.name}"（id {src.id}，原 harness {label}）。只做交接，不要开始新的工作：',
+        f"1. 用 `orbit-agent history {src.id} --last 50` 读它的请求和回答；需要更早的再加大 N。",
+        "2. 跑 git status / git diff，核对工作区和记录是否一致。",
+        "3. 用几句话汇报：在做什么、做到哪一步、工作区有哪些未提交改动，然后等我的指令。",
+        *([f"原 harness 记录（只在需要工具细节时查）：{record}"] if record else []),
+    ])
+
+
 class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Handoff):
     def __init__(self, state_dir: Path):
         self.state_dir = state_dir
@@ -326,28 +346,40 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
         self.save()
         self.broadcast({"t": "order", "ids": order})
 
-    def fork(self, sid: str, name: str = "") -> dict:
+    def fork(self, sid: str, name: str = "", harness: str = "", model: str = "") -> dict:
         """A new session in the same group that continues from this one's conversation, with all its settings
         (folder, harness, model, effort, mode). The harness forks the conversation itself (Claude Code --fork-session,
         Codex thread/fork, a protocol agent's --fork); one that cannot (agy, `fork: false`) gets the conversation so far
-        with its first request."""
+        with its first request.
+        Another harness (when this one is out of quota, say): a hand-over, not a copy. The new session starts empty
+        (its cards come from its own harness's store, so copied ones would not survive a restart) and its first
+        request, sent at once, tells it where this session's turns are (orbit-agent history) and to report and wait."""
         src = self.get(sid)
         self._ensure_loaded(src)
         from orbit.desk.session import DRIVERS
+        to = harness.strip() or src.harness
+        if to not in DRIVERS:
+            raise ValueError(f"no harness {to!r} (one of {', '.join(sorted(DRIVERS))})")
+        across = to != src.harness
         native = getattr(DRIVERS.get(src.harness), "native_fork", True)
+        label = getattr(DRIVERS[to], "label", to)
         with self.lock:
-            s = Session({"id": str(uuid.uuid4()), "name": name.strip() or f"{src.name} (fork)", "named": bool(name.strip()) or src.named,
-                         "cwd": src.cwd, "model": src.model, "mode": src.mode, "effort": src.effort, "harness": src.harness,
-                         "group": src.group, "fork_from": src.id, "last": src.last})
+            s = Session({"id": str(uuid.uuid4()), "named": bool(name.strip()) or src.named,
+                         "name": name.strip() or (f"{src.name} ({label})" if across else f"{src.name} (fork)"),
+                         "cwd": src.cwd, "model": model.strip() or ("" if across else src.model),
+                         "mode": src.mode if src.mode in getattr(DRIVERS[to], "modes", ()) else "default",
+                         "effort": "" if across else src.effort, "harness": to,
+                         "group": src.group, "fork_from": src.id, "last": src.last,
+                         **({"fork_harness": src.harness} if across else {})})
             s.loaded = True
-            for c in src.cards:
+            for c in [] if across else src.cards:
                 if c["state"] in ("queued",) + ACTIVE:
                     continue
                 cc = copy.deepcopy(c)
                 cc["sid"] = s.id
                 s.cards.append(cc)
-            s.compactions = src.compactions
-            if not native:
+            s.compactions = 0 if across else src.compactions
+            if not native and not across:
                 s.fork_carry = len(s.cards)
             order = list(self.sessions.values())
             i = order.index(src) + 1
@@ -359,6 +391,8 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
         self.save()
         self._session_changed(s)
         self.broadcast({"t": "order", "ids": ids})
+        if across:
+            self.send(s.id, hand_over_text(src))
         return s.public()
 
     clone = fork  # (its earlier name)
