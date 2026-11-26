@@ -31,6 +31,8 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   its check, last check, result, seen); the last run; Task and journal folded (the journal read when unfolded, not
   redrawn under the reader). Removing a job archives it (its journal stays; `GET /api/schedules` → `archived`,
   `GET /api/schedules/ID/journal`). Keys as before; a fold's head takes ⏎ / Space.
+  The phone's Misc → Schedules the same: active cards first, the two folds, each card with its switch, grid, last
+  run and Task and journal.
 - Schedules wake another machine's session (`NAME~ID`, through its server, a client id per due time so a re-fired
   run sends once); `done_notify` {title, body, fail_if} pushes to the phone when that run ends, or says it did not
   (failed, stopped, the answer's first line has fail_if, gone, 6 h with no end); a waiting run is followed again

@@ -27,7 +27,7 @@ async function loadMisc() {
   if (!PUSH.st) pushLoad();
   const [st, sc] = await Promise.all([api("GET", "/api/settings").catch(() => null), api("GET", "/api/schedules").catch(() => null)]);
   if (st) S.settings = st;
-  if (sc) S.schedules = sc.schedules || [];
+  if (sc) { S.schedules = sc.schedules || []; S.schedArchived = sc.archived || []; }
   miscChanged();
   loadCal();
 }
@@ -180,46 +180,97 @@ function lastLine(it) {
   if (l.skipped) return `last ${esc(when)}: skipped`;
   return `last ${esc(when)}${l.late ? " (late)" : ""}${l.manual ? " (run now)" : ""}${l.cid ? ` · #${l.cid}` : ""}`;
 }
+/* Schedules, as the desktop's: active first (soonest next), then "Paused and finished" and "Archived" (removed jobs,
+   their journals kept) folded until opened (remembered). A card: name, state, the switch; When / Wakes / Next / Runs /
+   the phone / Ends; the last run; Task and journal folded (the journal read when opened). A tap: Run now, the last
+   run, Remove. */
+const SCHF = Object.assign({ off: true, arch: true }, LS.get("schedFold", {}));
+const SCHJ = new Map(), SCHOPEN = new Set();
+const schD = t => { const d = new Date(t * 1000); return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${hm24(t)}`; };
+function schPill(it) {
+  if (it.removed) return `<span class="spill arch">archived</span>`;
+  if (it.enabled) return it.last && it.last.error ? `<span class="spill err">active · last failed</span>` : `<span class="spill on">active</span>`;
+  return it.spec && it.spec.kind === "once" && it.runs ? `<span class="spill done">done</span>` : `<span class="spill off">paused</span>`;
+}
+const skv = (k, v) => v === "" || v == null ? "" : `<div class="skv"><span class="sk">${esc(k)}</span><span class="sv">${v}</span></div>`;
+function schCard(it, k) {
+  const wakes = it.notify ? "the phone" + (it.sid ? " · opens " + esc(String(it.target_name || "").replace(/^phone notification → /, "")) : "") : esc(it.target_name || "");
+  const next = it.removed ? "" : it.enabled && it.next ? `<b>${esc(fmtNext(it.next))}</b> <span class="dim">${esc(schD(it.next))}</span>` : `<span class="dim">—</span>`;
+  const grid = skv("When", `${esc(it.when || "")}${it.describe && it.describe !== it.when ? ` <span class="dim">· ${esc(it.describe)}</span>` : ""}`)
+    + skv(it.notify ? "Sends to" : "Wakes", wakes) + skv("Next", next)
+    + skv("Runs", `${it.runs || 0}${it.check || it.notify ? "" : ` <span class="dim">· max ${it.max || 24}/day</span>`}`)
+    + skv("Phone", it.done_notify ? `when it ends: “${esc(it.done_notify.title)}”` : "")
+    + skv("Ends", it.expires ? esc(schD(it.expires)) : "")
+    + (it.check ? skv("Check", `<code>${esc(it.check)}</code>`) : "")
+    + (it.removed ? skv("Removed", esc(schD(it.removed))) : "");
+  const done = it.last && it.last.done ? (it.last.done.ok ? " · finished" : ` · <span class="err">did not finish</span>`) : "";
+  const jt = SCHJ.get(it.id), open = SCHOPEN.has(k);
+  return `<div class="scard${it.enabled ? "" : " off"}${it.removed ? " arch" : ""}" data-sch="${esc(k)}">`
+    + `<div class="sch"><span class="snm">${esc(it.name)}</span>${schPill(it)}`
+    + (it.removed ? "" : `<button class="switch${it.enabled ? " on" : ""}" data-toggle="${esc(it.id)}" role="switch" aria-checked="${it.enabled}" aria-label="${it.enabled ? "Pause" : "Resume"} ${esc(it.name)}"><span></span></button>`) + `</div>`
+    + `<div class="sgrid">${grid}</div><div class="slast">Last: ${lastLine(it)}${done}</div>`
+    + `<details class="stask" data-det="${esc(k)}"${open ? " open" : ""}><summary>Task and journal</summary>`
+    + `<div class="ssec">Task</div><div class="md">${renderMd(it.text || "")}</div><div class="ssec">Journal</div>`
+    + (jt == null ? `<div class="dim">${open ? "…" : ""}</div>` : jt ? `<div class="md">${renderMd(jt)}</div>` : `<div class="dim">No journal.</div>`)
+    + `</details></div>`;
+}
 function schedulesPage() {
   const page = makePage({ title: "Schedules" });
   page.misc = true;
-  page.refresh = () => {
-    const xs = S.schedules;
+  page.refresh = (force = false) => {  // (an event's redraw waits while a Task and journal is open: not under the reader)
+    const xs = S.schedules, arch = S.schedArchived || [];
     if (xs == null) { page.body.innerHTML = loadingHtml(); return; }
-    page.setTitle("Schedules", xs.length ? `${xs.filter(x => x.enabled).length} on · ${xs.length} in all` : "");
-    page.body.innerHTML = xs.length ? `<div class="rows">` + xs.map(it => {
-      const st = !it.enabled ? "stopped" : it.last && it.last.error ? "err" : "ok";
-      return `<div class="schrow${it.enabled ? "" : " off"}" data-sch="${esc(it.id)}" role="button" tabindex="0"><span class="sdot ${st}"></span>` +
-        `<span class="tx"><span class="t1"><span class="nm">${esc(it.name)}</span></span>` +
-        `<span class="t2">${it.check ? `<span class="watch">watch</span> ` : it.notify ? `<span class="watch">reminder</span> ` : ""}${esc(it.describe)} → ${esc(it.target_name || "")}</span>` +
-        `<span class="t2">${it.enabled ? `next ${esc(fmtNext(it.next) || "—")}` : "off"} · ${lastLine(it)}</span></span>` +
-        `<button class="switch${it.enabled ? " on" : ""}" data-toggle="${esc(it.id)}" role="switch" aria-checked="${it.enabled}" aria-label="${it.enabled ? "Pause" : "Resume"} ${esc(it.name)}"><span></span></button></div>`;
-    }).join("") + `</div>` : emptyBox("No schedules yet", "A schedule sends a request to a session at set times: every 2h, weekdays 9am. Make one in Orbit on the Mac, or ask an agent: <code>orbit-agent wake 30m \"check CI\"</code>.");
+    if (!force && page.body.querySelector("details[open]")) return;
+    const y = page.body.scrollTop;
+    const active = xs.filter(x => x.enabled).sort((a, b) => (a.next || Infinity) - (b.next || Infinity)), off = xs.filter(x => !x.enabled);
+    page.setTitle("Schedules", xs.length ? `${active.length} active of ${xs.length}` : "");
+    const cards = (list, pre) => list.map(it => schCard(it, pre + it.id)).join("");
+    const fold = (key, label, list, pre) => !list.length ? "" :
+      `<button class="sfold" data-fold="${key}"><span class="chev${SCHF[key] ? "" : " open"}">${I("chev", 12)}</span>${esc(label)} <span class="dim">${list.length}</span></button>`
+      + (SCHF[key] ? "" : `<div class="scards">${cards(list, pre)}</div>`);
+    page.body.innerHTML = xs.length || arch.length
+      ? `<div class="scards">${active.length ? cards(active, "") : `<div class="note psec">No active schedule.</div>`}</div>`
+        + fold("off", "Paused and finished", off, "") + fold("arch", "Archived", arch, "a:")
+      : emptyBox("No schedules yet", "A schedule sends a request to a session at set times: every 2h, weekdays 9am. Make one in Orbit on the Mac, or ask an agent: <code>orbit-agent wake 30m \"check CI\"</code>.");
+    page.body.scrollTop = y;
   };
-  const find = id => (S.schedules || []).find(x => x.id === id);
+  const find = k => k.startsWith("a:") ? (S.schedArchived || []).find(x => "a:" + x.id === k) : (S.schedules || []).find(x => x.id === k);
   const toggle = async it => {
-    it.enabled = !it.enabled; page.refresh();  // (at once; the server's answer and its event follow)
+    it.enabled = !it.enabled; page.refresh(true);  // (at once; the server's answer and its event follow)
     try { const x = await api("POST", `/api/schedules/${encodeURIComponent(it.id)}/update`, { enabled: it.enabled }); Object.assign(it, x); toast(x.enabled ? `On: next ${fmtNext(x.next)}` : `“${x.name}” is off`); }
     catch (e) { it.enabled = !it.enabled; if (!(e instanceof NotPaired)) toast(e.message); }
     miscChanged();
   };
+  page.body.addEventListener("toggle", e => {
+    const d = e.target; if (!d.matches || !d.matches("details[data-det]")) return;
+    const k = d.dataset.det, it = find(k);
+    if (d.open) {
+      if (SCHOPEN.has(k)) return;
+      SCHOPEN.add(k);
+      if (it) api("GET", `/api/schedules/${encodeURIComponent(it.id)}/journal`).then(r => r.text || "", () => "")
+        .then(t => { SCHJ.set(it.id, t); if (SCHOPEN.has(k)) page.refresh(true); });
+    } else if (d.isConnected) SCHOPEN.delete(k);
+  }, true);
   page.body.addEventListener("click", e => {
+    const fd = e.target.closest("[data-fold]");
+    if (fd) { SCHF[fd.dataset.fold] = !SCHF[fd.dataset.fold]; LS.set("schedFold", SCHF); page.refresh(true); return; }
     const tg = e.target.closest("[data-toggle]");
     if (tg) { const it = find(tg.dataset.toggle); if (it) toggle(it); return; }
-    const r = e.target.closest("[data-sch]"), it = r && find(r.dataset.sch); if (!it) return;
+    if (e.target.closest(".stask")) return;  // (Task and journal: its own fold)
+    const r = e.target.closest("[data-sch]"), it = r && find(r.dataset.sch); if (!it || it.removed) return;
     actionSheet(`${it.name} · ${it.describe}`, [
-      { label: "Run now", icon: "play", run: async () => {
+      { label: it.check ? "Check now" : "Run now", icon: "play", run: async () => {
         try { const x = await api("POST", `/api/schedules/${encodeURIComponent(it.id)}/run`); toast(x.last && x.last.error ? "Could not run: " + x.last.error : x.notify ? `Sent to ${(x.last.push || {}).sent || 0} device(s)` : `Sent to ${x.target_name}${x.last && x.last.cid ? " as #" + x.last.cid : ""}`); }
         catch (err) { toast(err.message); }
       } },
       { label: it.enabled ? "Pause" : "Resume", icon: it.enabled ? "pause" : "play", run: () => toggle(it) },
       { label: "Open the last run", icon: "chat", disabled: !(it.last && it.last.sid && S.sessions.has(it.last.sid)), run: () => { switchTab("sessions"); openSession(it.last.sid); } },
-      { label: "Remove…", icon: "x", danger: true, run: () => actionSheet(`Delete the schedule “${it.name}”? The sessions and requests it made stay.`, [
-        { label: "Delete", icon: "x", danger: true, run: () => api("POST", `/api/schedules/${encodeURIComponent(it.id)}/delete`).then(() => { S.schedules = S.schedules.filter(x => x !== it); miscChanged(); }).catch(err => toast(err.message)) },
+      { label: "Remove…", icon: "x", danger: true, run: () => actionSheet(`Remove the schedule “${it.name}”? It moves to Archived; the sessions, requests and its journal stay.`, [
+        { label: "Remove", icon: "x", danger: true, run: () => api("POST", `/api/schedules/${encodeURIComponent(it.id)}/delete`).then(() => { S.schedules = S.schedules.filter(x => x !== it); page.refresh(true); miscChanged(); }).catch(err => toast(err.message)) },
       ]) },
     ]);
   });
-  page.refresh();
+  page.refresh(true);
   return page;
 }
 

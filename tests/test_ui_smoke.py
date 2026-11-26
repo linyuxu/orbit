@@ -915,6 +915,65 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             for it in list(self.desk.scheduler.items):
                 self.desk.scheduler.delete(it["id"])
 
+    def test_phone_schedules_are_cards_active_first(self):
+        """The phone's Misc → Schedules, as the desktop's: active cards first, "Paused and finished" and "Archived"
+        folded until opened; a card's grid; Task and journal unfold (the journal read then)."""
+        sid = self.new_session("phone-sched")["id"]
+        mk = lambda **b: self.req("POST", "/api/schedules", {"sid": sid, **b})[1]
+        a1 = mk(when="daily 08:20", text="Morning **news**", name="Morning news", done_notify={"title": "早间新闻总结已完成"})
+        a2 = mk(when="every 2h", text="CI", name="CI digest")
+        p_ = mk(when="weekdays 9am", text="paused", name="Paused job")
+        self.req("POST", f"/api/schedules/{p_['id']}/update", {"enabled": False})
+        gone = mk(when="every 1h", text="old", name="Old job")
+        j = Path(self.desk.scheduler.journal(gone))
+        j.write_text(j.read_text() + "\n- did the **thing**\n")
+        self.req("POST", f"/api/schedules/{gone['id']}/delete")
+        try:
+            for name, b in self.browsers.items():
+                ctx = b.new_context(viewport={"width": 390, "height": 844}, has_touch=True)
+                # (Playwright's WebKit freezes the page on a real pushManager.getSubscription: no Web Push here)
+                ctx.add_init_script("try { localStorage.removeItem('orbit.schedFold'); } catch (e) {} try { delete window.PushManager; } catch (e) {}")
+                page = ctx.new_page()
+                errors = []
+                page.on("pageerror", lambda e: errors.append(str(e)))
+                try:
+                    page.goto(f"http://127.0.0.1:{self.port}/m/")
+                    page.wait_for_function("() => typeof S !== 'undefined' && S.sessions && S.sessions.size > 0", timeout=15000)
+                    page.evaluate("switchTab('misc')")
+                    page.wait_for_selector("[data-open=schedules]")
+                    page.wait_for_timeout(500)
+                    page.click("[data-open=schedules]")
+                    page.wait_for_selector(".scard")
+                    page.wait_for_timeout(300)
+                    page.screenshot(path=f"/tmp/orbit-msched-top-{name}.png")
+                    names = page.eval_on_selector_all(".view .scards:first-of-type > .scard .snm, .scards > .scard .snm", "els => [...new Set(els.map(e => e.textContent))]")
+                    self.assertEqual(names[:2], ["Morning news", "CI digest"] if a1["next"] < a2["next"] else ["CI digest", "Morning news"], name)
+                    self.assertNotIn("Paused job", names)
+                    self.assertNotIn("Old job", names)
+                    card = page.locator(f".scard[data-sch='{a1['id']}']")
+                    grid = card.locator(".sgrid").inner_text().upper()
+                    for k in ("WHEN", "WAKES", "NEXT", "RUNS", "PHONE"):
+                        self.assertIn(k, grid)
+                    card.locator("summary").click()
+                    page.wait_for_function(f"() => document.querySelector(\".scard[data-sch='{a1['id']}'] .stask strong\")")
+                    page.click("[data-fold=off]")
+                    page.wait_for_selector(f".scard[data-sch='{p_['id']}']")
+                    page.click("[data-fold=arch]")
+                    arch = page.locator(f".scard[data-sch='a:{gone['id']}']")
+                    arch.wait_for()
+                    self.assertEqual(arch.locator(".spill").inner_text(), "archived")
+                    arch.locator("summary").click()
+                    page.wait_for_function(f"() => /did the/.test((document.querySelector(\".scard[data-sch='a:{gone['id']}'] .stask\") || {{}}).textContent || '')", timeout=5000)
+                    arch.scroll_into_view_if_needed()
+                    page.wait_for_timeout(200)
+                    page.screenshot(path=f"/tmp/orbit-msched-folds-{name}.png")
+                finally:
+                    ctx.close()
+                self.assertEqual(errors, [], name)
+        finally:
+            for it in list(self.desk.scheduler.items):
+                self.desk.scheduler.delete(it["id"])
+
     def test_phone_side_shows_a_website_without_the_token(self):
         sid = self.new_session("phone side")["id"]
         site = f"http://localhost:{self.port}/api/version"  # (another origin than the page's 127.0.0.1)

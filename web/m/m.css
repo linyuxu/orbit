@@ -822,3 +822,31 @@ img.gicon { border-radius:4px; object-fit:cover; }
 .mrow .t2 .err, .note.err { color:var(--err); }
 .po.ok { color:var(--ok); } .po.err { color:var(--err); }
 .psec { padding:0 var(--pr) 0 var(--pl); }
+
+/* Misc → Schedules as cards (m-misc.js), as the desktop's: active first, then folded "Paused and finished", "Archived" */
+.scards { display:flex; flex-direction:column; gap:10px; padding:10px var(--pr) 4px var(--pl); }
+.scard { background:var(--surface); border:var(--hair) solid var(--line); border-radius:12px; padding:12px 14px; }
+.scard.off { background:color-mix(in srgb, var(--surface) 55%, var(--bg)); }
+.scard.arch { opacity:.8; }
+.scard .sch { display:flex; align-items:center; gap:8px; min-width:0; }
+.scard .snm { font-size:16px; font-weight:600; line-height:22px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.scard .switch { margin-left:auto; flex:none; }
+.spill { flex:none; font-size:12px; line-height:20px; padding:0 8px; border-radius:10px; font-weight:500; }
+.spill.on { color:var(--ok); background:color-mix(in srgb, var(--ok) 13%, transparent); }
+.spill.err { color:var(--err); background:color-mix(in srgb, var(--err) 12%, transparent); }
+.spill.off, .spill.done, .spill.arch { color:var(--ink-3); background:color-mix(in srgb, var(--ink-3) 13%, transparent); }
+.scard .sgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-top:10px; }
+.scard .skv { display:flex; flex-direction:column; min-width:0; }
+.scard .sk { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); }
+.scard .sv { font-size:14px; line-height:19px; overflow-wrap:anywhere; }
+.scard .dim, .scard .slast { color:var(--ink-3); }
+.scard .err { color:var(--err); }
+.scard .slast { margin-top:8px; font-size:13px; line-height:18px; overflow-wrap:anywhere; }
+.scard .stask { margin-top:8px; }
+.scard .stask > summary { font-size:14px; color:var(--accent); padding:4px 0; }
+.scard .ssec { margin:10px 0 4px; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); }
+.scard .stask .md { font-size:14px; padding:8px 10px; border-radius:8px; background:color-mix(in srgb, var(--bg) 70%, var(--surface)); overflow-x:auto; }
+.sfold { display:flex; align-items:center; gap:6px; width:100%; margin-top:14px; padding:8px var(--pr) 8px var(--pl); font-size:15px; font-weight:600; color:var(--ink-2); text-align:left; }
+.sfold .chev { display:grid; transition:transform .12s; }
+.sfold .chev.open { transform:rotate(90deg); }
+.sfold .dim { color:var(--ink-3); font-weight:400; }

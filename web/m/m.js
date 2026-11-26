@@ -104,7 +104,7 @@ function onEvent(m) {
   } else if (m.t === "machines") {
     S.machines = m.machines || []; if (!S.current) renderList();
   } else if (m.t === "schedules") {
-    S.schedules = m.schedules || []; miscChanged();
+    S.schedules = m.schedules || []; if (m.archived) S.schedArchived = m.archived; miscChanged();
   } else if (m.t === "settings") {
     const was = S.settings && !!S.settings.calendar;
     S.settings = m.settings;
