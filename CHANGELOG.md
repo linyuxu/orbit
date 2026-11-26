@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Fixed: the script guard's false "a page script did not load (an error)": a picture (or stylesheet, video) that
+  failed while the page loaded, and errors with no file that are no SyntaxError ("Script error.", a ResizeObserver
+  loop), counted as a failed script.
 - ⌘O → Files has every project: the files of every open session's folder (this machine's and the connected
   ones'), the current one's first (with its git status); each says its project ("orbit/web/src"), whose name is
   matched too. All Files is that and the homes. In every fuzzy filter a space only parts the words ("orbit readme").

@@ -62,7 +62,8 @@
   };
   addEventListener("error", e => {
     const t = e.target;
-    if (t && t.tagName === "SCRIPT") {  // (fetching it failed: the capture phase sees an element's error)
+    if (t && t !== window && t.nodeType === 1) {  // (an element's error, seen in the capture phase: a script's fetch failed;
+      if (t.tagName !== "SCRIPT") return;          //  a picture, a stylesheet, a video that failed is no script)
       const src = pageScript(t.src);
       if (src) say(src, "it could not be fetched");
       return;
@@ -72,6 +73,9 @@
     const dom = typeof DOMException !== "undefined" && e.error instanceof DOMException;
     const counts = (!dom && (e.error instanceof SyntaxError || (!e.error && /^SyntaxError/.test(msg)))) || !started;
     if (!e.filename) {  // (see unloaded above: named a moment later, when the scripts fetched meanwhile have loaded)
+      // Without a file only a SyntaxError says a script failed (WebKit's duplicate const); "Script error." (another
+      // origin's), a ResizeObserver loop and the like are no failed script.
+      if (!/SyntaxError/.test(msg) && !(e.error instanceof SyntaxError)) return;
       if (counts && !orphan) orphan = { msg, tm: setTimeout(() => { orphan = null; say(unloaded(), msg); }, 100) };
       return;
     }

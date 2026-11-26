@@ -671,7 +671,13 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page = ctx.new_page()
             try:
                 page.route("**/src/dupe-test.js", lambda r: r.fulfill(status=200, content_type="text/javascript", body="const S = 1;"))
+                # while the page loads: a picture that fails and an error with no file (a ResizeObserver loop): no notice
+                ctx.add_init_script("""document.addEventListener('DOMContentLoaded', () => {
+                    const im = document.createElement('img'); im.src = '/api/raw?path=/no/such.png'; document.body.appendChild(im);
+                    window.dispatchEvent(new ErrorEvent('error', {message: 'ResizeObserver loop completed with undelivered notifications.'})); });""")
                 self.open(page)
+                page.wait_for_timeout(500)
+                self.assertEqual(page.evaluate("document.querySelectorAll('#scripterr .scripterr-line').length"), 0, name)
                 page.evaluate("""() => { for (const src of ['/src/missing-test.js', '/src/dupe-test.js', '/src/dupe-test.js']) {
                     const sc = document.createElement('script'); sc.src = src; document.head.appendChild(sc); } }""")
                 page.wait_for_selector("#scripterr .scripterr-line:nth-child(2)", timeout=5000)
