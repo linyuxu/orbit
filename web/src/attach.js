@@ -124,7 +124,7 @@ async function dropIntoEditor(path, pos, items) {  // items: [{src}] (paths) or 
   }
   ed.ed.insert(at, text);
   if (isNote(path)) { loadNoteNames(); refreshTree(S.vault, true); }
-  toast(links.length === 1 ? `Added ${basename(links[0].path)} beside the note` : `${links.length} files added`);
+  toast(links.length === 1 ? `Added ${basename(links[0].path)} to ${basename(dirname(links[0].path))}/` : `${links.length} files added to ${basename(dirname(links[0].path))}/`);
 }
 window.orbitDrop = ev => {
   if (modal) { dropHint(null); return; }

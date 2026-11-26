@@ -59,12 +59,13 @@ class NotesTest(test_skeleton.SkeletonTest):
     # ------------------------------------------------------------------ live preview / drops (builddoc/features/files.md §0)
     def test_attach_into_the_vault_and_beside_a_file(self):
         import base64
+        import urllib.parse
         png = b"\x89PNG\r\n\x1a\nfake"
         orbit = self.vault / "Projects" / "Orbit.md"
         code, r = self.req("POST", "/api/attach", {"doc": str(orbit), "name": "shot.png", "data": base64.b64encode(png).decode()})
         self.assertEqual(code, 200)
         self.assertEqual(r["link"], "![[shot.png]]")
-        self.assertEqual(Path(r["path"]), Path(os.path.realpath(self.vault / "attachments" / "shot.png")))
+        self.assertEqual(Path(r["path"]), Path(os.path.realpath(self.vault / "Projects" / "attachments" / "shot.png")))  # (beside the note)
         _, again = self.req("POST", "/api/attach", {"doc": str(orbit), "name": "shot.png", "data": base64.b64encode(png).decode()})
         self.assertEqual(again["path"], r["path"])  # the same bytes again: reused, not "shot 1.png"
         src = Path(self.tmp.name) / "report final.pdf"
@@ -75,8 +76,24 @@ class NotesTest(test_skeleton.SkeletonTest):
         outside.parent.mkdir(exist_ok=True)
         outside.write_text("# r\n")
         _, o = self.req("POST", "/api/attach", {"doc": str(outside), "src": str(src)})
-        self.assertEqual(o["link"], "[report final.pdf](<assets/report final.pdf>)")
-        self.assertTrue((outside.parent / "assets" / "report final.pdf").exists())
+        self.assertEqual(o["link"], "[report final.pdf](<attachments/report final.pdf>)")
+        self.assertTrue((outside.parent / "attachments" / "report final.pdf").exists())
+        # the same name from another note: its own attachments, linked by its path from the note; each resolves to its own
+        ideas = self.vault / "Ideas.md"
+        _, other = self.req("POST", "/api/attach", {"doc": str(ideas), "name": "shot.png", "data": base64.b64encode(b"\x89PNG other").decode()})
+        self.assertEqual((other["link"], Path(other["path"])), ("![[attachments/shot.png]]", Path(os.path.realpath(self.vault / "attachments" / "shot.png"))))
+        self.assertEqual(notes.resolve_file("attachments/shot.png", str(ideas)), other["path"])
+        self.assertEqual(notes.resolve_file("shot.png", str(orbit)), r["path"])  # (the note's own, beside it)
+        # Obsidian's setting, when the vault has one: "x" a folder of the vault
+        obs = self.vault / ".obsidian"; obs.mkdir(exist_ok=True)
+        (obs / "app.json").write_text('{"attachmentFolderPath": "Files"}')
+        try:
+            _, f = self.req("POST", "/api/attach", {"doc": str(orbit), "name": "z.png", "data": base64.b64encode(png + b"z").decode()})
+            self.assertEqual(Path(f["path"]), Path(os.path.realpath(self.vault / "Files" / "z.png")))
+        finally:
+            (obs / "app.json").unlink()
+        # a wiki link to an attachment resolves (it is never made a note)
+        self.assertEqual(self.req("GET", "/api/notes/resolve?name=shot.png&from=" + urllib.parse.quote(str(orbit)))[1]["path"], r["path"])
 
     def test_embed_resolves_like_obsidian(self):
         (self.vault / "pic.png").write_bytes(b"\x89PNG")

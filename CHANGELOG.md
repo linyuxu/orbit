@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A file pasted or dropped into a Markdown document (an image or any attachment) goes into the attachments/ folder
+  beside the document, here and in the vault alike (the vault's Obsidian attachmentFolderPath when it sets one), not
+  the vault's top attachments/ nor assets/. A wiki link to an image opens it: it no longer makes a "x.png.md" note.
 - The week note starts empty (no heading a day: today's comes with its first entry). Its title is its name ("Week of
   2026-11-23", in Obsidian's date folder too), shown above the text and apart from it (⌘A in the text never takes it);
   edited, the file is renamed and ⌘⇧D still opens it (the vault's .orbit-journal.json keeps each week's note). This

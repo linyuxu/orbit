@@ -1185,6 +1185,32 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.press(".finder .fq", "Enter")
             page.wait_for_function(f"() => S.pcursor === {json.dumps(k)} && document.activeElement.id === 'plist'", timeout=5000)
 
+    def test_a_pasted_image_goes_into_attachments_beside_the_document(self):
+        """An image (or any file) pasted or dropped into a Markdown document: into the attachments folder beside it,
+        linked from it; a wiki link to an attachment opens it, never a new note."""
+        d = Path(self.work) / "paste-doc"; d.mkdir(exist_ok=True)
+        doc = d / "README.md"; doc.write_text("# Readme\n")
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"openFile({json.dumps(str(doc))}, {{pinned: true}})")
+            page.wait_for_function("() => EDITORS.get(S.file) && EDITORS.get(S.file).ed", timeout=5000)
+            page.evaluate(f"""dropIntoEditor(S.file, null, [{{ file: new File([new Uint8Array([137,80,78,71,13,10,26,10,{len(name)}])], "shot-{name}.png", {{ type: "image/png" }}) }},
+                                                      {{ file: new File(["%PDF-1.4"], "spec {name}.pdf", {{ type: "application/pdf" }}) }}])""")
+            page.wait_for_function(f"() => EDITORS.get(S.file).ed.getDoc().includes('attachments/shot-{name}.png')", timeout=5000)
+            text = page.evaluate("EDITORS.get(S.file).ed.getDoc()")
+            self.assertIn(f"[spec {name}.pdf](<attachments/spec {name}.pdf>)", text, name)
+            self.assertTrue((d / "attachments" / f"shot-{name}.png").exists(), name)
+            self.assertTrue((d / "attachments" / f"spec {name}.pdf").exists(), name)
+            # in the vault: a wiki link to an image opens it (no "x.png.md" note made)
+            vault = Path(page.evaluate("S.vault"))
+            n = self.req("POST", "/api/notes/create", {"name": f"Pics {name}"})[1]["path"]
+            r = self.req("POST", "/api/attach", {"doc": n, "name": f"wiki-{name}.png", "data": "iVBORw0KGgo="})[1]
+            page.evaluate(f"openWiki({json.dumps(f'wiki-{name}.png')}, {json.dumps(n)})")
+            page.wait_for_function(f"() => S.file === {json.dumps(r['path'])}", timeout=5000)
+            self.assertFalse(any(vault.rglob(f"wiki-{name}.png.md")), name)
+            page.evaluate(f"openWiki('missing-{name}.png', {json.dumps(n)})"); page.wait_for_timeout(300)
+            self.assertFalse(any(vault.rglob(f"missing-{name}.png.md")), name)
+
     def test_earlier_cards_come_in_only_when_the_scrolling_stops(self):
         """A long conversation draws its latest 40 requests; the earlier ones come in above once the user's scrolling
         stops, the view kept where it was. Never during the scroll: WebKit drops a scrollTop written during a

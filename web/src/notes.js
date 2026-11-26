@@ -20,6 +20,7 @@ async function openWiki(name, from) {
   try {
     const r = await api("GET", `/api/notes/resolve?name=${encodeURIComponent(name)}&from=${encodeURIComponent(from || "")}`);
     let path = r.path;
+    if (!path && /\.(?!md$)[a-z0-9]{1,8}$/i.test(name.split("|")[0].trim())) { toast(`No file “${name}” in the vault`); return; }  // (an attachment: never a new note)
     if (!path) {
       path = (await api("POST", "/api/notes/create", { name })).path;
       loadNoteNames(); refreshTree(S.vault, true);

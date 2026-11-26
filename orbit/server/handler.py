@@ -967,7 +967,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             if p == "/api/notes/list":
                 return self._json({"root": str(notes.root()), "notes": notes.all_notes()})
             if p == "/api/notes/resolve":
-                hit = notes.resolve(q.get("name", ""), q.get("from") or None)
+                hit = notes.resolve_file(q.get("name", ""), q.get("from") or None)  # (a note, or an attachment: ![[x.png]])
                 return self._json({"path": hit, "exists": bool(hit)})
             if p == "/api/notes/backlinks":
                 return self._json({"links": notes.backlinks(q.get("path", ""))})

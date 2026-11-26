@@ -526,6 +526,10 @@ def resolve_file(name: str, from_path: str | None = None, files: list[str] | Non
     if not os.path.splitext(name)[1]:
         return resolve(name, from_path)
     files = files if files is not None else all_files()
+    if "/" in name and from_path:  # a path from the linking note (Obsidian's relative links)
+        near = Path(os.path.dirname(os.path.realpath(from_path))) / name
+        if near.is_file() and in_vault(near):
+            return str(near)
     if "/" in name:
         hit = next((f for f in files if f.lower() == name.lower()), None)
         if hit:
@@ -536,9 +540,11 @@ def resolve_file(name: str, from_path: str | None = None, files: list[str] | Non
         return None
     if from_path:
         here = os.path.relpath(os.path.dirname(os.path.realpath(from_path)), root())
-        same = [f for f in matches if os.path.dirname(f) == ("" if here == "." else here)]
-        if same:
-            return str(root() / same[0])
+        here = "" if here == "." else here
+        for folder in (here, os.path.relpath(attachment_folder(Path(os.path.realpath(from_path))), root())):  # beside it, then its attachments
+            same = [f for f in matches if os.path.dirname(f) == ("" if folder == "." else folder)]
+            if same:
+                return str(root() / same[0])
     return str(root() / min(matches, key=lambda f: (f.count("/"), len(f), f.lower())))
 
 
@@ -551,9 +557,31 @@ def _unique(folder: Path, name: str) -> Path:
     return p
 
 
+ATTACH_DIR = "attachments"  # a document's attachments: in this folder beside it (Obsidian's "./attachments")
+
+
+def attachment_folder(docp: Path) -> Path:
+    """Where a file dropped or pasted into this Markdown document goes: the attachments/ folder beside it; in the vault
+    as its Obsidian setting says when it has one (attachmentFolderPath: "./x" beside the note, "x" in the vault,
+    "/" or "" the vault itself)."""
+    if in_vault(docp):
+        try:
+            cfg = json.loads((root() / ".obsidian" / "app.json").read_text(encoding="utf-8"))
+            at = cfg.get("attachmentFolderPath") if isinstance(cfg, dict) else None
+        except (OSError, ValueError):
+            at = None
+        if isinstance(at, str):
+            at = at.strip()
+            if at in ("", "/"):
+                return root()
+            return _inside(docp.parent / at[2:]) if at.startswith("./") else _inside(root() / at.strip("/"))
+    return docp.parent / ATTACH_DIR
+
+
 def attach(doc: str, name: str, data: bytes | None = None, src: str | None = None) -> dict[str, Any]:
-    """Copy a dropped or pasted file next to a Markdown document and return the text that links it: in the vault
-    into attachments/ as ![[name]] (an image) or [[name]]; elsewhere into assets/ beside the document as ![](…) / […](…)."""
+    """Copy a dropped or pasted file (an image or any attachment) into the document's attachments folder
+    (attachment_folder) and return the text that links it: in the vault ![[name]] (an image) or [[name]], its path
+    from the note when the name is not the vault's only one; elsewhere ![](attachments/…) / […](attachments/…)."""
     docp = Path(os.path.realpath(doc))
     if src:
         s = Path(os.path.realpath(os.path.expanduser(src)))
@@ -567,7 +595,7 @@ def attach(doc: str, name: str, data: bytes | None = None, src: str | None = Non
     if name.lower() in ("image.png", "pasted.png", "pasted"):  # a clipboard image has no name of its own
         name = f"Pasted image {datetime.now():%Y%m%d%H%M%S}.png"
     vault = in_vault(docp)
-    folder = root() / "attachments" if vault else docp.parent / "assets"
+    folder = attachment_folder(docp)
     folder.mkdir(parents=True, exist_ok=True)
     p = folder / name
     if not (p.exists() and p.read_bytes() == data):  # the same file dropped again is reused
@@ -575,7 +603,9 @@ def attach(doc: str, name: str, data: bytes | None = None, src: str | None = Non
         p.write_bytes(data)
     image = p.suffix.lower() in IMAGE_EXT
     if vault:
-        link = f"![[{p.name}]]" if image else f"[[{p.name}]]"
+        others = [f for f in all_files() if os.path.basename(f).lower() == p.name.lower()]
+        ref = p.name if len(others) <= 1 else os.path.relpath(p, docp.parent)  # (another file of that name: its path from the note)
+        link = f"![[{ref}]]" if image else f"[[{ref}]]"
     else:
         rel = os.path.relpath(p, docp.parent)
         target = f"<{rel}>" if re.search(r"[\s()]", rel) else rel

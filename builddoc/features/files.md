@@ -81,7 +81,7 @@ Documents over 400 KB keep the plain styled source. A rendering that throws leav
 
 | Target | Result |
 |---|---|
-| A Markdown editor (drop or ⌘V of a file / image) | Copied beside the document and linked at the drop point: in the vault into `attachments/` as `![[name]]` (an image) or `[[name]]`; elsewhere into `assets/` beside the file as `![name](assets/…)` / `[name](assets/…)`. Images and several files go on lines of their own below the line dropped on; the same bytes dropped again reuse the file; a clipboard image is named `Pasted image <YYYYMMDDHHMMSS>.png` |
+| A Markdown editor (drop or ⌘V of a file / image) | Copied into the `attachments/` folder beside the document (any file, an image or not) and linked at the drop point: in the vault as `![[name]]` (an image) or `[[name]]` (its path from the note when another file has that name), and where the vault's Obsidian setting `attachmentFolderPath` says when it has one (`./x` beside the note, `x` in the vault); elsewhere as `![name](attachments/…)` / `[name](attachments/…)`. A wiki link to an attachment opens it, never a new note. Images and several files go on lines of their own below the line dropped on; the same bytes dropped again reuse the file; a clipboard image is named `Pasted image <YYYYMMDDHHMMSS>.png` |
 | A code editor | The paths as text at the drop point |
 | The session view (conversation or input) | Into the input as `![name](path)` / `[name](path)` (`<path>` when it holds spaces); the agent reads the files from there |
 | Anywhere else (title bar, left panel, file header) | The files open in tabs |
@@ -111,6 +111,6 @@ navigates the page away.
 
 - Each row of §1 renders off the cursor line and shows its source on it; a checkbox click changes only `[ ]` ↔ `[x]`.
 - `$5 and $10` is not math; `#123` is not a tag; nothing in fenced code renders.
-- Drop a PNG and a PDF from Finder on a note (in the app, WebKit): both copied into `attachments/`, linked on their own
+- Drop a PNG and a PDF from Finder on a note (in the app, WebKit): both copied into the note's `attachments/` folder, linked on their own
   lines below the drop line, the image shows. Drop them on the input: two quoted-if-needed paths, a thumbnail and a chip.
 - Rename a note linked as `[[Name]]`, `[[folder/Name|x]]` and `[[Name\|y]]` in a table: all three follow.
