@@ -274,3 +274,7 @@ body.dragsort, body.dragsort * { cursor:grabbing !important; -webkit-user-select
 .prow.fnote { color:var(--ink-3); font-size:calc(12px * var(--ui-k)); cursor:default; }
 .prow.fgoto { color:var(--ink-3); margin-top:2px; }
 .prow.fgoto:hover { color:var(--ink); }
+/* The Files tree as a file manager (fileops.js): a cut row dimmed; the folder a drag would drop into */
+.prow.ft.cutrow { opacity:.45; }
+.prow.ft.droptgt { background:color-mix(in srgb, var(--focus) 16%, transparent); box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--focus) 60%, transparent); border-radius:6px; }
+.prow.ft[draggable="true"] { -webkit-user-drag:element; }

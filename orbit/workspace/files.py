@@ -155,12 +155,14 @@ def _status(root: Path) -> dict[str, str]:
 
 
 def tree(root: str) -> dict[str, Any]:
-    """Every file under root (git: tracked + untracked, minus ignored), with git status letters."""
+    """Every file under root (git: tracked + untracked, minus ignored), with git status letters; and the empty
+    folders (dirs: no file lists them, and a file manager shows them)."""
     base = Path(os.path.realpath(_abs(root)))  # git reports resolved paths (/var → /private/var on macOS)
     if not base.is_dir():
         raise ValueError(f"no such folder: {base}")
     groot = git_root(base)
     files: list[str] = []
+    empty: list[str] = []
     status: dict[str, str] = {}
     truncated = False
     if groot:
@@ -174,9 +176,24 @@ def tree(root: str) -> dict[str, Any]:
                 status[p[len(rel) + 1:]] = s
         # Deleted files are not on disk but belong in the tree (marked D).
         files = sorted(set(f for f in files if (base / f).exists() or status.get(f) == "D"))
+        # Empty folders (git lists no folder): untracked ones, not ignored, that hold nothing
+        out = _git(base, "ls-files", "-z", "--others", "--directory", "--exclude-standard", check=False)
+        have = {f.rsplit("/", 1)[0] for f in files if "/" in f}
+        for d in (x.rstrip("/") for x in out.split("\0") if x.endswith("/")):  # (an untracked folder, collapsed)
+            if not (base / d).is_dir():
+                continue
+            for dirpath, dirnames, filenames in os.walk(base / d):
+                dirnames[:] = [x for x in dirnames if x not in SKIP_DIRS]
+                rel = os.path.relpath(dirpath, base)
+                if not dirnames and not [f for f in filenames if f != ".DS_Store"] and rel not in have:
+                    empty.append(rel)
+                if len(empty) >= 2000:
+                    break
     else:
         for dirpath, dirnames, filenames in os.walk(base):
             dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith("."))
+            if not dirnames and not [f for f in filenames if f != ".DS_Store"] and dirpath != str(base):
+                empty.append(os.path.relpath(dirpath, base))
             for f in sorted(filenames):
                 if f == ".DS_Store":
                     continue
@@ -192,7 +209,7 @@ def tree(root: str) -> dict[str, Any]:
     if groot:
         branch = _git(groot, "branch", "--show-current", check=False).strip()
     return {"root": str(base), "git": bool(groot), "branch": branch, "files": files, "status": status,
-            "truncated": truncated}
+            "truncated": truncated, "dirs": sorted(empty)[:MAX_TREE]}
 
 
 def dirlist(path: str) -> dict[str, Any]:

@@ -7,7 +7,7 @@ async function refreshTree(root, force = false) {
   try {
     const d = await api("GET", "/api/tree?root=" + encodeURIComponent(root));
     d.at = Date.now();
-    d.index = buildIndex(d.files);
+    d.index = buildIndex(d.files, d.dirs || []);  // (the empty folders too: no file lists them)
     d.notes = d.files.filter(f => /\.md$/i.test(f));
     d.noteIndex = buildIndex(d.notes);
     d.dirty = new Set();
@@ -19,8 +19,18 @@ async function refreshTree(root, force = false) {
   // (drawn outside the try: a drawing error is no failure of this folder's listing)
   if (S.left.shown && S.left.tab !== "sessions" && (panelRoot() === root || S.left.tab === "files")) renderLeft();
 }
-function buildIndex(files) {
+function buildIndex(files, emptyDirs = []) {
   const kids = new Map([["", { dirs: new Set(), files: [] }]]);
+  for (const d of emptyDirs) {  // a folder with nothing in it: its own entry, under its parents
+    const parts = d.split("/");
+    let parent = "";
+    for (let i = 0; i < parts.length; i++) {
+      const dir = parts.slice(0, i + 1).join("/");
+      if (!kids.has(dir)) kids.set(dir, { dirs: new Set(), files: [] });
+      kids.get(parent).dirs.add(dir);
+      parent = dir;
+    }
+  }
   for (const f of files) {
     const parts = f.split("/");
     let parent = "";
@@ -454,6 +464,7 @@ function renderFilesRoots() {
     return `<div class="prow ft${kc}${full === curFile ? " cur" : ""}${st ? ` st-${esc(letter)}` : ""}" data-k="${esc(r.k)}" data-tip="${esc(tilde(full))}">${guides}<span class="tw"></span><span class="ic">${fileIcon(r.rel)}</span>` +
       `<span class="nm">${esc(name)}</span>${r.flat ? `<span class="fd">${esc(basename(r.root.replace(/^\/@[^/]+/, "")) || r.root)}</span>` : ""}${st ? `<span class="stl st-${esc(letter)}">${esc(letter)}</span>` : ""}</div>`;
   }).join("");
+  if (typeof opsDecorate === "function") opsDecorate();  // (fileops.js: draggable rows, the cut ones dimmed)
   revealCursor();
 }
 function toggleRoot(r, open) {
@@ -652,6 +663,9 @@ function folderMenu(dir, where, rootRow = null, treeRoot = null) {
     inVault ? { label: "New note…", run: () => newNote(relTo(S.vault, dir) === dir ? "" : relTo(S.vault, dir)) }
             : { label: "New file…", run: () => newFileIn(real) },
     { label: "New folder…", run: () => newFolderIn(real) },
+    !isRoot || !(rootRow && rootRow.place) ? { label: "Copy", key: "⌥W", run: () => filesClip(false, rootRow, real) } : null,
+    isRoot ? null : { label: "Cut", key: "⌃W", run: () => filesClip(true, null, real) },
+    { label: "Paste here", key: "⌃Y", run: () => filesPaste(real) },
     EMBED ? null : { label: "New session here…", run: () => newSessionIn(real) },
     here ? { label: "Open in Terminal", run: () => api("POST", "/api/open-external", { path: real, how: "terminal" }).then(r => toast(`Opened in ${r.app}`)).catch(e => toast(e.message)) } : null,
     { sep: true },
@@ -829,6 +843,8 @@ function panelKey(e, combo) {
     if (combo === "M:KeyW" && r && r.kind === "session") { closeOrUnfavorite(r.sid, r.gid); return true; }  // (a Favorites row: off the favorites)
     if (combo === "M:KeyW" && r && r.kind === "ftab") { closeGroupTab(r); return true; }
   }
+  // The Files tab, its filter empty: ⌥W copy · ⌃W cut · ⌃Y paste (and ⌘C ⌘X ⌘V), Finder's clipboard too (fileops.js)
+  if (tab === "files" && !S.filter && typeof filesOpsKey === "function" && filesOpsKey(combo)) return true;
   if (LINE_KEYS.has(combo) || combo === "Backspace") {  // the filter is a line: the editors' Emacs keys move and edit in it
     const r = lineEdit(S.filter, filterPos(), combo);
     if (r) { const changed = r.value !== S.filter; S.filter = r.value; S.filterPos = r.pos; if (changed) S.pcursor = null; renderLeft(); }

@@ -8,6 +8,16 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The Files panel is a file manager, on this Mac and across machines: ⌥W copy · ⌃W cut · ⌃Y paste into the cursor's
+  folder (⌘C ⌘X ⌘V too; menus: Copy, Cut, Paste here); drag a file or folder onto a folder (its machine: a move;
+  another machine: a copy; ⌥: a copy), a closed folder held under the drag opens, the panel scrolls at its edges.
+  With Finder through the Mac's clipboard: copied here, Finder pastes it (another machine's files fetched to
+  `~/Library/Caches/Orbit/clipboard` first; Finder takes a cut as a copy); copied in Finder, ⌃Y pastes it into a
+  local or remote folder; files dragged in from Finder land in that folder. `POST /api/files/transfer {src, dir,
+  move}`: one machine moves or copies; two: a tar from one (`GET /api/files/pack`) into the other (`POST
+  /api/files/unpack`, safe paths only), the original to its Trash once the copy is in place; a copy on a taken name
+  gets " copy", a move refuses. `POST /api/files/put` (one dropped file), `GET/POST /api/clipboard/files` (this Mac's
+  page only). The tree also lists empty folders (`/api/tree` → `dirs`).
 - A folder's menu in the Files tree: New file…, New folder…, New session here… (the New session dialog with that
   folder, and its machine for another machine's folder), Open in Terminal (iTerm, else Terminal; this machine's
   folders), Copy relative path, besides Refresh, Copy path, Open in Finder, Rename, Delete.

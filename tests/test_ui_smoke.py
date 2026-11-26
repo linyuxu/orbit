@@ -11,6 +11,7 @@ ORBIT_UI_BROWSERS=chromium (or webkit) runs one of them.
 
 import json
 import os
+import time
 import unittest
 from pathlib import Path
 
@@ -760,6 +761,73 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             # another machine's folder: that machine and its path written as there
             self.assertEqual(page.evaluate("(() => { let got; const old = newSession; newSession = (g, p) => { got = p; }; newSessionIn('/@gpu-box/home/me/proj'); newSession = old; return got; })()"),
                              {"machine": "gpu-box", "cwd": "~/proj"})
+
+    def test_the_files_tree_is_a_file_manager(self):
+        """The Files tab: ⌥W copy · ⌃W cut · ⌃Y paste into the cursor's folder; a file dragged onto a folder moves there; a
+        closed folder held under a drag opens. (The Mac's clipboard is replaced: the user's is never touched.)"""
+        from orbit.workspace import transfer
+        old = transfer._jxa
+        transfer._jxa = lambda script, args=None: {"count": 1, "paths": []} if args is None else {"count": 2}
+        top = Path(self.work) / "fm"
+        sid = None
+        try:
+            for name, page in self.each():
+                d = top / name
+                (d / "box").mkdir(parents=True, exist_ok=True)
+                (d / "shut" / "inner").mkdir(parents=True, exist_ok=True)
+                (d / "a.txt").write_text("A")
+                (d / "b.txt").write_text("B")
+                code, s = self.req("POST", "/api/sessions", {"cwd": str(d), "name": f"fm-{name}"})
+                self.assertEqual(code, 200, s)
+                self.open(page)
+                page.evaluate(f"switchTo({json.dumps(s['id'])}); S.left.shown = true; applyLeft(); setPanelTab('files'); focusPanel(); 0")
+                root = str(d)
+                page.wait_for_function(f"() => PROWS.some(r => r.k === 'f:{root}|a.txt')", timeout=8000)
+                go = lambda k: page.evaluate(f"S.pcursor = {json.dumps(k)}; renderLeft(); focusPanel(); 0")
+                # ⌥W on a.txt, ⌃Y on box: a copy in box
+                go(f"f:{root}|a.txt"); page.keyboard.press("Alt+w")
+                go(f"d:{root}|box"); page.keyboard.press("Control+y")  # (box is empty: the tree shows empty folders too)
+                self.wait_disk(d / "box" / "a.txt")
+                self.assertTrue((d / "a.txt").exists())
+                # ⌃W on b.txt (dimmed), ⌃Y on box: moved
+                go(f"f:{root}|b.txt"); page.keyboard.press("Control+w")
+                page.wait_for_selector(".prow.cutrow")
+                go(f"d:{root}|box"); page.keyboard.press("Control+y")
+                self.wait_disk(d / "box" / "b.txt")
+                self.wait_gone(d / "b.txt")
+                # a drag: a.txt held over the closed folder "shut" opens it, dropped in its "inner": moved there
+                page.wait_for_function(f"() => PROWS.some(r => r.k === 'f:{root}|a.txt') && !PROWS.some(r => r.k === 'f:{root}|b.txt')", timeout=8000)
+                page.evaluate(f"""(() => {{
+                  const el = k => [...plist.querySelectorAll('.prow[data-k]')].find(x => x.dataset.k === k);
+                  window.__dt = new DataTransfer();
+                  el('f:{root}|a.txt').dispatchEvent(new DragEvent('dragstart', {{ bubbles: true, dataTransfer: window.__dt }}));
+                  el('d:{root}|shut').dispatchEvent(new DragEvent('dragover', {{ bubbles: true, cancelable: true, dataTransfer: window.__dt }}));
+                }})(); 0""")
+                page.wait_for_function(f"() => PROWS.some(r => r.k === 'd:{root}|shut/inner')", timeout=3000)  # (it opened)
+                page.evaluate(f"""(() => {{
+                  const t = [...plist.querySelectorAll('.prow[data-k]')].find(x => x.dataset.k === 'd:{root}|shut/inner');
+                  t.dispatchEvent(new DragEvent('dragover', {{ bubbles: true, cancelable: true, dataTransfer: window.__dt }}));
+                  t.dispatchEvent(new DragEvent('drop', {{ bubbles: true, cancelable: true, dataTransfer: window.__dt }}));
+                }})(); 0""")
+                self.wait_disk(d / "shut" / "inner" / "a.txt")
+                self.wait_gone(d / "a.txt")
+                self.assertEqual(sorted(os.listdir(d / "box")), ["a.txt", "b.txt"])
+                if name == "chromium":
+                    page.screenshot(path="/tmp/orbit-files-manager.png", clip={"x": 0, "y": 0, "width": 420, "height": 700})
+        finally:
+            transfer._jxa = old
+
+    def wait_disk(self, p, timeout=8):
+        end = time.time() + timeout
+        while time.time() < end and not Path(p).exists():
+            time.sleep(0.1)
+        self.assertTrue(Path(p).exists(), f"{p} never appeared")
+
+    def wait_gone(self, p, timeout=8):
+        end = time.time() + timeout
+        while time.time() < end and Path(p).exists():
+            time.sleep(0.1)
+        self.assertFalse(Path(p).exists(), f"{p} is still there")
 
     def test_phone_usage_has_openai(self):
         self.new_session("usage")

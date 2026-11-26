@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import shutil
+import tarfile
 import os
 import re
 import subprocess
@@ -472,6 +474,34 @@ class Handler(Forward, Streams, Watch, BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _unpack(self, q: dict, one: bool = False) -> None:
+        """POST /api/files/unpack?dir=&name=&copy=: the body (a tar of one file or folder) into that folder; one (put):
+        the body is the file itself (dir may be another machine's)."""
+        import tempfile
+        from orbit.workspace import transfer
+        n = int(self.headers.get("Content-Length") or 0)
+        if n <= 0 or n > transfer.MAX_PACK:
+            return self._json({"error": "a tar body, 20 GB at most"}, 400)
+        tmp = tempfile.SpooledTemporaryFile(max_size=transfer.SPOOL)
+        left = n
+        while left > 0:
+            got = self.rfile.read(min(left, 1024 * 1024))
+            if not got:
+                break
+            tmp.write(got)
+            left -= len(got)
+        tmp.seek(0)
+        try:
+            if one:
+                r = transfer.put(self.desk.state_dir, q.get("dir", [""])[0], q.get("name", [""])[0], tmp)
+            else:
+                r = transfer.unpack(tmp, q.get("dir", [""])[0], q.get("name", [""])[0], copy=q.get("copy", ["1"])[0] != "0")
+        except (ValueError, OSError, tarfile.TarError) as e:
+            return self._json({"error": str(e)}, 400)
+        finally:
+            tmp.close()
+        self._json(r)
+
     def _body(self, limit: int = 0) -> dict | None:
         """The JSON object sent ({} when none or not one); with a limit, None (and 413 answered) past it."""
         n = int(self.headers.get("Content-Length") or 0)
@@ -685,6 +715,30 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json({"text": self.desk.scheduler.journal_text(m.group(1))})
             except KeyError:
                 return self._json({"error": "no such schedule"}, 404)
+        if p == "/api/files/pack":  # a file or folder of this machine as a tar (another server moving or copying it)
+            from orbit.workspace import transfer
+            try:
+                data = transfer.pack(parse_qs(u.query).get("path", [""])[0])
+            except (ValueError, OSError) as e:
+                return self._json({"error": str(e)}, 404 if isinstance(e, FileNotFoundError) else 400)
+            data.seek(0, 2)
+            n = data.tell()
+            data.seek(0)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-tar")
+            self.send_header("Content-Length", str(n))
+            self.end_headers()
+            shutil.copyfileobj(data, self.wfile, 1024 * 1024)
+            data.close()
+            return
+        if p == "/api/clipboard/files":  # the files on this Mac's clipboard (Finder's copy): this machine's page only
+            if self.from_remote:
+                return self._json({"error": "only on the server's own machine"}, 403)
+            from orbit.workspace import transfer
+            try:
+                return self._json(transfer.read_clipboard())
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
         if p == "/api/push":  # the phone's notifications: the VAPID public key, the devices, the last sends
             from orbit.services import push
             return self._json(push.of(self.desk).status())
@@ -999,6 +1053,10 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             return self._view_action(route, m.group(2), self._body())
         if self._watch_post(p):  # the watch's voice call (server/watch.py): its audio is a raw body, not JSON
             return
+        if p == "/api/files/unpack":  # a tar (another server's file or folder) into a folder here: a raw body, not JSON
+            return self._unpack(parse_qs(u.query))
+        if p == "/api/files/put":  # one file dropped from Finder on the page, into a folder here or another machine's
+            return self._unpack(parse_qs(u.query), one=True)
         b = self._body()
         if p in FILE_ROUTES and federation.machine_in(b):
             return self._remote_files(federation.machine_in(b), "POST", p, {}, b)
@@ -1202,6 +1260,14 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json(files.stats([str(x) for x in b.get("paths", [])]))
             if p == "/api/files/create":
                 return self._json(files.create(b.get("path", ""), folder=bool(b.get("folder"))))
+            if p == "/api/files/transfer":  # into a folder, a move or a copy: on one machine or across two (workspace/transfer.py)
+                from orbit.workspace import transfer
+                return self._json(transfer.transfer(self.desk.state_dir, str(b.get("src") or ""), str(b.get("dir") or ""), bool(b.get("move"))))
+            if p == "/api/clipboard/files":  # files onto this Mac's clipboard (Finder pastes them): this machine's page only
+                if self.from_remote:
+                    return self._json({"error": "only on the server's own machine"}, 403)
+                from orbit.workspace import transfer
+                return self._json(transfer.write_clipboard(self.desk.state_dir, [str(x) for x in (b.get("paths") or [])][:200]))
             if p == "/api/files/rename":
                 r = files.rename(b.get("path", ""), b.get("new", ""))
                 old = str(files._abs(b.get("path", "")))
