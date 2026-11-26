@@ -336,15 +336,84 @@ def daily_note(d: date | None = None) -> dict[str, Any] | None:
     d = d or date.today()
     m = monday(d)
     rel = moment(cfg["format"], m).strip("/")
-    p = _inside(root() / cfg["folder"] / (rel + ".md"))
+    folder = root() / cfg["folder"] / os.path.dirname(rel)  # (its date folder: YYYYMM/…)
+    def make(p: Path) -> None:
+        head = _template_text(cfg["template"], p.stem, datetime.combine(m, datetime.now().time())).rstrip("\n")
+        save_file(str(p), head + "\n" if head else "", None)
+    p = _journal_week(m, _inside(folder / week_name(m)), old=_inside(root() / cfg["folder"] / (rel + ".md")), make=make)
+    return {"path": str(p), "heading": day_heading(d, False), "kind": "week", "label": "This week"}
+
+
+JOURNAL_STATE = ".orbit-journal.json"  # in the vault: {monday YYYY-MM-DD: the week note's vault-relative path}
+
+
+def week_name(m: date) -> str:
+    return f"Week of {m:%Y-%m-%d}.md"
+
+
+def _journal_read() -> dict:
+    try:
+        d = json.loads((root() / JOURNAL_STATE).read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _journal_write(d: dict) -> None:
+    keep = dict(sorted(d.items())[-120:])  # (the last two years or so)
+    (root() / JOURNAL_STATE).write_text(json.dumps(keep, indent=1), encoding="utf-8")
+
+
+def _journal_week(m: date, p: Path, old: Path | None = None, make=None) -> Path:
+    """The week note of the week from Monday m: the one kept for it (renamed since, its title edited), else p (made
+    when missing; this week's note of the old kind, named by the date with a "# Week of" heading, renamed to p and
+    its heading dropped: the title is the name now)."""
+    st, key = _journal_read(), f"{m:%Y-%m-%d}"
+    kept = st.get(key)
+    if isinstance(kept, str):
+        try:
+            q = _inside(root() / kept)
+            if q.is_file():
+                return q
+        except ValueError:
+            pass
     if not p.exists():
         p.parent.mkdir(parents=True, exist_ok=True)
-        head = _template_text(cfg["template"], stem(rel + ".md"), datetime.combine(m, datetime.now().time())).rstrip("\n")
-        body = (head.split("\n") if head else [f"# Week of {m:%Y-%m-%d}"]) + [""]
-        for k in range(7):
-            body += [day_heading(m + timedelta(days=k), False), ""]
-        save_file(str(p), "\n".join(body).rstrip("\n") + "\n", None)
-    return {"path": str(p), "heading": day_heading(d, False), "kind": "week", "label": "This week"}
+        if old is not None and old.is_file() and old != p:
+            text = old.read_text(encoding="utf-8")
+            lines = text.split("\n")
+            if lines and re.fullmatch(r"#\s+Week of \S+\s*", lines[0]):
+                lines = lines[1:]
+                while lines and not lines[0].strip():
+                    lines.pop(0)
+            os.rename(old, p)
+            save_file(str(p), "\n".join(lines), None)
+            update_links(str(old), str(p))
+        elif make is not None:
+            make(p)
+    st[key] = str(p.relative_to(root()))
+    _journal_write(st)
+    return p
+
+
+def journal_renamed(old: str, new: str) -> None:
+    """A week note renamed (its title edited): still this week's (or that week's) note."""
+    st = _journal_read()
+    try:
+        o, n = str(Path(old).resolve().relative_to(root().resolve())), str(Path(new).resolve().relative_to(root().resolve()))
+    except ValueError:
+        return
+    hit = [k for k, v in st.items() if v == o]
+    if hit:
+        for k in hit:
+            st[k] = n
+        _journal_write(st)
+
+
+def journal_folder() -> str:
+    """Where the week notes are (vault-relative): their titles are their names (the page shows them above the text)."""
+    cfg = daily_config()
+    return cfg["folder"] if cfg is not None else "Journal" if _guide() is not None else "Weekly"
 
 
 def journal_kind() -> str:
@@ -368,12 +437,13 @@ def week_note(d: date | None = None) -> dict[str, Any]:
             pass
         elif guide is not None:
             body = _guide_template(guide, m)
-        else:
-            body = [f"# Week of {m:%Y-%m-%d}", ""]
-            for i in range(7):
-                body += [day_heading(m + timedelta(days=i), False), ""]
+        else:  # the built-in one: empty (its title is its name, shown above it; a day's heading comes with its first entry)
+            return {"path": str(_journal_week(m, p, make=lambda q: save_file(str(q), "", None))), "heading": day_heading(d, False),
+                    "kind": "week", "label": "This week"}
         p.parent.mkdir(parents=True, exist_ok=True)
         save_file(str(p), "\n".join(body).rstrip("\n") + "\n", None)
+    elif guide is None and _setting_template(monday(d), False) is None:
+        p = _journal_week(monday(d), p, make=lambda q: save_file(str(q), "", None))
     return {"path": str(p), "heading": day_heading(d, guide is not None), "kind": "week", "label": "This week"}
 
 
@@ -407,7 +477,7 @@ def append_today(text: str, source: str = "", d: date | None = None) -> dict[str
         else:
             while lines and lines[-1] == "":
                 lines.pop()
-            lines += ["", head, ""]
+            lines += ([""] if lines else []) + [head, ""]
     i = lines.index(head) + 1
     j = i
     while j < len(lines) and not (0 < _level(lines[j]) <= lv):

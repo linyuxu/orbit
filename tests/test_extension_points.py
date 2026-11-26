@@ -172,7 +172,7 @@ class DeskPointsTest(test_skeleton.SkeletonTest):
         self.assertIn("## Wed 03-04\n\ndone", Path(info["path"]).read_text())
         self.req("POST", "/api/settings", {"week_template": "Templates/Missing"})
         later = notes.week_note(date(2026, 3, 11))
-        self.assertIn("## Sun 03-15", Path(later["path"]).read_text())  # (unreadable: the built-in one)
+        self.assertEqual(Path(later["path"]).read_text(), "")  # (unreadable: the built-in one, empty)
         self.assertEqual(self.req("POST", "/api/settings", {"week_template": "a\nb"})[0], 400)
 
 

@@ -1127,6 +1127,64 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             self.assertIn("d:src@1", page.evaluate(rows), name)
             self.assertNotIn("d:src/ui@2", page.evaluate(rows), name)
 
+    def test_the_week_note_is_empty_and_its_title_is_its_name(self):
+        """⌘⇧D: this week's note, empty; its title (its name) above the text and apart from it (⌘A in the text never
+        takes it); edited, the file is renamed, and ⌘⇧D still opens it."""
+        info = self.req("POST", "/api/notes/week")[1]
+        start = info["path"]
+        for name, page in self.each():
+            self.open(page)
+            page.wait_for_function("() => !!S.vault && !!JOURNAL.folder", timeout=5000)
+            page.evaluate("weekNote()")
+            page.wait_for_selector("#fbody .host:not([hidden]) .ntitle")
+            cur = page.evaluate("S.file")
+            self.assertEqual(page.input_value("#fbody .host:not([hidden]) .ntitle"), Path(cur).stem, name)
+            self.assertEqual(page.evaluate("EDITORS.get(S.file).ed.getDoc()"), "", name)  # (empty: no day headings)
+            page.evaluate("EDITORS.get(S.file).ed.focus()")
+            page.keyboard.type("plans")
+            page.keyboard.press("Meta+a")
+            page.keyboard.type("only this")  # (⌘A took the text, not the title)
+            self.assertEqual(page.input_value("#fbody .host:not([hidden]) .ntitle"), Path(cur).stem, name)
+            page.fill("#fbody .host:not([hidden]) .ntitle", f"Launch week {name}")
+            page.press("#fbody .host:not([hidden]) .ntitle", "Enter")
+            want = str(Path(cur).with_name(f"Launch week {name}.md"))
+            page.wait_for_function(f"() => S.file === {json.dumps(want)}", timeout=5000)
+            self.wait_disk(want)
+            self.assertFalse(Path(cur).exists(), name)
+            page.wait_for_timeout(1800)  # (saved)
+            self.assertEqual(Path(want).read_text(), "only this", name)
+            page.evaluate("closeFile(S.file)"); page.wait_for_timeout(200)
+            page.evaluate("weekNote()")  # still this week's
+            page.wait_for_function(f"() => S.file === {json.dumps(want)}", timeout=5000)
+            page.evaluate("closeFile(S.file)")
+            Path(want).write_text(""); os.rename(want, start)  # (the next browser starts as this one did)
+
+    def test_recent_has_the_folders_opened_from_open(self):
+        """A folder opened from ⌘O (Files & Folders) is in ⌘R; chosen there, the Files panel on it again. Moving
+        through the Files panel adds none."""
+        d = Path(self.work) / "recent-folders"
+        (d / "deep" / "pkgfold").mkdir(parents=True, exist_ok=True); (d / "deep" / "pkgfold" / "a.py").write_text("a")
+        (d / "other").mkdir(exist_ok=True); (d / "other" / "b.py").write_text("b")
+        sid = self.req("POST", "/api/sessions", {"cwd": str(d), "name": "recent-folders"})[1]["id"]
+        k = f"d:{os.path.realpath(d)}|deep/pkgfold"
+        for name, page in self.each():
+            page.add_init_script("try { localStorage.removeItem('orbit.recent'); } catch (e) {}")
+            self.open(page)
+            page.evaluate(f"switchTo({json.dumps(sid)}); openFinder('Files & Folders')")
+            page.wait_for_timeout(600)
+            page.fill(".finder .fq", "pkgfold"); page.wait_for_timeout(300)
+            page.press(".finder .fq", "Enter")
+            page.wait_for_function(f"() => S.pcursor === {json.dumps(k)}", timeout=5000)
+            page.evaluate(f"S.pcursor = {json.dumps(f'd:{os.path.realpath(d)}|other')}; renderLeft(); openRow(prow())")  # (moving in the panel: none)
+            page.evaluate("focusMain(); openRecent()")
+            page.wait_for_selector(".finder .frow")
+            rows = page.evaluate("[...document.querySelectorAll('.finder .frow')].map(r => r.innerText.replace(/\\s+/g, ' '))")
+            self.assertTrue(any(r.startswith("pkgfold") and "folder" in r for r in rows), rows)
+            self.assertFalse(any(r.startswith("other ") for r in rows), rows)
+            page.fill(".finder .fq", "pkgfold"); page.wait_for_timeout(200)
+            page.press(".finder .fq", "Enter")
+            page.wait_for_function(f"() => S.pcursor === {json.dumps(k)} && document.activeElement.id === 'plist'", timeout=5000)
+
     def test_earlier_cards_come_in_only_when_the_scrolling_stops(self):
         """A long conversation draws its latest 40 requests; the earlier ones come in above once the user's scrolling
         stops, the view kept where it was. Never during the scroll: WebKit drops a scrollTop written during a

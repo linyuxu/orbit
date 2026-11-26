@@ -3,6 +3,8 @@
 /* The journal (⌘⇧D): Obsidian's daily note when the vault sets one up (.obsidian/daily-notes.json), else this week's. */
 const JOURNAL = { kind: "week", label: "This week" };
 const journalName = () => JOURNAL.kind === "day" ? "today's note" : "this week's note";
+/* A week note (in the journal's folder): its title is its name, shown above its text (files.js mountNoteTitle). */
+const isTitledNote = p => !!S.vault && !!JOURNAL.folder && isNote(p) && p.startsWith(S.vault + "/" + JOURNAL.folder + "/");
 async function loadVault() {
   try { const d = await api("GET", "/api/notes/info"); S.vault = d.root; if (d.journal) Object.assign(JOURNAL, d.journal); } catch {}
   loadNoteNames();

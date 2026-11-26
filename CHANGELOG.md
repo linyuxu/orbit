@@ -8,6 +8,11 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The week note starts empty (no heading a day: today's comes with its first entry). Its title is its name ("Week of
+  2026-11-23", in Obsidian's date folder too), shown above the text and apart from it (⌘A in the text never takes it);
+  edited, the file is renamed and ⌘⇧D still opens it (the vault's .orbit-journal.json keeps each week's note). This
+  week's note of the old kind (named by the date, a "# Week of" heading) is renamed so, its heading dropped, links kept.
+- ⌘R lists the folders opened from ⌘O (Files & Folders); chosen, the Files panel on it again.
 - ⌘O Files is Files & Folders: the session folders' folders are found too; one chosen shows in the Files panel, open,
   the keyboard on it.
 - The Files and Notes panels filtered stay a tree: the matches under their folders (each folder on the way open, a

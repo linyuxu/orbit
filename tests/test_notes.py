@@ -126,15 +126,21 @@ class NotesTest(test_skeleton.SkeletonTest):
         info = notes.week_note(d)
         self.assertTrue(info["path"].endswith("Weekly/Week of 2026-11-16.md"))
         self.assertEqual(info["heading"], "## Wed 11-18")
+        self.assertEqual(Path(info["path"]).read_text(), "")  # (empty: its title is its name; no day headings)
         notes.append_today("first thought", d=d)
         notes.append_today("> quoted answer", source="[demo #3](orbit://session/x#3)", d=d)
         text = Path(info["path"]).read_text()
-        wed = text.split("## Wed 11-18\n", 1)[1].split("## Thu", 1)[0]
+        self.assertTrue(text.startswith("## Wed 11-18\n"), text)  # (today's heading with its first entry)
+        wed = text.split("## Wed 11-18\n", 1)[1]
         self.assertEqual(wed.split("\n")[:6], ["", "first thought", "", "> quoted answer", wed.split("\n")[4], ""])
         self.assertTrue(wed.split("\n")[4].startswith("— [demo #3](orbit://session/x#3) · "))
-        self.assertIn("## Mon 11-16", text)
-        self.assertIn("## Sun 11-22", text)
+        self.assertNotIn("## Mon 11-16", text)
         self.assertNotIn("\n\n\n", text)
+        # its title edited (renamed): still this week's note
+        moved = str(Path(info["path"]).with_name("Launch week.md"))
+        os.rename(info["path"], moved)
+        notes.journal_renamed(info["path"], moved)
+        self.assertEqual(notes.week_note(date(2026, 11, 20))["path"], moved)
 
     def test_week_note_per_the_organization_guide(self):
         (self.vault / "Organization Guide.md").write_text("# How this vault works\n\nWeekly notes live in Journal.\n")
@@ -184,18 +190,25 @@ class NotesTest(test_skeleton.SkeletonTest):
             sun = date(2026, 11, 22)  # a Sunday: the week that began on Monday the 16th
             info = notes.week_note(sun)
             self.assertEqual((info["kind"], info["label"], info["heading"]), ("week", "This week", "## Sun 11-22"))
-            self.assertTrue(info["path"].endswith("Journal/202611/2026-11-16.md"))
+            self.assertTrue(info["path"].endswith("Journal/202611/Week of 2026-11-16.md"))  # (in its date folder, named as its title)
             self.assertEqual(notes.week_note(date(2026, 11, 16))["path"], info["path"])  # Monday: the same note
-            self.assertTrue(notes.week_note(date(2026, 11, 23))["path"].endswith("Journal/202611/2026-11-23.md"))  # the next Monday: a new one
+            self.assertTrue(notes.week_note(date(2026, 11, 23))["path"].endswith("Journal/202611/Week of 2026-11-23.md"))  # the next Monday: a new one
             text = Path(info["path"]).read_text()
-            self.assertTrue(text.startswith("# 2026-11-16\n\nWeek from 2026/11/16 · Monday\n\n## Mon 11-16\n"))
-            self.assertIn("## Sun 11-22", text)
+            self.assertEqual(text, "# Week of 2026-11-16\n\nWeek from 2026/11/16 · Monday\n")  # (Obsidian's template: no day headings)
             notes.append_today("first thought", d=sun)
             notes.append_today("> quoted", source="[demo #3](orbit://session/x#3)", d=sun)
             text = Path(info["path"]).read_text()
             self.assertTrue(text.split("## Sun 11-22\n", 1)[1].startswith("\nfirst thought\n\n> quoted\n— [demo #3]"))
             self.assertNotIn("\n\n\n", text)
-            self.assertEqual(self.req("GET", "/api/notes/info")[1]["journal"], {"kind": "week", "label": "This week"})
+            self.assertEqual(self.req("GET", "/api/notes/info")[1]["journal"], {"kind": "week", "label": "This week", "folder": "Journal"})
+            # this week's note of the old kind (named by the date, a "# Week of" heading): renamed, the heading dropped
+            (obs / "daily-notes.json").write_text('{"folder": "Journal", "format": "YYYYMM/YYYY-MM-DD"}')
+            old = self.vault / "Journal" / "202611" / "2026-11-30.md"
+            old.write_text("# Week of 2026-11-30\n\nkept text\n")
+            (self.vault / "Links.md").write_text("see [[2026-11-30]]\n")
+            new = Path(notes.week_note(date(2026, 12, 2))["path"])
+            self.assertEqual((new.name, new.read_text(), old.exists()), ("Week of 2026-11-30.md", "kept text\n", False))
+            self.assertIn("[[Week of 2026-11-30]]", (self.vault / "Links.md").read_text())
             self.assertEqual(notes.moment("[Week] ww, ddd Do MMM YY", date(2026, 1, 3)), "Week 01, Sat 3rd Jan 26")
         finally:
             (obs / "daily-notes.json").unlink()

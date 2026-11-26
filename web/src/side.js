@@ -111,15 +111,15 @@ function ensureFrame(spec) {
     } else if (spec.kind === "web") fr.setAttribute("sandbox", "allow-scripts allow-popups allow-forms");
     fr.addEventListener("focus", () => { LAST_PANE.side = true; renderSide(); followSoon(); });  // (the keyboard went beside: follow follows it)
     fr.addEventListener("load", () => { fr.dataset.loaded = "1"; sideLoaded(spec, fr); });
-    fr.setAttribute("src", src);
+    fr.setAttribute("src", src); fr.dataset.src = src;
     $("#sideframes").appendChild(fr);
     FRAMES.set(spec.id, fr);
-  } else if (fr.getAttribute("src") !== src) {
+  } else if ((fr.dataset.src || fr.getAttribute("src")) !== src) {
     const base = s => s.replace(/%2C%22line%22%3A\d+|%22line%22%3A\d+%2C?/g, "");  // (the same file at another line)
     if (spec.kind === "file" && base(fr.getAttribute("src")) === base(src)) {
       try { fr.contentWindow.postMessage({ orbit: "reveal", path: spec.path, line: spec.line }, location.origin); } catch {}
       fr.setAttribute("data-line", String(spec.line || ""));
-    } else fr.setAttribute("src", src);
+    } else { fr.setAttribute("src", src); fr.dataset.src = src; }
   }
   fr.dataset.seen = Date.now();
   if (FRAMES.size > FRAME_POOL) {  // the least recently shown frames go; they load again when shown
@@ -396,6 +396,7 @@ addEventListener("message", e => {
   else if (m.orbit === "key") runForwarded(m.combo);
   else if (m.orbit === "open-file") { if (m.line) S.reveal = { path: m.path, line: m.line }; openFile(m.path, { pinned: !!m.pinned }); if (m.line && S.file === m.path) applyReveal(m.path); }
   else if (m.orbit === "open-side") openSide(m.spec);
+  else if (m.orbit === "renamed" && m.from && m.to) pathRenamed(String(m.from), String(m.to));  // (a note's title edited beside)
   else if (m.orbit === "side-pin") {  // edited beside: a preview kept
     const ent = sideEntry(), k = ent ? ent.list.findIndex(x => FRAMES.get(x.id) && FRAMES.get(x.id).contentWindow === e.source) : -1;
     if (k >= 0) pinSide(k);

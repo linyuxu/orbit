@@ -130,6 +130,10 @@ function revealFolder(root, rel) {
   const full = rel ? root + "/" + rel : root;  // (under the nearest session folder that holds it: a nested one's own)
   const near = filesRoots().all.map(f => f.path).filter(p => full === p || full.startsWith(p + "/")).sort((a, b) => b.length - a.length)[0];
   if (near) { root = near; rel = full === near ? "" : full.slice(near.length + 1); }
+  else {  // (in no open session's folder now: under Places, as Go to a folder does)
+    if (!FILES.places.includes(full)) { FILES.places.push(full); LS.set("filesPlaces", FILES.places); }
+    root = full; rel = "";
+  }
   if (filesRoots().other.some(f => f.path === root) && !FILES.other) { FILES.other = true; LS.set("filesOther", true); }  // (another group's folder)
   setRootOpen(root, true);
   if (rel) {

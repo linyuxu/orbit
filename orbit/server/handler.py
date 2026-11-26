@@ -962,7 +962,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                                    "notes": notes.search(terms, limit) if terms else []})
             if p == "/api/notes/info":
                 kind = notes.journal_kind()  # ⌘⇧D: Obsidian's daily note, else this week's
-                return self._json({"root": str(notes.root()), "journal": {"kind": kind, "label": "Today" if kind == "day" else "This week"}})
+                return self._json({"root": str(notes.root()), "journal": {"kind": kind, "label": "Today" if kind == "day" else "This week",
+                                                                          "folder": notes.journal_folder()}})
             if p == "/api/notes/list":
                 return self._json({"root": str(notes.root()), "notes": notes.all_notes()})
             if p == "/api/notes/resolve":
@@ -1273,6 +1274,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 old = str(files._abs(b.get("path", "")))
                 if notes.in_vault(old):  # renaming a note (or an attachment) rewrites the links to it
                     r["links"] = notes.update_links(old, r["path"])
+                    notes.journal_renamed(old, r["path"])  # (a week note: still its week's)
                 return self._json(r)
             if p == "/api/https":  # HTTPS for other machines and the phone, by Tailscale: on / off
                 if self.from_remote:

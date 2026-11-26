@@ -117,6 +117,7 @@ function mountFile(path, ed, f) {
       onFiles: (files, pos) => dropIntoEditor(path, pos, files.map(file => ({ file }))),
       zoom: url => openLightbox(url),
     });
+    if (typeof isTitledNote === "function" && isTitledNote(path)) mountNoteTitle(path, ed);
     applyReveal(path);
     if (!ed.host.dataset.linkmenu) {  // a link's own menu (right-click on it): how to open it
       ed.host.dataset.linkmenu = "1";
@@ -472,17 +473,71 @@ async function renamePath(path) {
   const v = await dialog({ title: "Rename", fields: [{ key: "name", label: "New name (or a/relative/path)", value: basename(path) }],
     validate: v => v.name.trim() ? null : "Give it a name." });
   if (!v) return;
-  const to = dirname(path) + "/" + v.name.trim();
+  await renameTo(path, dirname(path) + "/" + v.name.trim());
+}
+/* A file renamed (the Rename dialog, a note's title): on disk, then wherever it is open (its tabs, its editor, a
+   side tab, ⌘R). A page beside tells the page around it. True when it went. */
+async function renameTo(path, to) {
+  if (to === path) return true;
   try {
     await saveFile(path);
     await api("POST", "/api/files/rename", { path, new: to });
-    for (const gid of Object.keys(S.ftabs)) for (const t of S.ftabs[gid]) if (t.path === path) t.path = to;
-    const ed = EDITORS.get(path);
-    if (ed) { EDITORS.delete(path); EDITORS.set(to, ed); }
-    if (S.file === path) S.file = to;
-    saveUi(); renderAll(); if (S.file === to) renderFileHead();
-    refreshTree(ctxRoot(), true);
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(e.message); return false; }
+  const ed = EDITORS.get(path);
+  if (ed) { EDITORS.delete(path); EDITORS.set(to, ed); }
+  if (S.file === path) S.file = to;
+  if (EMBED) {
+    if (EMBED.path === path) EMBED.path = to;
+    try { parent.postMessage({ orbit: "renamed", from: path, to }, location.origin); } catch {}
+    renderFileHead();
+    return true;
+  }
+  pathRenamed(path, to);
+  return true;
+}
+function pathRenamed(path, to) {
+  for (const gid of Object.keys(S.ftabs)) for (const t of S.ftabs[gid]) if (t.path === path) t.path = to;
+  const ed = EDITORS.get(path);
+  if (ed) { EDITORS.delete(path); EDITORS.set(to, ed); }
+  if (S.file === path) S.file = to;
+  for (const r of S.recent) if (r.id === "f:" + path) r.id = "f:" + to;
+  LS.set("recent", S.recent);
+  for (const [key, e] of Object.entries(S.sides)) for (const x of (e && e.list) || []) {
+    if (x.kind !== "file" || x.path !== path) continue;
+    x.path = to;
+    const fr = FRAMES.get(x.id); if (fr) fr.dataset.src = sideSrc(x);  // (its page knows already: not loaded again)
+    sideOp(key, { op: "replace", id: x.id, spec: x });
+  }
+  saveUi(); renderAll(); renderSide(); if (S.file === to) renderFileHead();
+  refreshTree(ctxRoot(), true);
+  if (S.vault && to.startsWith(S.vault + "/")) loadNoteNames();
+}
+/* A week note's title (notes.js isTitledNote): its name, above its text and apart from it (⌘A in the text never takes
+   it); edited, the file is renamed (⏎ or leaving it; Esc puts it back). ⏎ and ↓ go into the text. */
+function mountNoteTitle(path, ed) {
+  const t = document.createElement("input");
+  t.className = "ntitle"; t.spellcheck = false; t.title = "The note's name: editing it renames the file";
+  const pathNow = () => { for (const [p, e] of EDITORS) if (e === ed) return p; return path; };
+  const stemOf = p => basename(p).replace(/\.md$/i, "");
+  t.value = stemOf(path);
+  const row = document.createElement("div"); row.className = "ntitle-row"; row.appendChild(t);
+  ed.host.classList.add("titled"); ed.host.prepend(row);
+  let busy = false;
+  const commit = async () => {
+    const p = pathNow(), name = t.value.trim();
+    if (busy || name === stemOf(p)) return;
+    if (!name || /[/\\:]/.test(name) || name.startsWith(".")) { toast("A note's name: no / \\ : and not starting with a dot"); t.value = stemOf(p); return; }
+    busy = true;
+    const ok = await renameTo(p, dirname(p) + "/" + name + ".md");
+    busy = false;
+    if (!ok) t.value = stemOf(p);
+  };
+  t.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); e.stopPropagation(); commit(); if (ed.ed) ed.ed.focus(); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); t.value = stemOf(pathNow()); if (ed.ed) ed.ed.focus(); }
+  });
+  t.addEventListener("blur", commit);
+  ed.titleEl = t;
 }
 async function trashPath(path) {
   const ok = await confirmDialog({ title: `Delete “${basename(path)}”?`, body: "It moves to the Trash, so you can put it back from there.", ok: "Move to Trash", danger: true });

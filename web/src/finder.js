@@ -177,11 +177,11 @@ async function fileItems(side) {
     const here = root === cur || (cur && cur.startsWith(root + "/"));
     // its folders (the session folder itself first): chosen, the Files panel on it
     out.push({ label: name, detail: tilde(root.replace(/^\/@[^/]+/, "")), match: name, iconHtml: folderIcon(false), tag: machine || "folder",
-               boost: here ? 0.5 : 0, run: () => revealFolder(root, "") });
+               boost: here ? 0.5 : 0, run: () => { recordVisit("d:" + root); revealFolder(root, ""); } });
     for (const d of t.index ? t.index.keys() : []) {
       if (!d) continue;
       out.push({ label: basename(d), detail: name + (d.includes("/") ? "/" + dirname(d) : ""), match: name + "/" + d, iconHtml: folderIcon(false),
-                 tag: machine || "folder", boost: here ? 0.5 : 0, run: () => revealFolder(root, d) });
+                 tag: machine || "folder", boost: here ? 0.5 : 0, run: () => { recordVisit("d:" + root + "/" + d); revealFolder(root, d); } });
     }
     for (const f of t.files || []) {
       const st = here && t.status[f];
@@ -342,6 +342,12 @@ function openRecent() {
     }
     return [...groups, ...out];
     function item(r) {
+      if (r.id.startsWith("d:")) {  // a folder opened from ⌘O (Files & Folders): the Files panel on it again
+        const p = r.id.slice(2), g = gname(r.g);
+        return { label: basename(p.replace(/^\/@[^/]+/, "")) || p, iconHtml: folderIcon(false), detail: tilde(dirname(p.replace(/^\/@[^/]+/, ""))),
+                 tag: [g, (/^\/@([^/]+)/.exec(p) || [])[1] || "folder"].filter(Boolean).join(" · "), match: `${p} ${g}`, key: ago(r.t),
+                 run: () => revealFolder(p, "") };
+      }
       if (r.id.startsWith("f:")) {
         const p = r.id.slice(2);
         const open = (S.ftabs[r.g] || []).some(t => t.path === p) || fileTabs().some(t => t.path === p);
