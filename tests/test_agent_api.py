@@ -168,6 +168,15 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         self.assertEqual((len(st["items"]), st["i"], st["items"][2]["line"]), (3, 2, 7))
         st = post({"op": "close", "id": "rv1"})[1]
         self.assertEqual(([x["kind"] for x in st["items"]], st["i"]), (["web", "file"], 1))
+        # a preview (a file clicked in the Files panel): the next one takes its place; one already there is selected
+        g = Path(self.work) / "other.py"; g.write_text("y\n")
+        prev = post({"op": "open", "spec": {"kind": "file", "path": str(g), "preview": True, "id": "pv1"}})[1]
+        self.assertEqual(([x["kind"] for x in prev["items"]], prev["i"]), (["web", "file", "file"], 2))
+        st = post({"op": "replace", "id": "pv1", "spec": {"kind": "file", "path": str(f.with_name("third.py")), "preview": True, "id": "pv2"}})[1]
+        self.assertEqual(([x.get("path", "").rsplit("/", 1)[-1] for x in st["items"]], st["i"], st["items"][2]["id"]), (["", "notes.py", "third.py"], 2, "pv2"))
+        st = post({"op": "replace", "id": "pv2", "spec": {"kind": "file", "path": os.path.realpath(f), "preview": True}})[1]
+        self.assertEqual((len(st["items"]), st["i"]), (3, 1))  # (notes.py is there: shown, the preview stays)
+        st = post({"op": "close", "id": "pv2"})[1]
         self.assertEqual(post({"op": "open", "spec": {"kind": "nope"}})[0], 400)
         self.assertEqual(post({"op": "close", "id": "gone"})[0], 400)
         self.assertEqual(self.req("GET", "/api/sessions/nope/side")[0], 404)

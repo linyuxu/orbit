@@ -30,7 +30,7 @@ function finder({ title, tabs, start = 0, opener, lead }) {  // lead(q): items a
     const ft = box.querySelector(".ftabs");
     if (ft) ft.innerHTML = tabs.map((x, k) => `<button class="ptab${k === t ? " cur" : ""}" data-t="${k}">${esc(x.name)}</button>`).join("");
   };
-  const row = (it, k) => `<div class="frow${k === i ? " sel" : ""}" data-i="${k}">${it.mark ? stateMark(it.mark) : it.dot ? `<span class="dot ${it.dot}"></span>` : ""}${it.icon ? `<span style="color:var(--ink-3)">${I(it.icon, 13)}</span>` : ""}<span class="fl">${esc(it.label)}</span>${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ""}<span class="fd">${boldTerms(it.detail || "", it.hl)}</span><span class="fk">${esc(it.key || "")}</span></div>`;
+  const row = (it, k) => `<div class="frow${k === i ? " sel" : ""}" data-i="${k}">${it.mark ? stateMark(it.mark) : it.dot ? `<span class="dot ${it.dot}"></span>` : ""}${it.icon ? `<span style="color:var(--ink-3)">${I(it.icon, 13)}</span>` : it.iconHtml ? `<span class="gi">${it.iconHtml}</span>` : ""}<span class="fl">${esc(it.label)}</span>${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ""}<span class="fd">${boldTerms(it.detail || "", it.hl)}</span><span class="fk">${esc(it.key || "")}</span></div>`;
   const draw = () => {
     const s = q.value.trim();
     const server = !!tabs[t].search;  // the server already matched these
@@ -153,6 +153,14 @@ function sessionItem(s, { detail, side } = {}) {
     menu: s.closed ? null : where => tabMenu(s.id, where),
   };
 }
+/* A group, as ⌘O's Sessions and ⌘R list it: chosen, the group in front, on the tab it was left on (its last session,
+   file or home: switchGroup). Groups are switched often; reached here by name like a session. */
+function groupItem(gid, { key = "" } = {}) {
+  const n = tabIds(gid).length, last = String(S.lastTab[gid] || "");
+  const at = last === "f:" + HOME ? "its home" : last.startsWith("f:") ? basename(last.slice(2)) : (S.sessions.get(last.replace(/^s:/, "")) || {}).name || "";
+  return { label: groupPath(gid), iconHtml: groupIconHtml(gid, 13), tag: "group", key, match: `${groupPath(gid)} group`,
+           detail: [at ? "→ " + at : "", `${n} session${n === 1 ? "" : "s"}`].filter(Boolean).join(" · "), run: () => switchGroup(gid) };
+}
 /* The Files tab: every file of every open session's folder (this machine's and the connected ones'; a folder inside
    another counted once), the current one's first. Each says its folder ("project/dir"), and the folder's name is
    matched too ("orbit readme"). A folder listed before is used at once (and listed again meanwhile); the others are
@@ -221,7 +229,8 @@ function openFinder(start, { side = false, opener } = {}) {
       const all = (await api("GET", "/api/sessions?closed=1")).sessions;
       const open = all.filter(s => !s.closed);
       const closed = all.filter(s => s.closed && s.named).sort((a, b) => (b.closed_at || 0) - (a.closed_at || 0));
-      return [...open, ...closed].map(s => sessionItem(s, { side }));
+      const groups = side ? [] : S.groups.filter(g => g.id !== S.group).map(g => groupItem(g.id));
+      return [...open.map(s => sessionItem(s, { side })), ...groups, ...closed.map(s => sessionItem(s, { side }))];
     } },
     { name: "Files", empty: "No session folders: open a session (All Files also looks in the homes).", items: () => fileItems(side) },
     { name: "All Files", empty: "Type to search file names in every session's folder and in the home folder, on this Mac and on the machines it reaches.",
@@ -314,21 +323,35 @@ function openRecent() {
   if (modal && modal.kind === "finder" && modal.opener === "M:KeyR") { closeModal(); return; }
   finder({ title: "Recent", opener: "M:KeyR", tabs: [{ name: "Recent", empty: "Nothing seen yet.", items: async () => {
     const all = new Map((await api("GET", "/api/sessions?closed=1")).sessions.map(s => [s.id, s]));
-    const here = tabKey();
-    return S.recent.filter(r => r.id !== here).map(r => {
+    const here = tabKey(), seenG = new Set([S.group, FAV]), out = [];
+    const gname = g => g && g !== FAV && S.groups.some(x => x.id === g) ? groupPath(g) : "";
+    // Each group (not the one in front) also as a row of its own, after its latest tab: back to that group as it was left
+    const withGroup = (it, g) => {
+      if (!it) return;
+      out.push(it);
+      if (g && !seenG.has(g) && gname(g)) { seenG.add(g); out.push(groupItem(g, { key: it.key })); }
+    };
+    for (const r of S.recent.filter(r => r.id !== here)) {
+      const s = r.id.startsWith("s:") && all.get(r.id.slice(2));
+      withGroup(item(r), r.g || (s && s.group) || "");
+    }
+    return out;
+    function item(r) {
       if (r.id.startsWith("f:")) {
         const p = r.id.slice(2);
-        const open = fileTabs().some(t => t.path === p);
+        const open = (S.ftabs[r.g] || []).some(t => t.path === p) || fileTabs().some(t => t.path === p);
         if (isView(p)) return { label: viewInfo(p).title, icon: viewInfo(p).icon, detail: isPluginTab(p) ? parsePluginTab(p).plugin : "Orbit", match: viewInfo(p).title,
                                 key: ago(r.t), tag: open ? "" : "closed", run: () => openFile(p, { pinned: true }) };
-        return { label: isNote(p) ? noteTitle(p) : basename(p), icon: "file", detail: tilde(dirname(p)), match: p, key: ago(r.t),
-                 tag: [isNote(p) ? "note" : "", open ? "" : "closed"].filter(Boolean).join(" · "),
-                 run: () => openFile(p, { pinned: open }), menu: where => fileMenu(p, where) };  // a closed file reopens as a preview
+        const g = gname(r.g);
+        return { label: isNote(p) ? noteTitle(p) : basename(p), icon: "file", detail: tilde(dirname(p)), match: `${p} ${g}`, key: ago(r.t),
+                 tag: [g, isNote(p) ? "note" : "", open ? "" : "closed"].filter(Boolean).join(" · "),
+                 run: () => { if (r.g && r.g !== S.group && gname(r.g) && (S.ftabs[r.g] || []).some(t => t.path === p)) switchGroup(r.g, { quiet: true }); openFile(p, { pinned: open }); },
+                 menu: where => fileMenu(p, where) };  // a closed file reopens as a preview
       }
       const s = all.get(r.id.slice(2));
       if (!s) return null;
       return { ...sessionItem(s, { detail: s.last ? oneLine(s.last.text) : tilde(s.cwd) }), key: ago(r.t) };
-    }).filter(Boolean);
+    }
   } }] });
 }
 /* ⌘⇧F: every session (open or closed) and the notes; newest first. ⏎ opens the card or the note at the line. */

@@ -71,6 +71,7 @@
 .finder .fq:focus { border-color:var(--accent); outline:none; }
 .finder .flist { max-height:52vh; overflow-y:auto; margin-top:6px; }
 .frow { min-height:28px; display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:var(--r-s); cursor:default; font-size:calc(12px * var(--ui-k)); }
+.frow .gi { display:inline-flex; flex:none; color:var(--ink-3); }  /* a group's icon (⌘O, ⌘R) */
 .frow.sel { background:var(--sel); }
 .frow .fl { color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:none; max-width:45%; }
 .frow .fd { color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1; }

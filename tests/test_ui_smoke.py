@@ -938,8 +938,8 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
                 page.keyboard.press("Escape")
 
     def test_a_click_in_the_left_panel_keeps_the_keyboard_there(self):
-        """A click on a row of the left panel opens it and the keyboard stays in the panel (↓ moves there); a
-        double-click goes into what it opened (the session's input, the file's editor)."""
+        """A click on a row of the left panel opens it (a file: beside) and the keyboard stays in the panel (↓ moves
+        there); a double-click goes into what it opened (the session's input, the file's editor in the main pane)."""
         gid = self.group("Clicks")
         a, b = self.session_in(gid, "click-a"), self.session_in(gid, "click-b")
         d = Path(self.work) / "clicks"; d.mkdir(exist_ok=True); (d / "k.txt").write_text("one\ntwo\n"); (d / "l.txt").write_text("x")
@@ -963,10 +963,11 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.evaluate(f"switchTo({json.dumps(files_sid)}); setPanelTab('files'); focusPanel(); 0")
             frow = f"#plist .prow[data-k='f:{d}|k.txt']"
             page.wait_for_selector(frow)
-            page.click(frow)
-            page.wait_for_function(f"() => S.file === {json.dumps(str(d / 'k.txt'))}", timeout=5000)
+            page.click(frow)  # (shown beside: test_a_file_clicked_in_the_tree_shows_beside)
+            page.wait_for_function(f"() => S.side && S.side.path === {json.dumps(str(d / 'k.txt'))}", timeout=5000)
             self.assertEqual(page.evaluate("document.activeElement && document.activeElement.id"), "plist", name)
             page.dblclick(frow)
+            page.wait_for_function(f"() => S.file === {json.dumps(str(d / 'k.txt'))}", timeout=5000)
             page.wait_for_function("() => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.cm-editor'))", timeout=5000)
 
     def test_the_files_tree_answers_the_mouse_and_keeps_its_scroll(self):
@@ -1008,6 +1009,75 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.evaluate("focusPanel()"); page.keyboard.press("ArrowDown")  # (a key: the cursor in view again)
             page.wait_for_timeout(100)
             self.assertLess(page.evaluate("plist.scrollTop"), y, name)
+
+    def test_a_file_clicked_in_the_tree_shows_beside(self):
+        """A click on a file in the Files panel shows it beside, a preview (the next click takes its place), the
+        session staying in front and the keyboard in the panel; a double-click on the side tab keeps it; a double-click
+        on the row opens it in the main pane (its preview beside gone). Side tabs wear their main tab's marks and have
+        a menu. ⌘O's Sessions lists the groups; ⌘R names each tab's group and lists the group after its latest tab."""
+        gid = self.group("Beside files")
+        other = self.group("Elsewhere grp")
+        d = Path(self.work) / "beside"
+        d.mkdir(exist_ok=True)
+        for n in ("one.py", "two.md", "three.txt"):
+            (d / n).write_text(n + "\n")
+        sid = self.req("POST", "/api/sessions", {"cwd": str(d), "name": "beside-s", "group": gid})[1]["id"]
+        osid = self.session_in(other, "elsewhere-s")
+        row = lambda n: f"#plist .prow[data-k='f:{d}|{n}']"
+        tabs = "[...document.querySelectorAll('#sidetabs .stab')].map(t => t.querySelector('.nm').innerText.trim() + (t.classList.contains('preview') ? '*' : ''))"
+        for name, page in self.each():
+            page.add_init_script("try { localStorage.removeItem('orbit.recent'); } catch (e) {}")
+            self.req("POST", f"/api/sessions/{sid}/side", {"op": "clear"})  # (the server's: the last browser's gone)
+            self.open(page)
+            page.evaluate(f"switchGroup({json.dumps(other)}); switchTo({json.dumps(osid)}); 0")
+            page.wait_for_timeout(200)
+            page.evaluate(f"switchGroup({json.dumps(gid)}); switchTo({json.dumps(sid)}); S.left.shown = true; applyLeft(); setPanelTab('files'); focusMain(); 0")
+            page.wait_for_selector(row("one.py"))
+            page.click(row("one.py"))
+            page.wait_for_function("() => S.side && S.side.path && S.side.path.endsWith('one.py')", timeout=5000)
+            self.assertEqual(page.evaluate("[S.file, S.current]"), [None, sid], name)  # (the session stays in front)
+            page.wait_for_timeout(600)  # (the frame loaded: the keyboard still in the panel)
+            self.assertEqual(page.evaluate("document.activeElement && document.activeElement.id"), "plist", name)
+            self.assertEqual(page.evaluate(tabs), ["one.py*"], name)
+            page.click(row("two.md"))
+            page.wait_for_timeout(300)
+            self.assertEqual(page.evaluate(tabs), ["two.md*"], name)  # (in the preview's place)
+            page.dblclick("#sidetabs .stab")
+            page.wait_for_timeout(200)
+            page.click(row("three.txt"))
+            page.wait_for_timeout(300)
+            self.assertEqual(page.evaluate(tabs), ["two.md", "three.txt*"], name)
+            self.assertTrue(page.evaluate("!!document.querySelector('#sidetabs .stab .fi *')"), name)  # (its file mark)
+            page.click("#sidetabs .stab.active", button="right")
+            page.wait_for_selector(".menu >> text=Open as a main tab")
+            page.keyboard.press("Escape")
+            page.dblclick(row("one.py"))
+            page.wait_for_function(f"() => S.file === {json.dumps(str(d / 'one.py'))}", timeout=5000)
+            page.evaluate(f"switchTo({json.dumps(sid)}); 0"); page.wait_for_timeout(200)
+            page.evaluate("openSide({ kind: 'session', sid: " + json.dumps(osid) + " }, { focus: false })")
+            page.wait_for_timeout(200)
+            self.assertTrue(page.evaluate("!!document.querySelector('#sidetabs .stab.active .si')"), name)  # (a session's status mark)
+            # ⌘O: the groups among the sessions; chosen, that group in front
+            page.evaluate("openFinder('Sessions')")
+            page.wait_for_selector(".finder .frow")
+            page.keyboard.type("Elsewhere grp")
+            page.wait_for_timeout(200)
+            first = page.inner_text(".finder .flist .frow")
+            self.assertIn("group", first, name)
+            page.keyboard.press("Enter")
+            page.wait_for_function(f"() => S.group === {json.dumps(other)} && S.current === {json.dumps(osid)}", timeout=3000)
+            # ⌘R: the tab's group named, and the group itself after it
+            page.evaluate("openRecent()")
+            page.wait_for_selector(".finder .frow")
+            rows = page.evaluate("[...document.querySelectorAll('.finder .frow')].map(r => r.innerText.replace(/\\s+/g, ' '))")
+            self.assertTrue(any("Beside files" in r and "group" in r for r in rows), rows)
+            page.keyboard.press("Escape")
+            page.evaluate(f"closeGroupTab({{gid: {json.dumps(gid)}, path: {json.dumps(str(d / 'one.py'))}}})")
+            page.wait_for_timeout(300)
+        for s_ in (sid, osid):  # (the tests after this one see the panel as before)
+            self.req("POST", f"/api/sessions/{s_}/close")
+        for g in (gid, other):
+            self.req("POST", f"/api/groups/{g}/delete")
 
     def test_earlier_cards_come_in_only_when_the_scrolling_stops(self):
         """A long conversation draws its latest 40 requests; the earlier ones come in above once the user's scrolling

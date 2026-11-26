@@ -17,6 +17,7 @@ only list of shortcuts: the ⌘/ sheet is generated from the same data, and ever
 | 6 | Never lose input | Unsent drafts survive tab switches, ⌘⇧R and restarts; a failed send puts the text back |
 | 7 | Confirm only what is destructive | Closing a working session or deleting a file asks; ⏎ = OK, Esc = Cancel. Everything else acts at once |
 | 8 | Focus belongs to the tab | Each tab remembers whether the keyboard was in its main pane or its side pane and gets it back on return, whatever switched the tab (⌘⇧[ ⌘⇧], a click, ⌘1…9, ⌘O, ⌘- ⌘=). A tab not visited yet: where the keyboard is now (the side pane only if the tab has a side tab). Switching never moves the keyboard between panes on its own; ⌘⇧[ ⌘⇧] typed in the side pane switch tabs directly. Lists and dialogs that have the keyboard keep it |
+| 9 | Keep the user's focus | A look does not move the work: a click in a list shows its row where the current work stays in front (a file clicked in the Files panel opens beside, as a preview the next click replaces; the keyboard stays in the list). Going into something is explicit: ⏎ or a double-click (the main pane, the keyboard in it) |
 
 ## 2. The key handler
 
@@ -107,7 +108,7 @@ Every list (left-panel lists, the ⌘O finder, menus, the bell list, the shortcu
 | Esc | Back (to the input, or close the list) |
 | ⌘⇧[ ⌘⇧] | Switch the list's tabs (left panel tabs, finder tabs) |
 
-Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it. Sessions: ← / → fold and unfold a group (← on a session goes to its group); a filter looks inside folded groups.
+Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it. The mouse (principle 9): a click on a file shows it beside (an italic preview tab; a double-click on that side tab, or an edit in it, keeps it), a click on a folder toggles it, a double-click on a file opens it in the main pane with the keyboard in its editor. Sessions: ← / → fold and unfold a group (← on a session goes to its group); a filter looks inside folded groups.
 
 ## 7. Menus, dialogs, dropdowns
 

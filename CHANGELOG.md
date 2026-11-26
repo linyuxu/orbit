@@ -8,6 +8,15 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A file clicked in the Files panel shows beside, as a preview (italic) the next click replaces; the session or file
+  in front and the keyboard stay where they were (interaction.md principle 9: keep the user's focus). A double-click on
+  the side tab or an edit in it keeps it; a double-click on the row opens the file in the main pane, the keyboard in its
+  editor. Side tabs wear their main tab's marks (a session's status and agent, a file's type) and have a menu (open as
+  a main tab, keep open, copy path or link, reload, close the others).
+- ⌘O Sessions lists the groups too, and ⌘R names each tab's group and lists the group after its latest tab: chosen, the
+  group in front on the tab it was left on.
+- The conversation and the left panel no longer jump while scrolled: earlier cards come in once the scrolling stops;
+  the Files tree keeps its place through redraws and answers a click that a redraw used to swallow.
 - A click in the left panel opens the row and the keyboard stays in the panel (↑↓, ⏎, ⌥W… go on there; Esc goes to
   the main pane); a double-click goes into what it opened (the session's input, the file's editor; a file pinned). The
   double-click is told by the press's click count: the first click redraws the rows, and the browser's dblclick never

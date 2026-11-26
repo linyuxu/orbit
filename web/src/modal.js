@@ -10,7 +10,7 @@ function focusMain() {
   if (xOn()) { $("#xbody").focus({ preventScroll: true }); return; }
   if (EMBED_REVIEW) { $("#rvbody").focus({ preventScroll: true }); return; }
   if (isPluginTab(S.file)) { focusPView(); return; }  // a plugin's view: its reply editor, else its messages
-  if (S.file) { const ed = EDITORS.get(S.file); if (ed && ed.ed) ed.ed.focus(); return; }
+  if (S.file) { const ed = EDITORS.get(S.file); if (ed && ed.ed) ed.ed.focus(); else FOCUS_ON_LOAD = S.file; return; }  // (still loading: once it is)
   if (cur()) input.focus({ preventScroll: true });
   else conv.focus({ preventScroll: true });
 }

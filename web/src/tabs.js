@@ -2,7 +2,7 @@
 /* ===================================================================== tabs and groups */
 function recordVisit(key) {
   if (!key || EMBED) return;
-  S.recent = [{ id: key, t: Date.now() / 1000 }, ...S.recent.filter(r => r.id !== key)].slice(0, 80);
+  S.recent = [{ id: key, t: Date.now() / 1000, g: S.group }, ...S.recent.filter(r => r.id !== key)].slice(0, 80);  // (g: the group it was in)
   LS.set("recent", S.recent);
 }
 /* Focus belongs to the tab (interaction.md principle 8): leaving a tab remembers whether the keyboard was in its main

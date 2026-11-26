@@ -91,7 +91,7 @@ class Sides:
 
     def side_op(self, sid: str, op: str, spec: Any = None, item_id: str = "") -> dict:
         """open (spec: shown, added after the one shown unless it is there already: then that one, its line or title
-        updated), close (id), select (id), clear. The new state, told to every client."""
+        updated), replace (id, spec: in that one's place; a preview), close (id), select (id), clear. The new state, told to every client."""
         self.get(sid)
         with self.lock:
             d = self._sides_read()
@@ -110,6 +110,17 @@ class Sides:
                         drop = min((n for n in range(len(items)) if n != i), key=lambda n: items[n].get("t", 0))
                         items.pop(drop)
                         i -= drop < i
+            elif op == "replace":  # (a preview: the next one clicked takes its place)
+                sp = clean(spec)
+                k = next((n for n, x in enumerate(items) if x.get("id") == item_id), -1)
+                there = next((n for n, x in enumerate(items) if same(x, sp)), -1)
+                if there >= 0:
+                    i = there
+                elif k >= 0:
+                    items[k], i = {**sp, "t": time.time()}, k
+                else:
+                    i = i + 1 if items else 0
+                    items.insert(i, {**sp, "t": time.time()})
             elif op in ("close", "select"):
                 k = next((n for n, x in enumerate(items) if x.get("id") == item_id), -1)
                 if k < 0:
@@ -122,7 +133,7 @@ class Sides:
             elif op == "clear":
                 items, i = [], 0
             else:
-                raise ValueError(f"no such op: {op} (open, close, select, clear)")
+                raise ValueError(f"no such op: {op} (open, replace, close, select, clear)")
             new = {"items": items, "i": max(0, i), "rev": int(st.get("rev") or 0) + 1}
             if items:
                 d[sid] = new

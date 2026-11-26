@@ -107,6 +107,10 @@ body.app #titlebar { --bar:max(calc(30px * var(--ui-k)), calc(max(32px, 38px * v
   color:var(--ink-3); cursor:default; }
 .stab:hover { background:var(--hover); }
 .stab .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.stab .fi { color:var(--ink-3); display:inline-flex; flex:none; }  /* its mark, as its main tab wears it */
+.stab.active .fi { color:var(--ink-2); }
+.stab .si, .stab .hlogo { flex:none; }
+.stab.preview .nm { font-style:italic; }
 .stab.active { color:var(--ink-2); background:var(--bg); box-shadow:0 0 0 1px var(--line); }
 #side.focused .stab.active { color:var(--ink); font-weight:calc(600 + var(--wd)); }
 .stab .x { width:16px; height:16px; display:grid; place-items:center; border-radius:4px; visibility:hidden; flex:none; }

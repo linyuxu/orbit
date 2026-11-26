@@ -29,7 +29,12 @@ function toggleView(path) {
   if (S.file === path && !EMBED) { closeFile(path); return; }
   openFile(path, { pinned: true });
 }
+let FOCUS_ON_LOAD = null;  // a file the keyboard goes into once its editor is there (modal.js focusMain)
 function pinFile(path) {
+  if (EMBED && EMBED.kind === "file") {  // edited beside: its side tab kept, once (side.js)
+    if (!pinFile.told) { pinFile.told = true; try { parent.postMessage({ orbit: "side-pin", path }, location.origin); } catch {} }
+    return;
+  }
   const t = fileTabs().find(x => x.path === path);
   if (t && !t.pinned) { t.pinned = true; saveUi(); renderTabs(); renderFileHead(); }
 }
@@ -93,7 +98,9 @@ async function showFile(path) {
   applyReveal(path);
   loadBacklinks(path);
   setTimeout(() => {
-    if (S.file === path && ed.ed && !modal && mayFocus() && !panelFocused() && !sideFocused() && document.activeElement !== input) ed.ed.focus();
+    const asked = FOCUS_ON_LOAD === path;  // (focusMain while it loaded: a double-click in the Files panel)
+    if (asked) FOCUS_ON_LOAD = null;
+    if (S.file === path && ed.ed && !modal && mayFocus() && (asked || (!panelFocused() && !sideFocused() && document.activeElement !== input))) ed.ed.focus();
   }, 0);
 }
 function mountFile(path, ed, f) {

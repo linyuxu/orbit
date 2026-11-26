@@ -602,6 +602,9 @@ function openRow(r, { focus = true, pinned = false } = {}) {
     if (r.kind === "note") return;
     if (r.kind === "dir") { toggleDir(r.rel, undefined, rowRoot(r)); return; }
     S.filter = "";
+    // A click: a look at it beside, the keyboard and the main pane left where they were (interaction.md: the user
+    // keeps their focus); the next click takes its place unless it was kept. ⏎ and a double-click: the main pane.
+    if (byMouse && !pinned && tabKey() && S.file !== rowPath(r)) { openSide({ kind: "file", path: rowPath(r), preview: true }, { focus: false }); return; }
     fromList = true;
     try { openFile(rowPath(r), { pinned, focus }); } finally { fromList = false; }
     return;
@@ -924,7 +927,7 @@ function rowDoubleClick(r) {
   if (!r) return false;
   if (S.left.tab === "sessions") { if (r.kind !== "session" && r.kind !== "ftab") return false; openRow(r); focusMain(); return true; }
   if (r.kind !== "file" && r.kind !== "lfile") return false;
-  pinFile(rowPath(r)); openRow(r, { pinned: true }); focusMain();
+  pinFile(rowPath(r)); openRow(r, { pinned: true }); dropSidePreview(rowPath(r)); focusMain();
   return true;
 }
 plist.addEventListener("contextmenu", e => {

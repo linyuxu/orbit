@@ -87,6 +87,14 @@ function sideTitle(spec) {
   if (spec.kind === "calendar") return "Calendar";
   return "Side tab";
 }
+/* A side tab's mark, as its main tab wears it: a session's status and agent, a file's type, a view's icon. */
+function sideIcon(spec) {
+  if (spec.kind === "session") { const s = S.sessions.get(spec.sid); return s ? stateMark(s) + harnessIcon(s.harness, 13) : `<span class="fi">${I("terminal", 13)}</span>`; }
+  if (spec.kind === "file") return `<span class="fi">${isView(spec.path) ? I(viewInfo(spec.path).icon, 13) : fileIcon(spec.path)}</span>`;
+  if (spec.kind === "pview") return `<span class="fi">${I(pluginTabInfo(spec.path).icon, 13)}</span>`;
+  const ic = { review: "swap", web: "external", schedules: "clock", calendar: "calendar" }[spec.kind] || "file";
+  return `<span class="fi">${I(ic, 13)}</span>`;
+}
 function ensureFrame(spec) {
   let fr = FRAMES.get(spec.id);
   const src = sideSrc(spec);
@@ -164,7 +172,7 @@ function renderSide() {
   if (sp) ensureFrame(sp);
   for (const [id, fr] of FRAMES) fr.hidden = !sp || id !== sp.id;
   $("#side").classList.toggle("focused", sideFocused());
-  const html = e ? e.list.map((x, k) => `<div class="stab${k === e.i ? " active" : ""}" role="tab" data-si="${k}" title="${esc(sideTitle(x))}${x.path ? " · " + esc(tilde(x.path)) : ""} (⌥⇧[ ⌥⇧])"><span class="nm">${esc(sideTitle(x))}</span><span class="x" data-sclose="${k}" title="Close (⌘W there)">${I("x", 11)}</span></div>`).join("") : "";
+  const html = e ? e.list.map((x, k) => `<div class="stab${k === e.i ? " active" : ""}${x.preview ? " preview" : ""}" role="tab" data-si="${k}" title="${esc(sideTitle(x))}${x.path ? " · " + esc(tilde(x.path)) : ""}${x.preview ? " · preview: the next file clicked takes its place (double-click or editing keeps it)" : ""} (⌥⇧[ ⌥⇧])">${sideIcon(x)}<span class="nm">${esc(sideTitle(x))}</span><span class="x" data-sclose="${k}" title="Close (⌘W there)">${I("x", 11)}</span></div>`).join("") : "";
   const tabs = $("#sidetabs");
   if (tabs.innerHTML !== html) {
     tabs.innerHTML = html;
@@ -195,12 +203,23 @@ function openSide(spec, { focus = true, key = sideKey() } = {}) {
   const e = S.sides[key] = sideEntry(key) || { list: [], i: 0 };
   e.hidden = false;  // (a new or shown again side tab: the panel shows)
   const k = e.list.findIndex(x => sameSide(x, spec));
+  const p = spec.preview && k < 0 ? e.list.findIndex(x => x.preview) : -1;
+  if (p >= 0) {  // a preview (a file clicked in the Files panel): in the last one's place
+    const old = e.list[p];
+    dropFrame(old.id);
+    e.list[p] = { ...spec, id: sideId() }; e.i = p;
+    renderSide(); renderReviewBadge(); saveUi();
+    sideOp(key, { op: "replace", id: old.id, spec: e.list[p] });
+    if (focus) focusSide();
+    return;
+  }
+  if (k >= 0 && !spec.preview && e.list[k].preview) spec = { ...spec, preview: false };  // (opened on purpose: kept)
   if (k >= 0) {
     const old = e.list[k], fr = FRAMES.get(old.id);
     if (spec.kind === "file" && spec.line && fr && fr.contentWindow) {
       // a file already open beside: move its cursor (a new src would load it again, and drop unsaved edits)
       try { fr.contentWindow.postMessage({ orbit: "reveal", path: spec.path, line: spec.line }, location.origin); } catch {}
-    } else if (spec.line || (spec.kind === "web" && spec.title !== old.title)) e.list[k] = { ...old, ...spec, id: old.id };
+    } else if (spec.line || (spec.kind === "web" && spec.title !== old.title) || spec.preview === false) e.list[k] = { ...old, ...spec, id: old.id };
     e.i = k;
   } else {
     e.i = e.list.length ? e.i + 1 : 0;
@@ -217,6 +236,42 @@ function showSideAt(k, { focus } = {}) {
   renderSide(); renderReviewBadge(); saveUi();
   if (e.list[k]) sideOp(sideKey(), { op: "select", id: e.list[k].id });
   if (focus ?? wasFocused) focusSide();
+}
+/* A preview side tab kept (double-click on it, editing in it, Keep open): the next file clicked opens beside it. */
+function pinSide(k, key = sideKey()) {
+  const e = sideEntry(key); if (!e || !e.list[k] || !e.list[k].preview) return;
+  e.list[k] = { ...e.list[k], preview: false };
+  renderSide(); saveUi();
+  sideOp(key, { op: "open", spec: e.list[k] });
+}
+/* A file's preview beside goes once it is opened in the main pane (a double-click in the Files panel). */
+function dropSidePreview(path) {
+  const e = sideEntry(), k = e ? e.list.findIndex(x => x.preview && x.kind === "file" && x.path === path) : -1;
+  if (k >= 0) closeSide(k);
+}
+/* What a side tab's menu offers: into the main pane, kept, copied, shown elsewhere; closed (it, the others, all). */
+function sideTabMenu(k, where) {
+  const e = sideEntry(); if (!e || !e.list[k]) return;
+  const x = e.list[k], s = x.kind === "session" && S.sessions.get(x.sid);
+  const toMain = x.kind === "session" ? () => switchTo(x.sid) : x.kind === "file" ? () => { openFile(x.path, { pinned: true }); dropSidePreview(x.path); }
+    : x.kind === "review" ? () => { closeSide(k); toggleReview(); } : x.kind === "web" ? () => openUrl(x.url) : null;
+  const fr = FRAMES.get(x.id);
+  menu([
+    toMain ? { label: x.kind === "web" ? "Open in the browser" : "Open as a main tab", run: toMain } : null,
+    x.preview ? { label: "Keep open", run: () => pinSide(k) } : null,
+    k !== e.i ? { label: "Show", run: () => showSideAt(k, { focus: true }) } : null,
+    { sep: true },
+    x.kind === "file" ? { label: "Copy path", run: () => copyText(x.path) } : null,
+    x.kind === "file" && ctxRoot() && x.path.startsWith(ctxRoot() + "/") ? { label: "Copy relative path", run: () => copyText(relTo(ctxRoot(), x.path)) } : null,
+    x.kind === "file" ? { label: "Open in Finder", run: () => openExternal(x.path, "finder") } : null,
+    s ? { label: "Copy link", run: () => copyText(`orbit://session/${x.sid}`) } : null,
+    x.kind === "web" ? { label: "Copy link", run: () => copyText(x.url) } : null,
+    fr ? { label: "Reload", run: () => { fr.dataset.loaded = ""; fr.setAttribute("src", sideSrc(x)); } } : null,
+    { sep: true },
+    { label: "Close", key: "⌘W there", run: () => closeSide(k) },
+    e.list.length > 1 ? { label: "Close the others", run: () => { const keep = e.list[k].id; for (let n = e.list.length - 1; n >= 0; n--) if (e.list[n] && e.list[n].id !== keep) closeSide(n); } } : null,
+    { label: "Close all side tabs", run: () => { for (let n = e.list.length - 1; n >= 0; n--) closeSide(n); } },
+  ].filter(Boolean), where);
 }
 /* Close one side tab of the current main tab (default: the shown one); its neighbour shows. */
 function closeSide(k) {
@@ -302,7 +357,13 @@ $("#sidetabs").addEventListener("mousedown", e => {
   if (!t) return;
   e.preventDefault();
   if (x) closeSide(+x.dataset.sclose);
+  else if (e.detail >= 2) pinSide(+t.dataset.si);  // a double-click keeps a preview (told by the click count: the first click redraws)
   else showSideAt(+t.dataset.si, { focus: true });  // a click on a side tab takes the keyboard there
+});
+$("#sidetabs").addEventListener("contextmenu", e => {
+  const t = e.target.closest(".stab"); if (!t) return;
+  e.preventDefault();
+  sideTabMenu(+t.dataset.si, { at: { x: e.clientX, y: e.clientY } });
 });
 addEventListener("blur", () => setTimeout(() => { renderSide(); if (sideFocused()) { LAST_PANE.side = true; followSoon(); } }, 0));  // (into a side frame)
 document.addEventListener("focusin", e => {  // (the keyboard in the main pane: the main tab is followed again)
@@ -335,6 +396,10 @@ addEventListener("message", e => {
   else if (m.orbit === "key") runForwarded(m.combo);
   else if (m.orbit === "open-file") { if (m.line) S.reveal = { path: m.path, line: m.line }; openFile(m.path, { pinned: !!m.pinned }); if (m.line && S.file === m.path) applyReveal(m.path); }
   else if (m.orbit === "open-side") openSide(m.spec);
+  else if (m.orbit === "side-pin") {  // edited beside: a preview kept
+    const ent = sideEntry(), k = ent ? ent.list.findIndex(x => FRAMES.get(x.id) && FRAMES.get(x.id).contentWindow === e.source) : -1;
+    if (k >= 0) pinSide(k);
+  }
   else if (m.orbit === "ask") askAboutFile(m.path);
   else if (m.orbit === "open-note-at") openNoteAt(m.path, m.line);
   else if (m.orbit === "open-card") openUrl(`orbit://session/${m.sid}${m.cid ? "#" + m.cid : ""}`);
