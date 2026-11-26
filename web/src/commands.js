@@ -247,7 +247,7 @@ if (EMBED) addEventListener("resize", fitEmbed);
 const SHORTCUTS = [
   ["Sessions and tabs", [
     ["⌘N", "New session (folder, model, permissions, group, name)", "M:KeyN", () => newSession()],
-    ["⌘O", "Open: finder with Sessions · Files · All Files (every session's folder and the home folders) · Notes · History (starts on Files in a file tab, on Notes in a note; ⌘⏎ opens pinned)", "M:KeyO", () => openFinder()],
+    ["⌘O", "Open: finder with Sessions · Files & Folders (a folder: the Files panel on it) · All Files (every session's folder and the home folders) · Notes · History (starts on Files in a file tab, on Notes in a note; ⌘⏎ opens pinned)", "M:KeyO", () => openFinder()],
     ["⌘⌃O", "Open into the side tab", "MC:KeyO", () => openFinder(null, { side: true })],
     ["⌘R", "Recent: sessions (with their last answer) and files, open or closed (in the Groups panel: rename the row: a group, a session, a file tab's file)", "M:KeyR", openRecent],
     ["⌘W", "Close what has the keyboard: the side tab, else the file tab, else the session tab", "M:KeyW", closeWhatHasKeyboard],

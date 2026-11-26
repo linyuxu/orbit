@@ -8,6 +8,8 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- ⌘O Files is Files & Folders: the session folders' folders are found too; one chosen shows in the Files panel, open,
+  the keyboard on it.
 - The Files and Notes panels filtered stay a tree: the matches under their folders (each folder on the way open, a
   folder matched by its name too), the matched text bold, the cursor on the best match (its very name first).
 - A file clicked in the Files panel shows beside, as a preview (italic) the next click replaces; the session or file

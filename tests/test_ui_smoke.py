@@ -596,6 +596,7 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             (d / "lib").mkdir(parents=True, exist_ok=True)
             (d / "lib" / "shared_util.py").write_text("x = 1\n")
             (d / f"{name}-only.txt").write_text("y\n")
+            (d / f"{name.replace('-', '')}_pkg" / "mod").mkdir(parents=True, exist_ok=True); (d / f"{name.replace('-', '')}_pkg" / "mod" / "m.py").write_text("z\n")
             code, sess = self.req("POST", "/api/sessions", {"cwd": str(d), "name": name})
             self.req("POST", f"/api/sessions/{sess['id']}/update", {"group": g})
             roots[name] = (sess["id"], os.path.realpath(d))
@@ -603,7 +604,7 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             self.open(page)
             page.evaluate(f"switchTo({json.dumps(roots['op-here'][0])})")
             page.wait_for_timeout(400)
-            page.evaluate("openFinder('Files')")
+            page.evaluate("openFinder('Files & Folders')")
             page.wait_for_selector(".finder .ptab.cur")
             page.wait_for_timeout(800)
             page.fill(".finder .fq", "op-there-only")  # (a file of another group's session folder)
@@ -618,6 +619,19 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.press(".finder .fq", "Enter")
             page.wait_for_timeout(800)
             self.assertEqual(page.evaluate("S.file"), roots["op-there"][1] + "/lib/shared_util.py")
+            # a folder: the Files panel on it, open, the keyboard there
+            page.evaluate(f"switchTo({json.dumps(roots['op-here'][0])}); openFinder('Files & Folders')")
+            page.wait_for_timeout(600)
+            page.fill(".finder .fq", "mod")
+            page.wait_for_timeout(300)
+            self.assertIn("folder", page.inner_text(".finder .flist .frow"), name)
+            self.assertIn("ophere_pkg", page.inner_text(".finder .flist .frow"), name)  # (this session's folder first)
+            page.press(".finder .fq", "Enter")
+            here, k = roots["op-here"][1], f"d:{roots['op-here'][1]}|ophere_pkg/mod"
+            page.wait_for_function(f"() => S.left.shown && S.left.tab === 'files' && S.pcursor === {json.dumps(k)}", timeout=5000)  # (under this session's folder, nested in another's or not)
+            page.wait_for_selector(f"#plist .prow.kc[data-k={json.dumps(k)}]")
+            self.assertTrue(page.evaluate(f"PROWS.some(r => r.k === {json.dumps(f'f:{here}|ophere_pkg/mod/m.py')})"), name)  # (open, its folders on the way too)
+            self.assertEqual(page.evaluate("document.activeElement && document.activeElement.id"), "plist", name)
 
     def test_send_the_input_to_another_session(self):
         g = self.group("Send to")

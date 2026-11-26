@@ -121,6 +121,27 @@ function cursorToBest() {
   if (best) S.pcursor = best.k;
 }
 const hitName = (r, name) => r.hit && S.filter && typeof boldTerms === "function" ? boldTerms(name, S.filter.split(/\s+/)) : esc(name);
+/* A folder chosen in ⌘O (Files & Folders): the Files panel shows it open, its folders on the way open, the keyboard
+   on it (rel "": the session folder itself). */
+function revealFolder(root, rel) {
+  if (!S.left.shown) { S.left.shown = true; applyLeft(); }
+  if (S.left.tab !== "files") setPanelTab("files");
+  S.filter = "";
+  const full = rel ? root + "/" + rel : root;  // (under the nearest session folder that holds it: a nested one's own)
+  const near = filesRoots().all.map(f => f.path).filter(p => full === p || full.startsWith(p + "/")).sort((a, b) => b.length - a.length)[0];
+  if (near) { root = near; rel = full === near ? "" : full.slice(near.length + 1); }
+  if (filesRoots().other.some(f => f.path === root) && !FILES.other) { FILES.other = true; LS.set("filesOther", true); }  // (another group's folder)
+  setRootOpen(root, true);
+  if (rel) {
+    const open = expandedSet(root), parts = rel.split("/");
+    for (let i = 1; i <= parts.length; i++) open.add(parts.slice(0, i).join("/"));
+    setExpanded(root, open);
+  }
+  S.pcursor = rel ? "d:" + root + "|" + rel : "r:" + root;
+  FILES.want = { k: S.pcursor, t: Date.now() };  // (its tree may still be on its way)
+  refreshTree(root);
+  renderLeft(); focusPanel();
+}
 const rowRoot = r => (r && r.root) || panelRoot();
 const rowPath = r => r.path || rowRoot(r) + "/" + r.rel;
 function revealFile(path) {

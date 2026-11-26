@@ -161,7 +161,7 @@ function groupItem(gid, { key = "" } = {}) {
   return { label: groupPath(gid), iconHtml: groupMark(gid, 13), tag: "group", key, match: `${groupPath(gid)} group`, boost: 1000,  // (matched: above every session and file)
            detail: [at ? "→ " + at : "", `${n} session${n === 1 ? "" : "s"}`].filter(Boolean).join(" · "), run: () => switchGroup(gid) };
 }
-/* The Files tab: every file of every open session's folder (this machine's and the connected ones'; a folder inside
+/* The Files & Folders tab: every folder and file of every open session's folder (this machine's and the connected ones'; a folder inside
    another counted once), the current one's first. Each says its folder ("project/dir"), and the folder's name is
    matched too ("orbit readme"). A folder listed before is used at once (and listed again meanwhile); the others are
    listed together. */
@@ -175,6 +175,14 @@ async function fileItems(side) {
     const t = S.trees.get(root); if (!t || t.error) continue;
     const name = basename(root.replace(/^\/@[^/]+/, "")) || root, machine = (/^\/@([^/]+)/.exec(root) || [])[1] || "";
     const here = root === cur || (cur && cur.startsWith(root + "/"));
+    // its folders (the session folder itself first): chosen, the Files panel on it
+    out.push({ label: name, detail: tilde(root.replace(/^\/@[^/]+/, "")), match: name, iconHtml: folderIcon(false), tag: machine || "folder",
+               boost: here ? 0.5 : 0, run: () => revealFolder(root, "") });
+    for (const d of t.index ? t.index.keys() : []) {
+      if (!d) continue;
+      out.push({ label: basename(d), detail: name + (d.includes("/") ? "/" + dirname(d) : ""), match: name + "/" + d, iconHtml: folderIcon(false),
+                 tag: machine || "folder", boost: here ? 0.5 : 0, run: () => revealFolder(root, d) });
+    }
     for (const f of t.files || []) {
       const st = here && t.status[f];
       out.push({ label: basename(f), detail: name + (f.includes("/") ? "/" + dirname(f) : ""), match: name + "/" + f, ficon: f,
@@ -223,7 +231,7 @@ async function noteSearch(text, signal, side) {
 function openFinder(start, { side = false, opener } = {}) {
   opener = opener || (side ? "MC:KeyO" : "M:KeyO");
   if (modal && modal.kind === "finder" && modal.opener === opener) { closeModal(); return; }
-  if (start == null) start = S.file && isNote(S.file) ? "Notes" : S.file ? "Files" : "Sessions";  // starts on Files in a file tab, on Notes in a note
+  if (start == null) start = S.file && isNote(S.file) ? "Notes" : S.file ? "Files & Folders" : "Sessions";  // starts on Files & Folders in a file tab, on Notes in a note
   finder({ opener, start, lead: urlLead, tabs: [
     { name: "Sessions", empty: "No sessions. ⌘N starts one.", items: async () => {
       const all = (await api("GET", "/api/sessions?closed=1")).sessions;
@@ -232,7 +240,7 @@ function openFinder(start, { side = false, opener } = {}) {
       const groups = side ? [] : S.groups.filter(g => g.id !== S.group).map(g => groupItem(g.id));
       return [...groups, ...open.map(s => sessionItem(s, { side })), ...closed.map(s => sessionItem(s, { side }))];  // (groups first: switched often)
     } },
-    { name: "Files", empty: "No session folders: open a session (All Files also looks in the homes).", items: () => fileItems(side) },
+    { name: "Files & Folders", empty: "No session folders: open a session (All Files also looks in the homes).", items: () => fileItems(side) },
     { name: "All Files", empty: "Type to search file names in every session's folder and in the home folder, on this Mac and on the machines it reaches.",
       search: t => allFileItems(t, side) },
     { name: "Notes", empty: S.vault ? "No notes yet: ⌘⇧D opens this week's." : "No vault: Settings → Notes.", items: () => noteItems(side), live: (t, signal) => noteSearch(t, signal, side) },
