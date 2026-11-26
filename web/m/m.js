@@ -63,6 +63,7 @@ function setOnline(v) {
 function onEvent(m) {
   if (m.t === "hello" || m.t.startsWith("plugin-")) pviewEvent(m);  // (m-pviews.js: a plugin's thread, doc or list on screen)
   if (m.t === "hello") {
+    if (m.home) HOME_DIR = m.home;
     setOnline(true);
     voiceResync();  // (a voice call: what became of it while the stream was away)
     S.machines = m.machines || [];

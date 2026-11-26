@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The README says what Orbit is and does, with pictures, and how to start; the detailed reference moved to
+  docs/guide.md. The pictures come from a demo (docs/make_screenshots.py: a throwaway home, the tests' fake agents).
+- Paths under the server's home show as ~ wherever the home is (Linux's /home/… too): the page is told it.
 - A voice request waits for you to finish: GPT Live hands a task over at a 200 ms pause (a quarter of real requests
   were cut mid-sentence, the rest becoming a second request); Orbit now sends it once no words came for 1.5 s (Settings → Voice
   → End of what you say: 0.8–4 s; at most 8 s), with everything said until then, and a hand-over made meanwhile joins it. A request's status is never told

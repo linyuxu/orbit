@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import queue
+from pathlib import Path
 
 
 class Streams:
@@ -19,6 +20,7 @@ class Streams:
         q = self.desk.subscribe(delta=parse_qs(urlparse(self.path).query).get("delta") == ["1"])  # (card patches)
         try:
             self._sse_write({"t": "hello", "sessions": self.desk.all_sessions(), "groups": self.desk.all_groups(),
+                             "home": str(Path.home()),  # (the page writes it as ~)
                              "machines": self.desk.federation.machines() if self.desk.federation else []})
             while True:
                 try:

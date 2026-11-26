@@ -19,6 +19,9 @@ without spending API calls. Behaviour per request text:
               says something, reads a file ($FAKE_WAKE_SLOW s, 1.5), launches a background subagent of its own
               (which works and reports after that turn) and answers; a message sent meanwhile is folded into it
   anything else: one Bash step, then "answer: <text>"
+$FAKE_SCRIPT (a JSON file: [{"match", "steps": [{"tool", "input", "out"} | {"text"}], "answer", "hold"}]): a request
+whose text starts with a "match" plays that instead (docs/make_screenshots.py: the README's pictures); $FAKE_MODEL
+names its model (fake-1).
 Its init event names its pid; inputs.log records each message it received with its pid.
 """
 
@@ -70,7 +73,7 @@ def log(obj):
 
 
 def assistant(content):
-    m = {"type": "assistant", "message": {"role": "assistant", "model": "fake-1", "content": content,
+    m = {"type": "assistant", "message": {"role": "assistant", "model": os.environ.get("FAKE_MODEL", "fake-1"), "content": content,
                                           "usage": {"input_tokens": 10, "cache_read_input_tokens": 1000}},
          "parent_tool_use_id": None, "session_id": sid}
     out(m)
@@ -138,6 +141,14 @@ def result(text, ok=True, subtype=None):
          "is_error": not ok, "result": text, "session_id": sid})
 
 
+def scripted(text):
+    path = os.environ.get("FAKE_SCRIPT")
+    if not path:
+        return None
+    with open(path) as f:
+        return next((x for x in json.load(f) if text.startswith(x["match"])), None)
+
+
 def handle(text, n):
     running.set()
     try:
@@ -149,9 +160,27 @@ def handle(text, n):
 def _handle(text, n):
     interrupted.clear()
     log({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": text}]}})
-    out({"type": "system", "subtype": "init", "session_id": sid, "cwd": os.getcwd(), "model": "fake-1", "pid": os.getpid(),
+    out({"type": "system", "subtype": "init", "session_id": sid, "cwd": os.getcwd(), "model": os.environ.get("FAKE_MODEL", "fake-1"), "pid": os.getpid(),
          "slash_commands": ["compact", "context", "model", "doctor", "review"], "terminal_slash_commands": ["doctor"]})
     tid = f"toolu_{n}"
+    play = scripted(text)
+    if play is not None:
+        for i, st in enumerate(play.get("steps") or []):
+            if "text" in st:
+                assistant([{"type": "text", "text": st["text"]}])
+                continue
+            k = f"{tid}_{i}"
+            assistant([{"type": "tool_use", "id": k, "name": st["tool"], "input": st.get("input") or {}}])
+            time.sleep(st.get("sleep", 0.1))
+            tool_result(k, st.get("out", ""))
+        if play.get("hold"):  # (still at work when the picture is taken)
+            for _ in range(int(play["hold"] * 10)):
+                if interrupted.is_set():
+                    break
+                time.sleep(0.1)
+        assistant([{"type": "text", "text": play["answer"]}])
+        result(play["answer"])
+        return
     if text.startswith("deaf"):  # a Stop never reaches it: the request ends in its own time
         assistant([{"type": "tool_use", "id": tid, "name": "Bash", "input": {"command": "sleep 10"}}])
         time.sleep(10)
@@ -249,7 +278,7 @@ def woken(tid):
     """A turn Claude Code begins itself after a background task's notification: thinking, a word, a Read, a background
     subagent of its own, the answer, its result; that subagent works and reports after the turn."""
     running.set()
-    out({"type": "system", "subtype": "init", "session_id": sid, "cwd": os.getcwd(), "model": "fake-1", "pid": os.getpid(),
+    out({"type": "system", "subtype": "init", "session_id": sid, "cwd": os.getcwd(), "model": os.environ.get("FAKE_MODEL", "fake-1"), "pid": os.getpid(),
          "slash_commands": ["compact"], "terminal_slash_commands": []})
     out({"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking"}},
          "parent_tool_use_id": None, "session_id": sid})

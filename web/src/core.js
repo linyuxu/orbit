@@ -121,9 +121,11 @@ async function api(method, path, body, opts = {}) {
   return d;
 }
 /* Paths for display: ~ for the home folder; another machine's path (/@gpu-box/home/me/x) as gpu-box:~/x. */
+let HOME_DIR = "";  // the server's home (its hello event): written ~ (on Linux too, wherever it is)
 const tilde = p => {
   const m = /^\/@([a-z0-9][a-z0-9_-]*)(\/.*)?$/.exec(p || "");
   if (m) return `${m[1]}:${(m[2] || "/").replace(/^\/(?:home\/[^/]+|Users\/[^/]+|root)(?=\/|$)/, "~")}`;
+  if (HOME_DIR && (p === HOME_DIR || (p || "").startsWith(HOME_DIR + "/"))) return "~" + p.slice(HOME_DIR.length);
   return (p || "").replace(/^\/Users\/[^/]+/, "~");
 };
 /* A path written into a request: another machine's stays /@NAME/… (its server makes it that machine's path). */

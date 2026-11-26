@@ -21,6 +21,7 @@ function connect() {
     if (m.t === "live") { if (!EMBED) voiceEvent(m); return; }
     if (m.t === "hello") {
       const had = S.current;
+      if (m.home) HOME_DIR = m.home;
       if (typeof SIDE_SRV !== "undefined") { SIDE_SRV.loaded.clear(); SIDE_SRV.rev = {}; }  // (what changed meanwhile: fetched again)
       if (!EMBED) loadLayout();  // (the tabs too)
       S.machines = m.machines || [];

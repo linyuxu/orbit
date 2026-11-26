@@ -62,9 +62,11 @@ const pad2 = n => String(n).padStart(2, "0");
 const hm24 = t => { const d = new Date(t * 1000); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); };
 function dayStart(n = 0) { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n).getTime() / 1000; }
 function dayLabel(t) { const d = new Date(t * 1000); return d.toLocaleDateString("en-US", { weekday: "short" }) + " " + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+let HOME_DIR = "";  // the server's home (its hello event): written ~ (on Linux too, wherever it is)
 const tilde = p => {
   const m = /^\/@([a-z0-9][a-z0-9_-]*)(\/.*)?$/.exec(p || "");
   if (m) return `${m[1]}:${(m[2] || "/").replace(/^\/(?:home\/[^/]+|Users\/[^/]+|root)(?=\/|$)/, "~")}`;
+  if (HOME_DIR && (p === HOME_DIR || (p || "").startsWith(HOME_DIR + "/"))) return "~" + p.slice(HOME_DIR.length);
   return (p || "").replace(/^\/(?:private\/)?(?:Users\/[^/]+)/, "~");
 };
 const oneLine = s => String(s || "").replace(/\s+/g, " ").trim();
