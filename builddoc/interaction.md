@@ -120,7 +120,7 @@ Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it
   OK is red.
 - **Dropdown in a dialog**: button + our own list. ↑↓ / Space / ⏎ open it, ↑↓ move, ⏎ or click picks, Esc closes the
   list only.
-- **Finder** (⌘O, ⌘R, ⌘⇧F): a modal list with tabs (Sessions · Files · History · Other sessions); the same key closes it. A session is also found by its id: 4 or more characters of it (Orbit's id, or the agent's own conversation id in Other sessions), or a pasted `orbit://session/<id>#n` link, ranked ahead of matches by name.
+- **Finder** (⌘O, ⌘R, ⌘⇧F): a modal list with tabs (Sessions · Files · All Files · Notes · History · Other sessions); the same key closes it. A session is also found by its id: 4 or more characters of it (Orbit's id, or the agent's own conversation id in Other sessions), or a pasted `orbit://session/<id>#n` link, ranked ahead of matches by name.
 
 ## 8. Shortcuts
 
@@ -131,7 +131,7 @@ Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it
 | Keys | Action |
 |---|---|
 | ⌘N | New session: name, folder (the current session's; ↓ lists recent folders), harness, model, mode, group; ⌘⏎ or ⏎ starts it |
-| ⌘O | Open: finder with Sessions · Files · History · Other sessions tabs (fuzzy; Sessions includes closed named sessions, ⏎ resumes one with its name; Other sessions is everything else that can be resumed, on every machine: closed unnamed sessions, and Claude Code / Codex conversations that are no Orbit session, ⏎ resumes one on its machine). Starts on Files in a file tab |
+| ⌘O | Open: finder with Sessions · Files · All Files · Notes · History · Other sessions tabs (fuzzy; All Files: file names in every open session's folder and in the home folder, this machine's and each reachable machine's (`GET /api/findfiles`: every term in the path below its root, names first, then shorter paths, then the newest; the home through Spotlight on macOS, else a walk with a 1.5 s budget that skips hidden folders, ~/Library and dependency folders), a hit opens in the main pane, or beside from ⌘⌃O; Sessions includes closed named sessions, ⏎ resumes one with its name; Other sessions is everything else that can be resumed, on every machine: closed unnamed sessions, and Claude Code / Codex conversations that are no Orbit session, ⏎ resumes one on its machine). Starts on Files in a file tab, on Notes in a note |
 | ⌘⌃O | Open into the side tab |
 | ⌘R | Recent: every kind of tab seen lately (sessions with a preview of their last answer, files, notes, threads), open or closed since; a closed file reopens as a preview. In the Groups panel on a group: rename the group |
 | ⌘W | Close what has the keyboard: the shown side tab (its neighbour shows), else the file tab, else the session tab: always asked (⏎ closes, Esc keeps it; it says so when the session is working), from ⌘W, its × or the menu alike; ⌘⇧T reopens. In Favorites, ⌘W and × only take the session off the favorites (it stays open in its group): nothing is asked |

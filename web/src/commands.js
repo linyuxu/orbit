@@ -231,7 +231,7 @@ if (EMBED) addEventListener("resize", fitEmbed);
 const SHORTCUTS = [
   ["Sessions and tabs", [
     ["⌘N", "New session (folder, model, permissions, group, name)", "M:KeyN", () => newSession()],
-    ["⌘O", "Open: finder with Sessions · Files · Notes · History (starts on Files in a file tab, on Notes in a note; ⌘⏎ opens pinned)", "M:KeyO", () => openFinder()],
+    ["⌘O", "Open: finder with Sessions · Files · All Files (every session's folder and the home folders) · Notes · History (starts on Files in a file tab, on Notes in a note; ⌘⏎ opens pinned)", "M:KeyO", () => openFinder()],
     ["⌘⌃O", "Open into the side tab", "MC:KeyO", () => openFinder(null, { side: true })],
     ["⌘R", "Recent: sessions (with their last answer) and files, open or closed (in the Groups panel: rename the row: a group, a session, a file tab's file)", "M:KeyR", openRecent],
     ["⌘W", "Close what has the keyboard: the side tab, else the file tab, else the session tab", "M:KeyW", closeWhatHasKeyboard],
@@ -276,7 +276,7 @@ const SHORTCUTS = [
   ["Find, files, notes", [
     ["⌘F", "Find in what has the keyboard; ⏎ / ⇧⏎ or ⌘G / ⌘⇧G next / previous; Esc closes", ["M:KeyF", "M:KeyG", "MS:KeyG"],
       [() => openFind(), () => findNext(1), () => findNext(-1)]],
-    ["⌘⇧F", "Search every session's history and the notes (finder → History)", "MS:KeyF", () => openFinder(3, { opener: "MS:KeyF" })],
+    ["⌘⇧F", "Search every session's history and the notes (finder → History)", "MS:KeyF", () => openFinder("History", { opener: "MS:KeyF" })],
     ["⌘⇧E", "Browse the open file's folders (breadcrumb): ↑↓ ⏎, `..` goes up", "MS:KeyE", () => browseFolder()],
     ["⌘⇧D", "Today's (or this week's) note: the journal (selected answer text goes under today, linked to its card)", "MS:KeyD", weekNote],
     ["⌘S · ⌃X ⌃S", "Save (also auto-save 1.5 s after the last edit and on window blur)", "M:KeyS", saveCurrent],

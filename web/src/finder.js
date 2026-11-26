@@ -23,6 +23,7 @@ function finder({ title, tabs, start = 0, opener, lead }) {  // lead(q): items a
     <input class="fq" spellcheck="false" placeholder="Type to filter"><div class="flist"></div>`;
   document.body.append(back, box);
   const q = box.querySelector(".fq"), list = box.querySelector(".flist");
+  if (typeof start === "string") start = Math.max(0, tabs.findIndex(x => x.name === start));  // (a tab by its name)
   let t = Math.max(0, Math.min(start, tabs.length - 1)), all = [], view = [], i = 0, seq = 0;
   const live = { q: "", items: [], state: "", err: "", ctl: null, timer: 0, seq: 0 };
   const drawTabs = () => {
@@ -44,7 +45,7 @@ function finder({ title, tabs, start = 0, opener, lead }) {  // lead(q): items a
     }
     view = [...shown, ...extra];
     i = Math.max(0, Math.min(i, view.length - 1));
-    const empty = `<div class="fempty">${esc(s ? (server ? (searching ? "Searching…" : "Nothing found.") : "Nothing matches.") : (tabs[t].empty || "Nothing here yet."))}</div>`;
+    const empty = `<div class="fempty">${esc(failed ? `Could not ${server ? "search" : "list them"}: ${failed}` : s ? (server ? (searching ? "Searching…" : "Nothing found.") : "Nothing matches.") : (tabs[t].empty || "Nothing here yet."))}</div>`;
     if (withLive) {
       const st = live.state === "error" ? `not available: ${live.err}` : live.state === "done" && !extra.length ? (live.items.length ? "nothing more" : "nothing found") : live.state === "done" ? "" : "searching…";
       list.innerHTML = shown.map(row).join("") + `<div class="fdiv"><span>Search in ${esc(tabs[t].name)}</span>${st ? `<span class="fds">${esc(st)}</span>` : ""}</div>`
@@ -53,15 +54,16 @@ function finder({ title, tabs, start = 0, opener, lead }) {  // lead(q): items a
     const sel = list.querySelector(".frow.sel"); if (sel) sel.scrollIntoView({ block: "nearest" });
     tipFinderRow(list);
   };
-  let searching = false, stimer = 0;
+  let searching = false, stimer = 0, failed = "";
   const load = async (keep = false) => {  // keep: the same tab again (a new query, a change): no blank list meanwhile
     const my = ++seq;
     if (!keep) { drawTabs(); all = []; i = 0; }
-    searching = !!tabs[t].search && !!q.value.trim();
+    searching = !!tabs[t].search && !!q.value.trim(); failed = "";
     if (!keep) draw();
     let got;
-    try { got = tabs[t].search ? await tabs[t].search(q.value.trim()) : await tabs[t].items(); } catch (e) { got = []; if (my === seq) toast(e.message); }
-    if (my === seq) { all = got; searching = false; draw(); }
+    let err = "";
+    try { got = tabs[t].search ? await tabs[t].search(q.value.trim()) : await tabs[t].items(); } catch (e) { got = []; err = e.message || "failed"; }
+    if (my === seq) { all = got; failed = err; searching = false; draw(); }  // (a failure says so in the list: "Nothing found" would be wrong)
   };
   const stopLive = () => { clearTimeout(live.timer); if (live.ctl) live.ctl.abort(); Object.assign(live, { q: "", items: [], state: "", err: "", ctl: null }); live.seq++; };
   const kickLive = () => {
@@ -163,6 +165,21 @@ async function fileItems(side) {
     menu: where => fileMenu(root + "/" + f, where),
   }));
 }
+/* The All Files tab: file names in every open session's folder and in the home folders (this machine's, and each
+   machine this server reaches: their paths /@NAME/…), matched by the server (GET /api/findfiles). */
+async function allFileItems(text, side = false) {
+  if (!text.trim()) return [];
+  const d = await api("GET", "/api/findfiles?q=" + encodeURIComponent(text));
+  const terms = text.toLowerCase().split(/\s+/).filter(Boolean);
+  const items = d.files.map(f => {
+    const local = f.path.replace(/^\/@[^/]+/, "");
+    return { label: basename(f.path), detail: tilde(dirname(local)), hl: terms, icon: "file", tag: f.machine || (f.where === "home" ? "home" : ""),
+             key: f.time ? ago(f.time) : "", run: () => openFile(f.path, { side }), alt: () => openFile(f.path, { pinned: true, side }),
+             menu: where => fileMenu(f.path, where) };
+  });
+  if (d.unreachable && d.unreachable.length) items.push({ label: `Not searched: ${d.unreachable.join(", ")} (unreachable)`, detail: "", run: () => {} });
+  return items;
+}
 /* The Notes tab: every note of the vault by its title (and folder), filtered as you type; for 2+ characters, the
    notes whose text has it too ("Search in Notes": the server's search, with the line it is on). */
 async function noteItems(side) {
@@ -186,7 +203,7 @@ async function noteSearch(text, signal, side) {
 function openFinder(start, { side = false, opener } = {}) {
   opener = opener || (side ? "MC:KeyO" : "M:KeyO");
   if (modal && modal.kind === "finder" && modal.opener === opener) { closeModal(); return; }
-  if (start == null) start = S.file && isNote(S.file) ? 2 : S.file ? 1 : 0;  // starts on Files in a file tab, on Notes in a note
+  if (start == null) start = S.file && isNote(S.file) ? "Notes" : S.file ? "Files" : "Sessions";  // starts on Files in a file tab, on Notes in a note
   finder({ opener, start, lead: urlLead, tabs: [
     { name: "Sessions", empty: "No sessions. ⌘N starts one.", items: async () => {
       const all = (await api("GET", "/api/sessions?closed=1")).sessions;
@@ -195,6 +212,8 @@ function openFinder(start, { side = false, opener } = {}) {
       return [...open, ...closed].map(s => sessionItem(s, { side }));
     } },
     { name: "Files", empty: ctxRoot() ? "No files." : "Open a session to list its folder.", items: () => fileItems(side) },
+    { name: "All Files", empty: "Type to search file names in every session's folder and in the home folder, on this Mac and on the machines it reaches.",
+      search: t => allFileItems(t, side) },
     { name: "Notes", empty: S.vault ? "No notes yet: ⌘⇧D opens this week's." : "No vault: Settings → Notes.", items: () => noteItems(side), live: (t, signal) => noteSearch(t, signal, side) },
     { name: "History", empty: "Type to search every session's requests and answers, and the notes.", search: t => historyItems(t, side) },
     OTHER_TAB,

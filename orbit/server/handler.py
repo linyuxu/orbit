@@ -28,7 +28,7 @@ from orbit.server.watch import Watch
 from orbit.server.support import UPLOAD_MAX, USAGE, append_log, complete_dir, font_families, save_upload
 from orbit.services import schedule
 from orbit.services.shell import open_terminal_app
-from orbit.workspace import files, notes, skills
+from orbit.workspace import files, findfiles, notes, skills
 
 
 WEB = ROOT / "web"
@@ -808,6 +808,18 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 return self._json(files.read(q.get("path", "")))
             if p == "/api/dirlist":
                 return self._json(files.dirlist(q.get("path", "")))
+            if p == "/api/findfiles":  # ⌘O → All Files: file names in every open session's folder and the home, here
+                # and (unless ?local=1: another server asking) on every machine this one reaches, their paths /@NAME/…
+                text = q.get("q", "").strip()[:200]
+                n = max(1, min(500, int(q.get("limit", str(findfiles.LIMIT)))))
+                roots = [s.cwd for s in list(self.desk.sessions.values()) if not s.closed and not s.fleet]
+                found = findfiles.find(text, roots, n)
+                found["unreachable"] = []
+                if self.desk.federation and q.get("local") != "1" and text:
+                    theirs, down = self.desk.federation.find_files(text, n)
+                    found["files"] = findfiles.rank(found["files"] + theirs, text)[:n]
+                    found["unreachable"] = down
+                return self._json(found)
             if p == "/api/search":
                 text = q.get("q", "")
                 terms = [t.lower() for t in text.split()]

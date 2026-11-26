@@ -462,6 +462,25 @@ class Federation:
         with cf.ThreadPoolExecutor(len(names)) as ex:
             return [x for xs in ex.map(one, names) for x in xs]
 
+    def find_files(self, q: str, limit: int) -> tuple[list[dict], list[str]]:
+        """Every other machine's files named so (⌘O → All Files: their sessions' folders and home), at once, their
+        paths written /@NAME/…; (files, the machines that did not answer)."""
+        import concurrent.futures as cf
+        from urllib.parse import quote
+        names = sorted(remote.load(self.state))
+        if not names:
+            return [], []
+
+        def one(name: str) -> list[dict] | None:
+            code, r = self.call(name, "GET", f"/api/findfiles?q={quote(q)}&limit={limit}&local=1", timeout=8, rewrite=False)
+            if code != 200 or not isinstance(r, dict):
+                return None
+            return [{**x, "machine": name, "path": ours(name, str(x.get("path", ""))), "root": ours(name, str(x.get("root", "")))}
+                    for x in r.get("files") or [] if isinstance(x, dict)]
+        with cf.ThreadPoolExecutor(len(names)) as ex:
+            got = list(ex.map(one, names))
+        return [x for xs in got if xs for x in xs], [n for n, xs in zip(names, got) if xs is None]
+
     def remember(self, name: str, s: dict) -> None:
         """A session this server just made there (its event follows; the caller should not wait for it)."""
         if isinstance(s, dict) and str(s.get("id", "")).startswith(name + SEP):
