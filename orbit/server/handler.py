@@ -1489,8 +1489,14 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 if action == "resume":
                     return self._json(self.desk.resume(sid))
                 if action in ("fork", "clone"):  # (clone: its earlier name)
-                    return self._json(self.desk.fork(sid, str(b.get("name") or ""), harness=str(b.get("harness") or ""),
-                                                     model=str(b.get("model") or "")))
+                    from orbit.desk import forkto
+                    if forkto.crosses("", self.desk.get(sid).cwd, b):  # another machine or folder: a hand-over across
+                        return self._json(forkto.fork_across(self.desk, sid, b))
+                    r = self.desk.fork(sid, str(b.get("name") or ""), harness=str(b.get("harness") or ""),
+                                       model=str(b.get("model") or ""))
+                    if b.get("group") and b["group"] != r.get("group"):  # (the Fork to dialog's group)
+                        r = self.desk.update(r["id"], group=b["group"])
+                    return self._json(r)
                 if action == "update":
                     return self._json(self.desk.update(sid, group=b.get("group"), favorite=b.get("favorite")))
                 if action == "move":

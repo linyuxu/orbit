@@ -31,6 +31,16 @@ class Forward:
         if action == "update":  # its group and star are kept here (this server's groups), not over there
             shown = fed.place(sid, group=b.get("group"), favorite=b.get("favorite"))
             return self._json(shown or {"ok": True})
+        if action in ("fork", "clone"):  # to another machine or folder: a hand-over this server makes (orbit/desk/forkto.py)
+            from orbit.desk import forkto
+            src = next((s for s in (fed.list() if fed else []) if s.get("id") == sid), None)
+            if src and forkto.crosses(name, src.get("cwd", ""), b):
+                try:
+                    return self._json(forkto.fork_across(self.desk, sid, b))
+                except KeyError:
+                    return self._json({"error": "no such session"}, 404)
+                except (ValueError, OSError) as e:
+                    return self._json({"error": str(e)}, 400)
         if action == "mention":  # the sender is not a session there: a note as a plain request
             src = self.desk.sessions.get(str(b.get("from", "")))
             who = f'session "{src.name}"' if src else "a session"

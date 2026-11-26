@@ -8,6 +8,12 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Fork to… (a session's menu) opens the New session dialog as a fork: machine, folder, harness, model, effort, mode,
+  group, from the session's. The same machine and folder: the fork as before (another harness: a hand-over). Another
+  machine or folder: a hand-over there (orbit/desk/forkto.py): this server writes the session's latest 60 turns to a
+  file on that machine (`<state>/handover/` here, `/tmp/orbit-handover-*.md` on another), starts the new session there
+  and its first request reads the file, checks the working tree, reports and waits. Works from another machine's
+  session too.
 - The Files panel is a file manager, on this Mac and across machines: multi-select (⌘-click, ⇧-click, ⇧↑ ⇧↓; Esc
   clears; copy, cut, drag and ⌘⌫ Move to Trash take the whole selection; a file opens on the click, so a drag opens
   nothing and a real mouse drag starts); ⌥W copy · ⌃W cut · ⌃Y paste into the cursor's

@@ -17,7 +17,7 @@ const MODE_LABELS_BY = { opencode: {
   bypassPermissions: "bypass · every ask approved" } };
 const modeLabel = (harness, m) => (MODE_LABELS_BY[harness] || {})[m] || MODE_LABELS[m] || m;
 const modeOptions = id => modesFor(id).map(value => ({ value, label: modeLabel(id, value) }));
-async function newSession(gidArg, preset = {}) {  // preset: {cwd, machine} (a folder's menu: "New session here…")
+async function newSession(gidArg, preset = {}) {  // preset: {cwd, machine} (a folder's menu: "New session here…"); {fork: sid}: "Fork to…"
   try { const d = await api("GET", "/api/harnesses"); if (d.harnesses && d.harnesses.length) S.harnesses = d.harnesses; } catch {}  // what "Default" ran last
   const last = LS.get("lastNew", { cwd: "~/", model: "", mode: "acceptEdits", harness: "claude" });
   // Folders are written as the chosen machine writes them (~/proj there), and listed per machine: the recent ones
@@ -26,7 +26,11 @@ async function newSession(gidArg, preset = {}) {  // preset: {cwd, machine} (a f
   const homeTilde = p => p.replace(/^\/(?:home\/[^/]+|Users\/[^/]+|root)(?=\/|$)/, "~");
   const folderOf = s => homeTilde(s.remote ? s.cwd.replace(/^\/@[^/]+/, "") : s.cwd);
   const lastOn = m => m ? ((last.cwdOn || {})[m] || "") : tilde(last.cwd || "");
-  const harness = S.harnesses.some(h => h.id === last.harness) ? last.harness : S.harnesses[0].id;
+  // Fork to…: the dialog starts from the session forked (its machine, folder, harness, model, group); another machine
+  // or folder makes a hand-over there (orbit/desk/forkto.py), the same ones the session's own fork
+  const src = preset.fork ? S.sessions.get(preset.fork) : null;
+  if (src) { preset = { ...preset, machine: src.remote || "", cwd: folderOf(src) }; gidArg = gidArg || src.group; }
+  const harness = src && S.harnesses.some(h => h.id === src.harness) ? src.harness : S.harnesses.some(h => h.id === last.harness) ? last.harness : S.harnesses[0].id;
   let ctls = null;
   const gid = typeof gidArg === "string" ? gidArg : (S.group !== FAV ? S.group : (cur() ? cur().group : (S.groups[0] || {}).id));
   // Which machine: this one, or another (its folders, its harnesses); the group is this server's either way.
@@ -43,9 +47,10 @@ async function newSession(gidArg, preset = {}) {  // preset: {cwd, machine} (a f
   const harnessOpts = m => S.harnesses.filter(h => !m || !h.local_only).map(h => ({ value: h.id, label: h.label }));
   let harnessNow = harness;
   const v = await dialog({
-    title: "New session", ok: "Start ⌘⏎",
+    title: src ? `Fork “${src.name}” to…` : "New session", ok: src ? "Fork ⌘⏎" : "Start ⌘⏎",
+    ...(src ? { body: "Same machine and folder: it continues the conversation (another harness: a hand-over). Another machine or folder: a hand-over there: its latest turns go with it as a file, it reads them, checks the working tree, reports and waits." } : {}),
     fields: [
-      { key: "name", label: "Name", value: "", placeholder: "optional, kept when the tab closes; e.g. softcensor review" },
+      { key: "name", label: "Name", value: src ? `${src.name} (fork)` : "", placeholder: "optional, kept when the tab closes; e.g. softcensor review" },
       ...(ups.length ? [{ key: "machine", label: "Machine", type: "dropdown", value: machine,
         options: [{ value: "", label: "This Mac" }, ...ups.map(m => ({ value: m.name, label: m.name }))],
         onChange: m => {
@@ -57,19 +62,28 @@ async function newSession(gidArg, preset = {}) {  // preset: {cwd, machine} (a f
       { key: "cwd", label: "Folder", value: preset.cwd || defaultFolder(machine), recent, complete: completeDir },
       { key: "harness", label: "Harness", type: "dropdown", value: harness, options: harnessOpts(machine),
         onChange: h => { harnessNow = h; ctls.model.setOptions(modelsFor(h), ""); ctls.effort.setOptions(effortsFor(h), ""); ctls.mode.setOptions(modeOptions(h), ctls.mode.get()); } },
-      { key: "model", label: "Model", type: "dropdown", value: harness === last.harness ? last.model : "", options: modelsFor(harness) },
-      { key: "effort", label: "Effort", type: "dropdown", value: harness === last.harness ? (last.effort || "") : "", options: effortsFor(harness) },
-      { key: "mode", label: "Mode", type: "dropdown", value: modesFor(harness).includes(last.mode) ? last.mode : "default", options: modeOptions(harness) },
+      { key: "model", label: "Model", type: "dropdown", value: src ? (src.model || "") : harness === last.harness ? last.model : "", options: modelsFor(harness) },
+      { key: "effort", label: "Effort", type: "dropdown", value: src ? (src.effort || "") : harness === last.harness ? (last.effort || "") : "", options: effortsFor(harness) },
+      { key: "mode", label: "Mode", type: "dropdown", value: src && modesFor(harness).includes(src.mode) ? src.mode : modesFor(harness).includes(last.mode) ? last.mode : "default", options: modeOptions(harness) },
       { key: "group", label: "Group", type: "dropdown", value: gid, options: groupTree().map(({ g, depth }) => ({ value: g.id, label: "\u2003".repeat(depth) + g.name })) },
     ],
     render: (_, ctl) => { ctls = ctl; },
     validate: async v => {
       if (!v.cwd.trim()) return "Pick a folder.";
-      try { newSession.created = await api("POST", "/api/sessions", v); } catch (e) { return e.message; }
+      try { newSession.created = await api("POST", src ? `/api/sessions/${src.id}/fork` : "/api/sessions", src ? { ...v, machine: v.machine || "" } : v); }
+      catch (e) { return e.message; }
       return null;
     },
   });
   if (!v) return;
+  if (src) {  // (a fork: the last New session choices stay as they were)
+    const r = newSession.created;
+    S.sessions.set(r.id, r); if (!S.cards.has(r.id)) S.cards.set(r.id, []);
+    switchTo(r.id);
+    toast(r.fork_across ? `Forked “${src.name}” → “${r.name}”${v.machine ? " on " + v.machine : ""}: a hand-over (it reads ${r.handover ? "the turns written for it" : "this session's turns"}, checks the working tree, reports and waits)`
+                        : `Forked “${src.name}” → “${r.name}”`);
+    return;
+  }
   const cwdOn = { ...(last.cwdOn || {}), ...(v.machine ? { [v.machine]: v.cwd } : {}) };  // the last folder, per machine
   LS.set("lastNew", { cwd: v.machine ? last.cwd : v.cwd, cwdOn, model: v.model, mode: v.mode, harness: v.harness, effort: v.effort });
   const s = newSession.created;
@@ -91,8 +105,7 @@ function tabMenu(sid = S.current, where) {
   menu([
     { label: "Rename", run: () => renameSession(sid) },
     EMBED ? null : { label: "Fork", key: "/fork-session", run: () => forkSession(sid) },
-    EMBED ? null : { label: "Fork to", sub: () => S.harnesses.filter(h => h.id !== s.harness)  // another harness: a hand-over (out of quota, say)
-      .map(h => ({ label: h.label, run: () => forkSession(sid, "", h.id) })) },
+    EMBED ? null : { label: "Fork to…", run: () => newSession(undefined, { fork: sid }) },  // another harness, machine or folder (a dialog)
     EMBED ? null : { label: "Move to", sub: groups },
     { label: "Copy link", run: () => copyText(`orbit://session/${sid}`) },
     { label: "Copy resume command", run: () => copyResumeCommand(sid) },

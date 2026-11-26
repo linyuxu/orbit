@@ -903,6 +903,40 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             self.assertEqual(page.evaluate(f"(() => {{ const m = EDITORS.get({json.dumps(f)}).ed.view.state.selection.main; return m.empty; }})()"), True, name)
             self.assertTrue(page.evaluate("!!(document.activeElement && document.activeElement.closest('.cm-editor'))"), name)
 
+    def test_fork_to_opens_a_dialog(self):
+        """The session menu's Fork to… opens the New session dialog as a fork: its name, folder and harness the
+        source's; another folder makes a hand-over there (the new session reads the turns written for it)."""
+        src = self.new_session("fork-src")
+        self.req("POST", f"/api/sessions/{src['id']}/send", {"text": "the first request"})
+        self.wait_card(src["id"], 1, ("completed",))
+        for name, page in self.each():
+            other = Path(self.work) / f"fork-dest-{name}"
+            other.mkdir(exist_ok=True)
+            self.open(page)
+            page.evaluate(f"switchTo({json.dumps(src['id'])}); tabMenu({json.dumps(src['id'])}, {{ at: {{ x: 400, y: 120 }} }}); 0")
+            page.click(".menu >> text=Fork to…")
+            page.wait_for_selector(".dialog .title")
+            self.assertIn("Fork “fork-src” to", page.inner_text(".dialog .title"))
+            vals = page.evaluate("[...document.querySelectorAll('.dialog input')].map(i => i.value)")
+            self.assertIn("fork-src (fork)", vals)
+            folder = page.locator(".dialog input").nth(1) if "fork-src (fork)" == vals[0] else None
+            cwd_i = vals.index(next(v for v in vals if v.rstrip("/").endswith("work")))
+            box = page.locator(".dialog input").nth(cwd_i)
+            box.fill(str(other))
+            page.keyboard.press("Meta+Enter")
+            page.wait_for_function("() => !document.querySelector('.dialog')", timeout=8000)
+            page.wait_for_function(f"() => S.current && S.sessions.get(S.current) && S.sessions.get(S.current).name === 'fork-src (fork)' && S.current !== {json.dumps(src['id'])}", timeout=8000)
+            new = page.evaluate("S.current")
+            c = self.wait_card(new, 1, ("completed",))
+            self.assertIn("handover", c["text"])
+            self.assertEqual(os.path.realpath(self.desk.get(new).cwd), os.path.realpath(other))
+            if name == "chromium":
+                page.evaluate(f"tabMenu({json.dumps(src['id'])}, {{ at: {{ x: 400, y: 120 }} }}); 0")
+                page.click(".menu >> text=Fork to…")
+                page.wait_for_selector(".dialog .title")
+                page.screenshot(path="/tmp/orbit-forkto.png")
+                page.keyboard.press("Escape")
+
     def wait_disk(self, p, timeout=8):
         end = time.time() + timeout
         while time.time() < end and not Path(p).exists():
