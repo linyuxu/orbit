@@ -11,7 +11,12 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
 - Notifications on the phone's lock screen (Web Push), sent by Orbit's server itself: Misc → Notifications turns them
   on (a tap: the browser asks, the app subscribes with the server's VAPID key; iPhone: Orbit on the Home Screen from
   its HTTPS address), Send a test, Remind me, the last sends with the push service's answer, Turn off. A tap on a
-  notification opens its session (the running app, or a cold start at `/m/#s/<id>`). Two senders: a reminder (a
+  notification opens its session: on an HTTPS server the message is Declarative Web Push (`{"web_push": 8030,
+  "notification": {title, body, navigate}}`, navigate `/m/?session=<id>`), which iOS 18.4+ opens by itself (it does
+  not give a Home Screen app's service worker the tap); elsewhere the service worker shows it and opens the session
+  (a cache entry the page takes when it shows, or a message). The phone looks for a new version each time it comes
+  to the front (iOS resumes it without loading it again), and its service worker reports to the push log (took over,
+  a push came, a tap came, with its version). Two senders: a reminder (a
   schedule with `notify`: `orbit-agent remind WHEN TEXT`, once or repeating; the server sends it, no agent wakes) and
   an agent (`orbit-agent notify TITLE BODY`, pointing at its session). Each reminder's due time reaches a device once,
   also when it fires again after a restart (a key per due time and device, `<state>/push/sent.json`); `--key` does

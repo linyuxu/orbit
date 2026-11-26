@@ -289,8 +289,9 @@ each with what is next.
 - **Reminder** (`notify`): sent to the phone's lock screen at its times by the server itself, no agent woken
   (`orbit-agent remind WHEN TEXT`, or Misc → Notifications → Remind me on the phone); a tap opens its session. Each due
   time is sent once per device, also when it fires again after a restart. The phone turns notifications on in Misc →
-  Notifications (iPhone: Orbit added to the Home Screen from its HTTPS address); the server sends them itself (Web
-  Push, `<state>/push/`: its VAPID keys, the devices, what was sent and the push service's answer).
+  Notifications (iPhone: Orbit added to the Home Screen from its HTTPS address, iOS 18.4+ for a tap to open the
+  session); the server sends them itself (Web Push, declarative on an HTTPS server; `<state>/push/`: its VAPID keys,
+  the devices, what was sent and the push service's answer).
 - **Watch**: `orbit-agent schedule watch --every 30s --check CMD TEXT` runs CMD on its interval with no agent and no
   cost; each line it prints is an event (JSON with an `id`, or text). Only new events wake the agent, with TEXT and the
   events; the first run only learns what is there (`--include-existing` to act on it). `schedule check ID` tries it.
