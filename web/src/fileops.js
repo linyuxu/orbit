@@ -215,7 +215,7 @@ function filesMouseDown(e, el) {
     return true;
   }
   if (!FSEL.keys.has(r.k)) selClear();  // (a press on the selection keeps it: it may be dragged)
-  S.pcursor = r.k; FSEL.pressed = r.k;
+  S.pcursor = r.k; FSEL.pressed = r.k; PRESS.on = true;
   for (const x of plist.querySelectorAll(".prow.kc")) x.classList.remove("kc");
   el.classList.add("kc");
   if (document.activeElement !== plist) plist.focus({ preventScroll: true });
@@ -227,6 +227,7 @@ plist.addEventListener("click", e => {
   FSEL.pressed = "";
   if (Date.now() - (FDRAG.dragged || 0) < 300) return;  // (the end of a drag)
   const r = PROWS.find(x => x.k === el.dataset.k); if (!r) return;
+  if (e.detail >= 2 && /^(dir|ldir|root|fsec)$/.test(r.kind)) return;  // (a folder double-clicked: opened by the first click, not shut again)
   if (FSEL.keys.size > 1) selClear();
   byMouse = true;  // (opened, the keyboard kept in the panel: left.js's mousedown, the same)
   try { plist.focus(); openRow(r, { focus: false }); renderLeft(); if (document.activeElement !== plist) plist.focus({ preventScroll: true }); }

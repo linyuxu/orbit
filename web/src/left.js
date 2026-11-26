@@ -7,6 +7,9 @@ async function refreshTree(root, force = false) {
   try {
     const d = await api("GET", "/api/tree?root=" + encodeURIComponent(root));
     d.at = Date.now();
+    // Unchanged (the 5-second refresh, mostly): not drawn again. A redraw replaces the rows under the pointer.
+    d.sig = JSON.stringify([d.files, d.dirs, d.status, d.branch, d.git, d.truncated]);
+    if (!force && t && !t.error && t.sig === d.sig) { t.at = d.at; return; }
     d.index = buildIndex(d.files, d.dirs || []);  // (the empty folders too: no file lists them)
     d.notes = d.files.filter(f => /\.md$/i.test(f));
     d.noteIndex = buildIndex(d.notes);
@@ -202,9 +205,22 @@ function sessionTitle(s) {
   const twin = [...S.sessions.values()].some(x => x.id !== s.id && x.name === s.name);
   return twin ? `${s.name} · ${s.id.slice(0, 4)}` : s.name;
 }
+/* A press on a row of the Files panel opens it on the click: the rows are not redrawn until the button is up. A
+   redraw in between (the panel taking the keyboard, a tree refresh, an agent's step) put new rows under the pointer:
+   the click hit none (a folder did not open) and a drag did not start. Drawn once the press ends. */
+const PRESS = { on: false, later: false };
+function pressEnd() {
+  if (!PRESS.on) return;
+  PRESS.on = false;
+  setTimeout(() => { if (PRESS.later) renderLeft(); }, 0);  // (after the click, which may have drawn them already)
+}
+for (const ev of ["mouseup", "dragstart"]) addEventListener(ev, pressEnd, true);
+addEventListener("blur", pressEnd);
 function renderLeft() {
   if (EMBED || $("#left").hidden) return;
   if (DRAG.active) { DRAG.pending.add(renderLeft); return; }  // (a drag is moving its rows: after it)
+  if (PRESS.on) { PRESS.later = true; $("#left").classList.toggle("kb", panelFocused()); return; }
+  PRESS.later = false;
   $("#left").classList.toggle("kb", panelFocused());
   const tab = S.left.tab;
   $("#ptabs").innerHTML = ptabs().map(([id, label]) => {  // a plugin's tab: its icon when it has one (the title on hover)
@@ -430,8 +446,16 @@ function filesTabRows() {
   rows.push({ kind: "goto", k: "goto", depth: 0 });
   return rows;
 }
+/* Whether a session's new record changes what the left panel shows: the Sessions tab, yes; the Files tab, when its
+   folders changed (a session's folder, a new one, their order); the other tabs, only its name (a schedule names it). */
+function leftShowsSession(old, s) {
+  if (S.left.tab === "sessions" || !old) return true;
+  if (S.left.tab === "files") return !!S.filter || filesTabRows().map(r => r.k).join("\n") !== FILES.drawn;
+  return old.name !== s.name;
+}
 function renderFilesRoots() {
   PROWS = filesTabRows();
+  FILES.drawn = S.filter ? "" : PROWS.map(r => r.k).join("\n");
   const w = FILES.want;
   if (w && Date.now() - w.t < 3000) { if (PROWS.some(r => r.k === w.k)) { S.pcursor = w.k; FILES.want = null; } else if (!PROWS.some(r => r.k === S.pcursor)) S.pcursor = w.k; }
   else FILES.want = null;
@@ -517,7 +541,17 @@ function renderFilesPanel() {
   }).join("");
   revealCursor();
 }
-function revealCursor() { const el = plist.querySelector(".prow.kc"); if (el) el.scrollIntoView({ block: "nearest" }); tipPanelRow(); }
+/* The cursor row brought into view (and its cut-off name's tip) when the cursor moved: a key, a click, Follow; not on
+   every redraw. The tree redraws every few seconds and on an agent's steps, and the user's own scrolling was pulled
+   back to the cursor each time. */
+let REVEALED = "";
+function revealCursor() {
+  const el = plist.querySelector(".prow.kc"), k = el ? S.left.tab + "|" + el.dataset.k : "";
+  if (k === REVEALED) return;
+  REVEALED = k;
+  if (el) el.scrollIntoView({ block: "nearest" });
+  tipPanelRow();
+}
 /* Follow: the left panel shows what the keyboard is on: the main tab, or the side tab when it has the keyboard (its
    file, its session). */
 function followPanel() {

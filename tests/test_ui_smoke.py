@@ -969,6 +969,46 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.dblclick(frow)
             page.wait_for_function("() => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.cm-editor'))", timeout=5000)
 
+    def test_the_files_tree_answers_the_mouse_and_keeps_its_scroll(self):
+        """A click opens a folder even from the composer (the panel taking the keyboard redrew the rows under the
+        press: the click hit none), and while the panel redraws during the press (an agent's step); a double-click
+        leaves it open. The tree scrolled away from its cursor stays there through redraws; a key brings the cursor back."""
+        d = Path(self.work) / "mouse-tree"
+        for i in range(70):
+            (d / f"f{i:02d}.txt").parent.mkdir(parents=True, exist_ok=True); (d / f"f{i:02d}.txt").write_text("x")
+        for n in ("alpha", "beta", "gamma"):
+            (d / n).mkdir(exist_ok=True); (d / n / "inside.txt").write_text("i")
+        sid = self.req("POST", "/api/sessions", {"cwd": str(d), "name": "mouse-tree"})[1]["id"]
+        root = str(d)
+        is_open = lambda page, n: page.evaluate(f"PROWS.some(r => r.k === {json.dumps(f'f:{root}|{n}/inside.txt')})")
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"switchTo({json.dumps(sid)}); S.left.shown = true; applyLeft(); setPanelTab('files'); 0")
+            page.wait_for_function(f"() => PROWS.some(r => r.k === 'd:{root}|alpha')", timeout=8000)
+            row = lambda n: f"#plist .prow[data-k='d:{root}|{n}']"
+            page.evaluate("focusMain()")  # (the keyboard in the composer: the click moves it to the panel)
+            page.click(row("alpha"))
+            page.wait_for_timeout(150)
+            self.assertTrue(is_open(page, "alpha"), name)
+            box = page.locator(row("beta")).bounding_box()  # a redraw during the press
+            page.mouse.move(box["x"] + 40, box["y"] + box["height"] / 2); page.mouse.down()
+            page.evaluate("renderLeft()"); page.mouse.up()
+            page.wait_for_timeout(150)
+            self.assertTrue(is_open(page, "beta"), name)
+            page.dblclick(row("gamma"))
+            page.wait_for_timeout(250)
+            self.assertTrue(is_open(page, "gamma"), name)
+            # scrolled away from the cursor: redraws keep the place
+            page.evaluate(f"S.pcursor = {json.dumps(f'd:{root}|alpha')}; renderLeft(); plist.scrollTop = plist.scrollHeight; 0")
+            y = page.evaluate("plist.scrollTop")
+            self.assertGreater(y, 200, name)
+            page.evaluate(f"renderLeft(); refreshTree({json.dumps(root)}, true); 0")
+            page.wait_for_timeout(400)
+            self.assertEqual(page.evaluate("plist.scrollTop"), y, name)
+            page.evaluate("focusPanel()"); page.keyboard.press("ArrowDown")  # (a key: the cursor in view again)
+            page.wait_for_timeout(100)
+            self.assertLess(page.evaluate("plist.scrollTop"), y, name)
+
     def test_earlier_cards_come_in_only_when_the_scrolling_stops(self):
         """A long conversation draws its latest 40 requests; the earlier ones come in above once the user's scrolling
         stops, the view kept where it was. Never during the scroll: WebKit drops a scrollTop written during a

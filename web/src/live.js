@@ -1,5 +1,17 @@
 "use strict";
 /* ===================================================================== live updates (SSE) */
+/* A session's record comes again with its every step (its preview, its time): the tabs and the panels it shows in are
+   drawn from it at most every 250 ms. Drawn on each event (twenty a second with two agents at work), the rows were
+   replaced under the pointer: a click hit nothing, a hover's tip flickered. */
+const LIVE_DRAW = { fns: new Set(), t: 0, last: 0 };
+function drawSoon(...fns) {
+  fns.forEach(f => LIVE_DRAW.fns.add(f));
+  if (LIVE_DRAW.t) return;
+  LIVE_DRAW.t = setTimeout(() => {
+    LIVE_DRAW.t = 0; LIVE_DRAW.last = Date.now();
+    const f = [...LIVE_DRAW.fns]; LIVE_DRAW.fns.clear(); f.forEach(x => x());
+  }, Math.max(0, LIVE_DRAW.last + 250 - Date.now()));
+}
 function connect() {
   const es = new EventSource("/api/events?delta=1");  // (a streaming card's changes as patches: cardpatch.js)
   es.onmessage = ev => {
@@ -31,7 +43,8 @@ function connect() {
       if ((old ? old.attention || "" : "") !== (s.attention || "")) attentionChanged(s);
       if (s.id === S.current && old && !inView(s)) { removeFromView(s.id, old); return; }
       if (!S.current && inView(s) && !S.file) { switchTo(s.id, { focus: false }); return; }
-      renderTabs(); renderLeft(); renderSide();
+      drawSoon(renderTabs, renderSide);
+      if (leftShowsSession(old, s)) drawSoon(renderLeft);
       if (s.id === S.current) { renderStatus(); if (old && old.cwd !== s.cwd) pollReview(); }
     } else if (m.t === "order") {
       const next = new Map();
