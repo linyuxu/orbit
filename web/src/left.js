@@ -639,6 +639,7 @@ function rowMenu(r, where) {
     if (r.kind === "week" || r.kind === "note") return;
     if (r.kind === "goto") return gotoFolder();
     if (r.kind === "fsec") return r.fold ? toggleRoot(r) : undefined;
+    if (typeof FSEL !== "undefined" && FSEL.keys.size > 1 && FSEL.keys.has(r.k)) return selectionMenu(where);  // (fileops.js)
     if (r.kind === "root") return folderMenu(r.root, where, r);
     if (r.kind === "ldir") return folderMenu(r.path, where);
     return r.kind === "dir" ? folderMenu(rowPath(r), where, null, rowRoot(r)) : fileMenu(rowPath(r), where);
@@ -769,6 +770,8 @@ function panelKey(e, combo) {
   if ((combo === "AS:BracketLeft" || combo === "AS:BracketRight") && S.left.tab === "sessions" && (S.machines || []).length) {
     cycleMachine(combo.endsWith("Left") ? -1 : 1); return true;
   }
+  // The Files tab, its filter empty: ⌥W copy · ⌃W cut · ⌃Y paste (⌘C ⌘X ⌘V), ⇧↑ ⇧↓ select, ⌘⌫ to the Trash (fileops.js)
+  if (S.left.tab === "files" && !S.filter && typeof filesOpsKey === "function" && filesOpsKey(combo)) return true;
   if (combo === "Escape") { S.filter = ""; renderLeft(); focusMain(); return true; }
   const tab = S.left.tab;
   const r = prow();
@@ -843,8 +846,6 @@ function panelKey(e, combo) {
     if (combo === "M:KeyW" && r && r.kind === "session") { closeOrUnfavorite(r.sid, r.gid); return true; }  // (a Favorites row: off the favorites)
     if (combo === "M:KeyW" && r && r.kind === "ftab") { closeGroupTab(r); return true; }
   }
-  // The Files tab, its filter empty: ⌥W copy · ⌃W cut · ⌃Y paste (and ⌘C ⌘X ⌘V), Finder's clipboard too (fileops.js)
-  if (tab === "files" && !S.filter && typeof filesOpsKey === "function" && filesOpsKey(combo)) return true;
   if (LINE_KEYS.has(combo) || combo === "Backspace") {  // the filter is a line: the editors' Emacs keys move and edit in it
     const r = lineEdit(S.filter, filterPos(), combo);
     if (r) { const changed = r.value !== S.filter; S.filter = r.value; S.filterPos = r.pos; if (changed) S.pcursor = null; renderLeft(); }
@@ -868,6 +869,7 @@ $("#pfbox").addEventListener("mousedown", e => { e.preventDefault(); plist.focus
 plist.addEventListener("mousedown", e => {
   const el = e.target.closest(".prow[data-k]");
   if (!el || e.button !== 0) return;
+  if (S.left.tab === "files" && !S.filter && typeof filesMouseDown === "function" && filesMouseDown(e, el)) return;  // (a row that can be dragged: fileops.js)
   e.preventDefault();
   S.pcursor = el.dataset.k;
   const r = prow();

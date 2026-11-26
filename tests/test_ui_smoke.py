@@ -817,6 +817,55 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
         finally:
             transfer._jxa = old
 
+    def test_the_files_tree_selects_many(self):
+        """Multi-select in the Files tab: ⌘-click two files, drag them (a real mouse drag) onto a folder: both move; ⇧↓
+        selects from the cursor, ⌥W ⌃Y copies them; ⌘⌫ sends the selection to the Trash (the test's own)."""
+        from orbit.workspace import files as wfiles, transfer
+        old_jxa, old_trash = transfer._jxa, wfiles.trash
+        transfer._jxa = lambda script, args=None: {"count": 1, "paths": []} if args is None else {"count": 2}
+        trash = Path(self.work) / "trash-many"; trash.mkdir(exist_ok=True)
+        wfiles.trash = lambda p: os.rename(wfiles._abs(p), trash / f"{time.time_ns()}-{os.path.basename(p)}")
+        try:
+            for name, page in self.each():
+                d = Path(self.work) / "many" / name
+                (d / "box").mkdir(parents=True, exist_ok=True); (d / "copies").mkdir(exist_ok=True)
+                for f in ("c.txt", "d.txt", "e.txt", "f.txt", "g.txt"):
+                    (d / f).write_text(f)
+                s = self.req("POST", "/api/sessions", {"cwd": str(d), "name": f"many-{name}"})[1]
+                self.open(page)
+                page.evaluate(f"switchTo({json.dumps(s['id'])}); S.left.shown = true; applyLeft(); setPanelTab('files'); focusPanel(); 0")
+                root = str(d)
+                row = lambda f: page.locator(f".prow[data-k='f:{root}|{f}']")
+                page.wait_for_function(f"() => PROWS.some(r => r.k === 'f:{root}|c.txt')", timeout=8000)
+                row("c.txt").click(modifiers=["Meta"]); row("d.txt").click(modifiers=["Meta"])
+                self.assertEqual(page.evaluate("FSEL.keys.size"), 2, name)
+                self.assertEqual(page.locator(".prow.msel").count(), 2)
+                row("c.txt").drag_to(page.locator(f".prow[data-k='d:{root}|box']"))  # (a real drag: the browser's own)
+                self.wait_disk(d / "box" / "c.txt"); self.wait_disk(d / "box" / "d.txt")
+                self.wait_gone(d / "c.txt"); self.wait_gone(d / "d.txt")
+                # ⇧↓ from e.txt: e and f, copied into copies
+                page.wait_for_function(f"() => !PROWS.some(r => r.k === 'f:{root}|c.txt') && PROWS.some(r => r.k === 'f:{root}|e.txt')", timeout=8000)
+                page.evaluate(f"S.pcursor = 'f:{root}|e.txt'; renderLeft(); focusPanel(); 0")
+                page.keyboard.press("Shift+ArrowDown")
+                self.assertEqual(sorted(page.evaluate("[...FSEL.keys.values()].map(p => p.split('/').pop())")), ["e.txt", "f.txt"])
+                page.keyboard.press("Alt+w")
+                page.evaluate(f"S.pcursor = 'd:{root}|copies'; renderLeft(); focusPanel(); 0")
+                page.keyboard.press("Control+y")
+                self.wait_disk(d / "copies" / "e.txt"); self.wait_disk(d / "copies" / "f.txt")
+                self.assertTrue((d / "e.txt").exists())
+                # ⌘⌫ on a selection of two: one question, both to the Trash
+                page.wait_for_function(f"() => PROWS.some(r => r.k === 'f:{root}|g.txt')", timeout=8000)
+                page.evaluate(f"selClear(); S.pcursor = 'f:{root}|f.txt'; renderLeft(); focusPanel(); 0")
+                page.keyboard.press("Shift+ArrowDown")
+                page.keyboard.press("Meta+Backspace")
+                page.wait_for_selector(".dialog")
+                self.assertIn("2 items", page.inner_text(".dialog .title"))
+                page.click(".dialog [data-ok]")
+                self.wait_gone(d / "f.txt"); self.wait_gone(d / "g.txt")
+                self.assertTrue((d / "e.txt").exists())
+        finally:
+            transfer._jxa, wfiles.trash = old_jxa, old_trash
+
     def wait_disk(self, p, timeout=8):
         end = time.time() + timeout
         while time.time() < end and not Path(p).exists():

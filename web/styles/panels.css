@@ -278,3 +278,6 @@ body.dragsort, body.dragsort * { cursor:grabbing !important; -webkit-user-select
 .prow.ft.cutrow { opacity:.45; }
 .prow.ft.droptgt { background:color-mix(in srgb, var(--focus) 16%, transparent); box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--focus) 60%, transparent); border-radius:6px; }
 .prow.ft[draggable="true"] { -webkit-user-drag:element; }
+.prow.ft.msel { background:color-mix(in srgb, var(--focus) 13%, transparent); }
+.prow.ft.msel .nm { color:var(--ink); }
+.dragghost { position:fixed; top:-100px; left:0; padding:4px 10px; border-radius:6px; background:var(--focus); color:#fff; font:600 12px/1.4 var(--font); }

@@ -8,7 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
-- The Files panel is a file manager, on this Mac and across machines: ⌥W copy · ⌃W cut · ⌃Y paste into the cursor's
+- The Files panel is a file manager, on this Mac and across machines: multi-select (⌘-click, ⇧-click, ⇧↑ ⇧↓; Esc
+  clears; copy, cut, drag and ⌘⌫ Move to Trash take the whole selection; a file opens on the click, so a drag opens
+  nothing and a real mouse drag starts); ⌥W copy · ⌃W cut · ⌃Y paste into the cursor's
   folder (⌘C ⌘X ⌘V too; menus: Copy, Cut, Paste here); drag a file or folder onto a folder (its machine: a move;
   another machine: a copy; ⌥: a copy), a closed folder held under the drag opens, the panel scrolls at its edges.
   With Finder through the Mac's clipboard: copied here, Finder pastes it (another machine's files fetched to

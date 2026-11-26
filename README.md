@@ -170,8 +170,9 @@ saves over a file that has content: auto-save skips it and ⌘S asks.
   `![name](path)` (an image shows in place) or `[name](path)` (in the app the real path; a paste or a browser drop is
   saved under `~/.orbit/uploads/` first). Dropped on a Markdown file it is copied beside it and linked (`attachments/` +
   `![[name]]` in the vault); on a code file its path is typed in; anywhere else it opens in a tab.
-- **The Files panel is a file manager**, on this Mac and across machines. ⌥W copies, ⌃W cuts, ⌃Y pastes into the
-  cursor's folder (⌘C ⌘X ⌘V too; the menus have Copy, Cut, Paste here). Drag a file or folder onto any folder: on its
+- **The Files panel is a file manager**, on this Mac and across machines. ⌘-click and ⇧-click (⇧↑ ⇧↓) select several;
+  ⌥W copies, ⌃W cuts, ⌃Y pastes into the cursor's folder (⌘C ⌘X ⌘V too; the menus have Copy, Cut, Paste here); ⌘⌫
+  sends the selection to the Trash. Drag a file or folder onto any folder: on its
   own machine it moves, to another it copies (⌥ held: a copy); a closed folder held under the drag opens, and the
   panel scrolls at its edges. With Finder: what you copy here Finder pastes (another machine's files fetched first;
   Finder takes a cut as a copy), and ⌃Y pastes what you copied in Finder, into a local or a remote folder; files

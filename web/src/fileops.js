@@ -10,7 +10,21 @@
    (as Finder), ⌥ held → a copy. Hovering a closed folder opens it; near the panel's top or bottom it scrolls. Files
    dragged in from Finder are put in that folder (here or another machine's). */
 const FCLIP = { paths: [], cut: false, count: null };
-const FDRAG = { path: "", over: "", at: 0, timer: 0 };
+const FDRAG = { path: "", paths: [], over: "", at: 0, timer: 0 };
+/* Multi-select: ⌘-click toggles a row, ⇧-click selects a range, ⇧↑ ⇧↓ (⌃⇧P ⌃⇧N) grow it from the cursor, Esc clears.
+   Copy, cut, drag and Move to Trash take the selection (a folder with something of its own selected: the folder). */
+const FSEL = { keys: new Map(), anchor: "", pressed: "" };  // row key → its path (kept while folded away)
+function selectedPaths(r = prow()) {
+  const ps = FSEL.keys.size ? [...FSEL.keys.values()] : [opsPath(r)].filter(Boolean);
+  return ps.filter(p => !ps.some(q => q !== p && p.startsWith(q + "/")));  // (inside a selected folder: the folder takes it)
+}
+function selClear() { if (FSEL.keys.size) { FSEL.keys.clear(); FSEL.anchor = ""; return true; } return false; }
+function selAdd(r) { const p = opsPath(r); if (p) FSEL.keys.set(r.k, p); }
+function selRange(fromK, toK) {
+  const i = PROWS.findIndex(x => x.k === fromK), j = PROWS.findIndex(x => x.k === toK);
+  if (i < 0 || j < 0) return;
+  for (const r of PROWS.slice(Math.min(i, j), Math.max(i, j) + 1)) selAdd(r);
+}
 const opsRow = r => !!r && ["file", "dir", "lfile", "ldir"].includes(r.kind);
 const opsPath = r => opsRow(r) ? rowPath(r) : r && r.kind === "root" && !r.place ? r.root : "";
 /* The folder a paste or drop goes into: a folder itself, a file's folder, a root (a place: its real path). */
@@ -22,19 +36,40 @@ function opsFolder(r) {
   return "";
 }
 const machineOfPath = p => (/^\/@([^/]+)/.exec(p || "") || [])[1] || "";
-/* Copy (⌥W, ⌘C) or cut (⌃W, ⌘X) the cursor's file or folder (or a path: a menu's). */
+/* Copy (⌥W, ⌘C) or cut (⌃W, ⌘X) the selection, else the cursor's file or folder (or a path: a menu's). */
 async function filesClip(cut, r = prow(), path = "") {
-  const p = path || opsPath(r);
-  if (!p) { toast("A file or a folder to copy"); return; }
-  if (cut && r && r.kind === "root") { toast("A session's folder is not cut: copy it (⌥W)"); return; }
-  FCLIP.paths = [p]; FCLIP.cut = cut; FCLIP.count = null;
+  const ps = path ? [path] : selectedPaths(r);
+  if (!ps.length) { toast("A file or a folder to copy"); return; }
+  if (cut && ps.some(p => S.trees.has(p))) { toast("A session's folder is not cut: copy it (⌥W)"); return; }
+  FCLIP.paths = ps; FCLIP.cut = cut; FCLIP.count = null;
   renderLeft();
-  toast(`${cut ? "Cut" : "Copied"} ${basename(p)}: ⌃Y pastes it into a folder${machineOfPath(p) ? "" : " · Finder: ⌘V"}`);
+  const what = ps.length === 1 ? basename(ps[0]) : `${ps.length} items`;
+  toast(`${cut ? "Cut" : "Copied"} ${what}: ⌃Y pastes ${ps.length === 1 ? "it" : "them"} into a folder${ps.some(machineOfPath) ? "" : " · Finder: ⌘V"}`);
   try {
-    const d = await api("POST", "/api/clipboard/files", { paths: [p] });
-    if (FCLIP.paths[0] === p) FCLIP.count = d.count;
-    if (d.fetched) toast(`${basename(p)} is on the clipboard: Finder's ⌘V pastes it`);
+    const d = await api("POST", "/api/clipboard/files", { paths: ps });
+    if (FCLIP.paths === ps) FCLIP.count = d.count;
+    if (d.fetched) toast(`${what} on the clipboard: Finder's ⌘V pastes ${ps.length === 1 ? "it" : "them"}`);
   } catch (e) { if (e.status !== 403) console.warn("clipboard:", e.message); }  // (another machine's page: no Mac clipboard)
+}
+/* Move to Trash (⌘⌫, the menu): the selection, else the cursor's row; asked once. */
+async function filesTrash(r = prow()) {
+  const ps = selectedPaths(r).filter(p => !S.trees.has(p));
+  if (!ps.length) return;
+  if (ps.length === 1) { selClear(); return trashPath(ps[0]); }
+  const ok = await confirmDialog({ title: `Move ${ps.length} items to the Trash?`, body: ps.slice(0, 8).map(p => basename(p)).join(", ") + (ps.length > 8 ? "…" : "") + ". You can put them back from there.", ok: "Move to Trash", danger: true });
+  if (!ok) return;
+  let n = 0;
+  for (const p of ps) {
+    try {
+      await api("POST", "/api/files/trash", { path: p }); n++;
+      for (const gid of Object.keys(S.ftabs)) S.ftabs[gid] = S.ftabs[gid].filter(t => t.path !== p && !t.path.startsWith(p + "/"));
+      for (const q of [...EDITORS.keys()]) if (q === p || q.startsWith(p + "/")) disposeEditor(q);
+      if (S.file && (S.file === p || S.file.startsWith(p + "/"))) { S.file = null; showCurrent(true); }
+    } catch (e) { toast(`${basename(p)}: ${e.message}`); }
+  }
+  selClear(); saveUi(); renderTabs();
+  refreshAround(ps);
+  toast(`Moved ${n} item${n === 1 ? "" : "s"} to the Trash`);
 }
 /* Paste (⌃Y, ⌘V) into a folder: what Finder copied (the clipboard changed since), else what was copied here. */
 async function filesPaste(dir = opsFolder(prow())) {
@@ -97,6 +132,7 @@ function opsDecorate() {
     const r = PROWS.find(x => x.k === el.dataset.k); if (!r) continue;
     if (opsPath(r)) el.draggable = true;
     if (cut && cut.has(opsPath(r))) el.classList.add("cutrow");
+    if (FSEL.keys.has(r.k)) el.classList.add("msel");
   }
 }
 /* ---------- drag and drop */
@@ -107,10 +143,18 @@ plist.addEventListener("dragstart", e => {
   if (S.left.tab !== "files") return;
   const r = opsRowAt(e.target), p = opsPath(r);
   if (!p) { e.preventDefault(); return; }
-  FDRAG.path = p;
+  FDRAG.paths = FSEL.keys.has(r.k) ? selectedPaths(r) : [p];  // (a selected row: the whole selection; another: itself)
+  FDRAG.path = FDRAG.paths[0];
   e.dataTransfer.effectAllowed = "copyMove";
-  e.dataTransfer.setData("application/x-orbit-path", p);
-  e.dataTransfer.setData("text/plain", p);
+  e.dataTransfer.setData("application/x-orbit-path", FDRAG.paths.join("\n"));
+  e.dataTransfer.setData("text/plain", FDRAG.paths.join("\n"));
+  if (FDRAG.paths.length > 1) {  // the drag image: "N items"
+    const ghost = document.createElement("div");
+    ghost.className = "dragghost"; ghost.textContent = `${FDRAG.paths.length} items`;
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 10, 10);
+    setTimeout(() => ghost.remove(), 0);
+  }
 });
 plist.addEventListener("dragover", e => {
   if (S.left.tab !== "files") return;
@@ -122,7 +166,7 @@ plist.addEventListener("dragover", e => {
   const box = plist.getBoundingClientRect(), edge = 28;
   if (e.clientY < box.top + edge) plist.scrollTop -= 14; else if (e.clientY > box.bottom - edge) plist.scrollTop += 14;
   const r = opsRowAt(e.target), dir = opsFolder(r);
-  if (!dir || (FDRAG.path && (dir === FDRAG.path || dir.startsWith(FDRAG.path + "/")))) { opsClearOver(); e.dataTransfer.dropEffect = "none"; return; }
+  if (!dir || (FDRAG.path && FDRAG.paths.some(p => dir === p || dir.startsWith(p + "/")))) { opsClearOver(); e.dataTransfer.dropEffect = "none"; return; }
   e.preventDefault();
   e.dataTransfer.dropEffect = opsCopying(e, dir) ? "copy" : "move";
   if (FDRAG.over !== r.k) {
@@ -141,16 +185,53 @@ plist.addEventListener("dragleave", e => { if (!plist.contains(e.relatedTarget))
 plist.addEventListener("drop", async e => {
   if (S.left.tab !== "files") return;
   const r = opsRowAt(e.target), dir = opsFolder(r);
-  const src = FDRAG.path, copying = opsCopying(e, dir);
-  opsClearOver(); FDRAG.path = "";
+  const src = FDRAG.path, srcs = [...FDRAG.paths], copying = opsCopying(e, dir);
+  opsClearOver(); FDRAG.path = ""; FDRAG.paths = [];
   if (!dir) return;
   e.preventDefault();
-  if (src) { if (dir !== dirname(src) || copying) runTransfers([src], dir, !copying); return; }
+  if (src) {
+    const go = copying ? srcs : srcs.filter(p => dirname(p) !== dir);  // (a move into its own folder: nothing to do)
+    if (go.length) { selClear(); runTransfers(go, dir, !copying); }
+    return;
+  }
   const list = [...(e.dataTransfer.files || [])];
   if (list.length) uploadInto(dir, list);
 });
 // (a folder opened under the drag redraws the rows, the dragged one with them: its dragend may never come)
-for (const t of ["dragend", "drop"]) document.addEventListener(t, () => setTimeout(() => { opsClearOver(); FDRAG.path = ""; }, 0), true);
+for (const t of ["dragend", "drop"]) document.addEventListener(t, () => setTimeout(() => { opsClearOver(); FDRAG.path = ""; FDRAG.paths = []; FDRAG.dragged = Date.now(); }, 0), true);
+/* The mouse in the Files tab (from the panel's mousedown): a row that can be dragged is not redrawn on the press (its
+   drag could not start); it opens on the click (a drag ends with none). ⌘-click and ⇧-click select. True: handled. */
+function filesMouseDown(e, el) {
+  const r = PROWS.find(x => x.k === el.dataset.k);
+  if (!r || !opsPath(r)) { selClear(); return false; }
+  if (e.metaKey || e.shiftKey) {
+    e.preventDefault();
+    if (e.shiftKey) { const from = FSEL.anchor || S.pcursor; if (!e.metaKey) FSEL.keys.clear(); selRange(from, r.k); FSEL.anchor = from; }
+    else {
+      if (FSEL.keys.has(r.k)) FSEL.keys.delete(r.k); else selAdd(r);
+      FSEL.anchor = r.k;
+    }
+    S.pcursor = r.k; plist.focus({ preventScroll: true }); renderLeft();
+    return true;
+  }
+  if (!FSEL.keys.has(r.k)) selClear();  // (a press on the selection keeps it: it may be dragged)
+  S.pcursor = r.k; FSEL.pressed = r.k;
+  for (const x of plist.querySelectorAll(".prow.kc")) x.classList.remove("kc");
+  el.classList.add("kc");
+  if (document.activeElement !== plist) plist.focus({ preventScroll: true });
+  return true;
+}
+plist.addEventListener("click", e => {
+  if (S.left.tab !== "files" || e.metaKey || e.shiftKey || e.button !== 0) return;
+  const el = e.target.closest(".prow[data-k]"); if (!el || FSEL.pressed !== el.dataset.k) return;
+  FSEL.pressed = "";
+  if (Date.now() - (FDRAG.dragged || 0) < 300) return;  // (the end of a drag)
+  const r = PROWS.find(x => x.k === el.dataset.k); if (!r) return;
+  if (FSEL.keys.size > 1) selClear();
+  byMouse = true;
+  try { if (r.kind === "dir" || r.kind === "ldir" || r.kind === "root") { plist.focus(); openRow(r, { focus: false }); } else { openRow(r); renderLeft(); } }
+  finally { byMouse = false; }
+});
 /* Files dragged in from Finder: each put in the folder (here or another machine's). A folder from Finder: copy it
    there (⌘C) and paste here (⌃Y). */
 async function uploadInto(dir, list) {
@@ -167,8 +248,29 @@ async function uploadInto(dir, list) {
   refreshAround([dir]);
   if (n) toast(`Put ${n === 1 ? list[0].name : n + " files"} in ${tilde(dir)}`);
 }
+/* The menu of a multi-selection (a right-click on one of its rows). */
+function selectionMenu(where) {
+  const ps = selectedPaths(), n = ps.length;
+  menu([
+    { label: `Copy ${n} items`, key: "⌥W", run: () => filesClip(false) },
+    { label: `Cut ${n} items`, key: "⌃W", run: () => filesClip(true) },
+    { label: "Copy their paths", run: () => copyText(ps.join("\n")) },
+    { sep: true },
+    { label: `Move ${n} items to the Trash…`, key: "⌘⌫", danger: true, run: () => filesTrash() },
+    { label: "Clear the selection", key: "Esc", run: () => { selClear(); renderLeft(); } },
+  ], where);
+}
 /* Keys in the Files tab (from panelKey, the filter empty). */
 function filesOpsKey(combo) {
+  if (combo === "S:ArrowDown" || combo === "S:ArrowUp") {  // the selection grows from the cursor
+    if (!FSEL.keys.size) { selAdd(prow()); FSEL.anchor = S.pcursor; }
+    movePanel(combo === "S:ArrowDown" ? 1 : -1);
+    FSEL.keys.clear(); selRange(FSEL.anchor, S.pcursor); renderLeft();
+    return true;
+  }
+  if (combo === "Escape" && selClear()) { renderLeft(); return true; }
+  if (combo === "M:Backspace" || combo === "M:Delete") { filesTrash(); return true; }
+  if (["ArrowDown", "ArrowUp", "Home", "End", "PageDown", "PageUp"].includes(combo) && FSEL.keys.size) selClear();  // (a plain move: one row again)
   if (combo === "A:KeyW" || combo === "M:KeyC") { filesClip(false); return true; }
   if (combo === "C:KeyW" || combo === "M:KeyX") { filesClip(true); return true; }
   if (combo === "C:KeyY" || combo === "M:KeyV") { filesPaste(); return true; }
