@@ -53,6 +53,8 @@ class FindFilesTest(test_skeleton.SkeletonTest):
         r = findfiles.find("plan.py", [repo, repo + "/src"])  # (a folder inside another: one listing)
         self.assertEqual([(x["where"], x["path"]) for x in r["files"]], [("session", os.path.realpath(repo) + "/src/plan.py")])
         self.assertEqual(findfiles.outermost([repo + "/src", repo, "/nope/a", "/nope/a/b"]), ["/nope/a", os.path.realpath(repo)])
+        r = findfiles.find("repo plan.py", [repo])  # (a session folder's own name is part of its files' paths)
+        self.assertEqual([x["path"] for x in r["files"]], [os.path.realpath(repo) + "/src/plan.py"])
 
     def test_the_walk_stops_at_its_budget(self):
         old = findfiles.WALK_FILES

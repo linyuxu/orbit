@@ -138,8 +138,9 @@ def find(q: str, roots: list[str], limit: int = LIMIT, home: bool = True) -> dic
             continue
         truncated = truncated or bool(t.get("truncated"))
         base = t.get("root") or root
+        named = os.path.basename(base.rstrip("/")) + "/"  # (the folder's own name counts: "orbit readme" finds orbit/README.md)
         for rel in t.get("files") or []:
-            if _hit(rel, terms):
+            if _hit(named + rel, terms):
                 p = os.path.join(base, rel)
                 hits.setdefault(p, {"path": p, "root": base, "rel": rel, "where": "session"})
                 if len(hits) >= MATCH_CAP:
