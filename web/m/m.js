@@ -214,6 +214,14 @@ document.addEventListener("touchstart", () => {}, { passive: true });  // (iOS s
     navigator.serviceWorker.addEventListener("controllerchange", () => { if (had) reload(); });
     document.addEventListener("visibilitychange", () => { if (pending && !document.hidden) reload(); });
     navigator.serviceWorker.register("/m/sw.js", { scope: "/m/", updateViaCache: "none" }).then(r => r.update()).catch(() => {});
+    // iOS resumes a Home Screen app without loading it again: look for a new version each time it comes to the front
+    // (at most once a minute); a new one takes over and the page reloads (controllerchange, above).
+    let looked = Date.now();
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden || Date.now() - looked < 60000) return;
+      looked = Date.now();
+      navigator.serviceWorker.getRegistration("/m/").then(r => r && r.update()).catch(() => {});
+    });
   }
   try { const d = await api("GET", "/api/harnesses"); S.harnesses = d.harnesses || []; } catch (e) { if (e instanceof NotPaired) return; }
   try { await loadAll(); }
