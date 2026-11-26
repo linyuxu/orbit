@@ -15,6 +15,12 @@ A reminder (`notify`) sends its text to the phone's lock screen at its times (or
 agent; its session, if it names one, is what a tap opens. Each time it is due is sent once: the key is the schedule
 and that time, so a run fired again after a restart (its next time not yet saved) reaches no device twice.
 
+A schedule may target another machine's session (NAME~ID, as this server lists it): the request goes there
+through that server (a client id per due time, so a run fired again sends once). `done_notify` {title, body}:
+when the run's request ends, this server sends the phone a notification (completed: title / body; failed or
+stopped: "…未完成" and why) that opens the session; waiting runs are kept and followed again after a restart.
+`expires` (a time): no run after it (the schedule turns off).
+
 A watch schedule (`check`) runs a shell command on its interval with no agent and no cost; the command prints one
 event per line (JSON with an "id", or plain text); only events not seen before wake the agent, with the task and the
 new events. The first run only learns what is there (unless include_existing).
@@ -49,6 +55,7 @@ MAX_A_DAY = 24  # agent runs a day per job, unless the job says otherwise
 WATCH_MIN = 10  # seconds between a watch's checks, at least
 CHECK_TIMEOUT = 120
 EVENTS_SENT = 50  # new events a wake-up lists at most
+FOLLOW_MAX = 6 * 3600  # a run followed for its end (done_notify) this long at most
 
 
 # ------------------------------------------------------------------ when
@@ -227,6 +234,17 @@ def next_run(spec: dict, after: float, last: float | None = None) -> float | Non
 
 
 # ------------------------------------------------------------------ scheduler
+def _when_abs(v) -> float:
+    """A moment: seconds since the epoch, or an ISO date / date-time (local time unless it says otherwise)."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        d = datetime.fromisoformat(str(v).strip().replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError(f"not a date: {v!r} (2027-04-01 or 2027-04-01T00:00)") from None
+    return d.timestamp()
+
+
 class Scheduler:
     def __init__(self, desk: "Desk", path: Path):
         self.desk = desk
@@ -269,6 +287,9 @@ class Scheduler:
     def start(self) -> None:
         self._thread = threading.Thread(target=self._loop, name="orbit-scheduler", daemon=True)
         self._thread.start()
+        for it in list(self.items):  # runs still going when the last server stopped: follow them to their end
+            if it.get("waiting"):
+                self._follow(it)
 
     def stop(self) -> None:
         self._stop.set()
@@ -294,15 +315,37 @@ class Scheduler:
                 out.append(d)
             return out
 
+    def _remote(self, sid: str) -> dict | None:
+        """Another machine's session (NAME~ID) as this server last listed it; None when it is not one."""
+        from orbit.machines import federation
+        if not federation.split(sid or ""):
+            return None
+        fed = getattr(self.desk, "federation", None)
+        return next((s for s in (fed.list() if fed else []) if s.get("id") == sid), {})
+
+    def _session_exists(self, sid: str) -> None:
+        from orbit.machines import federation
+        if federation.split(sid):
+            if not self._remote(sid):
+                raise KeyError(sid)
+            return
+        self.desk.get(sid)
+
+    def _session_name(self, sid: str) -> str:
+        r = self._remote(sid)
+        if r is not None:
+            return (f"{r['name']} on {r.get('remote', '')}" if r else "(session gone)")
+        s = self.desk.sessions.get(sid)
+        return s.name if s else ""
+
     def _target_name(self, it: dict) -> str:
         if it.get("notify"):
-            s = self.desk.sessions.get(it.get("sid") or "")
-            return "phone notification" + (f" → {s.name}" if s else "")
+            n = self._session_name(it.get("sid") or "")
+            return "phone notification" + (f" → {n}" if n else "")
         if it.get("fleet"):
             return "Fleet" + (f" in {os.path.basename(it['cwd'].rstrip('/'))}" if it.get("cwd") else "")
         if it.get("sid"):
-            s = self.desk.sessions.get(it["sid"])
-            return s.name if s else "(session gone)"
+            return self._session_name(it["sid"]) or "(session gone)"
         return "new session in " + os.path.basename(it.get("cwd", "").rstrip("/"))
 
     def journal(self, it: dict) -> Path:
@@ -355,7 +398,7 @@ class Scheduler:
             if "sid" in b or "cwd" in b or "fleet" in b or it is None:
                 sid = str(b.get("sid") or "")
                 if sid:
-                    self.desk.get(sid)  # KeyError: no such session
+                    self._session_exists(sid)  # KeyError: no such session
                 out["fleet"], out["sid"], out["cwd"] = False, sid, ""
         elif "fleet" in b and b.get("fleet"):
             cwd = os.path.realpath(os.path.expanduser(str(b.get("cwd") or "~")))
@@ -366,7 +409,7 @@ class Scheduler:
             out["fleet"] = False
             sid, cwd = str(b.get("sid") or ""), str(b.get("cwd") or "")
             if sid:
-                self.desk.get(sid)  # KeyError: no such session
+                self._session_exists(sid)  # KeyError: no such session
                 out["sid"], out["cwd"] = sid, ""
             elif cwd:
                 cwd = os.path.realpath(os.path.expanduser(cwd))
@@ -375,6 +418,16 @@ class Scheduler:
                 out["sid"], out["cwd"] = "", cwd
             else:
                 raise ValueError("pick a session, or a folder for a new session each run")
+        if "done_notify" in b:
+            dn = b.get("done_notify")
+            if dn:
+                if not isinstance(dn, dict) or not str(dn.get("title") or "").strip():
+                    raise ValueError("done_notify: {title, body}")
+                out["done_notify"] = {"title": str(dn["title"]).strip()[:120], "body": str(dn.get("body") or "").strip()[:500]}
+            else:
+                out["done_notify"] = None
+        if "expires" in b:
+            out["expires"] = _when_abs(b.get("expires")) if b.get("expires") else None
         if "group" in b:
             out["group"] = str(b.get("group") or "")
         if "enabled" in b:
@@ -388,7 +441,7 @@ class Scheduler:
               "last": {}, "runs": 0, **fields}
         if not it["name"]:
             it["name"] = it["text"][:40]
-        it["next"] = next_run(it["spec"], now) if it["enabled"] else None
+        it["next"] = self._next(it, now, None) if it["enabled"] else None
         if it["enabled"] and it["next"] is None:
             raise ValueError("that time has passed")
         if it["spec"]["kind"] != "once" and not it.get("notify"):  # a repeating job keeps a journal of its runs
@@ -412,8 +465,8 @@ class Scheduler:
             if not it["name"]:
                 it["name"] = it["text"][:40]
             now = time.time()
-            if "spec" in fields or "enabled" in fields:
-                it["next"] = next_run(it["spec"], now) if it["enabled"] else None
+            if "spec" in fields or "enabled" in fields or "expires" in fields:
+                it["next"] = self._next(it, now, None) if it["enabled"] else None
         self._changed()
         return self._pub(it)
 
@@ -490,10 +543,79 @@ class Scheduler:
                 events.append({"id": hashlib.sha1(line.encode()).hexdigest()[:16], "line": line})
         return events, ""
 
+    def _next(self, it: dict, after: float, last: float | None) -> float | None:
+        n = next_run(it["spec"], after, last)
+        return None if n is None or (it.get("expires") and n > it["expires"]) else n
+
+    # ---------- a run's end, to the phone (done_notify)
+    def _follow(self, it: dict) -> None:
+        threading.Thread(target=self._follow_run, args=(it,), daemon=True, name=f"orbit-sched-follow-{it['id']}").start()
+
+    def _follow_run(self, it: dict) -> None:
+        """Wait for the waiting run's request to end (here, or on its machine), then tell the phone."""
+        from orbit.machines import federation
+        w = dict(it.get("waiting") or {})
+        if not w:
+            return
+        sid, cid = w["sid"], w["cid"]
+        card, reason = None, ""
+        while not self._stop.is_set():
+            if time.time() - w["since"] > FOLLOW_MAX:
+                reason = f"no answer in {FOLLOW_MAX // 3600} h"
+                break
+            fed = federation.split(sid)
+            try:
+                if fed:
+                    if getattr(self.desk, "federation", None) is None:
+                        self._stop.wait(5)
+                        continue
+                    code, r = self.desk.federation.call(fed[0], "GET", f"/api/sessions/{fed[1]}/cards/{cid}?wait=300", timeout=330)
+                    if code == 404:
+                        reason = "the request is gone"
+                        break
+                    if code != 200:
+                        raise OSError(r.get("error") if isinstance(r, dict) else code)
+                else:
+                    r = self.desk.wait_card(sid, cid, 300)
+                if r.get("final"):
+                    card = r["card"]
+                    break
+            except KeyError:
+                reason = "the session is gone"
+                break
+            except (OSError, ValueError) as e:  # (its machine away for a while: try again)
+                print(f"orbit: scheduler: following {sid}#{cid}: {e}", flush=True)
+                self._stop.wait(30)
+        if self._stop.is_set() and card is None and not reason:
+            return  # (stopping: the next server follows it)
+        ok = bool(card) and card.get("state") == "completed"
+        if card and not ok:
+            reason = card.get("state", "") + (f": {card['error']}" if card.get("error") else "")
+        self._done_push(it, w["key"], ok, reason)
+        with self.lock:
+            it.pop("waiting", None)
+            it.setdefault("last", {})["done"] = {"at": time.time(), "ok": ok, **({"why": reason} if reason else {})}
+        self._changed()
+
+    def _done_push(self, it: dict, key: str, ok: bool, why: str = "") -> None:
+        from orbit.services import push
+        dn = it.get("done_notify") or {}
+        title = dn.get("title") or it["name"]
+        if ok:
+            t, body = title, dn.get("body") or ""
+        else:
+            t = title[:-3].rstrip() + "未完成" if title.endswith("已完成") else title + "：未完成"
+            body = (why or "点开查看原因").strip()
+        try:
+            r = push.of(self.desk).notify(t, body, it.get("sid") or "", key=f"{key}:done", via="schedule")
+            with self.lock:
+                it.setdefault("last", {})["push"] = {"sent": r["sent"], "duplicate": r["duplicate"], "devices": r["devices"]}
+        except Exception as e:  # noqa: BLE001 - the run's state stays; the push is reported
+            print(f"orbit: scheduler: done push for {it['id']}: {e}", flush=True)
+
     def _notify(self, it: dict, last: dict, manual: bool, now: float) -> None:
         from orbit.services import push
-        due = it.get("next") or now
-        key = f"sched:{it['id']}:" + (f"manual:{now:.3f}" if manual else str(int(due)))
+        key = self._run_key(it, manual, now)
         r = push.of(self.desk).notify(it["name"], it["text"], it.get("sid") or "", key=key, via="schedule")
         last["push"] = {"sent": r["sent"], "duplicate": r["duplicate"], "devices": r["devices"], "key": key}
         if not r["devices"]:
@@ -547,6 +669,18 @@ class Scheduler:
                 if it.get("fleet"):
                     r = self.desk.fleet_ask(text, it.get("cwd") or "")
                     sid, card = r["session"]["id"], r["card"]
+                elif it.get("sid") and self._remote(it["sid"]) is not None:  # another machine's session: through its server
+                    from orbit.machines import federation
+                    sid = it["sid"]
+                    name, rid = federation.split(sid)
+                    if not self._remote(sid):
+                        raise KeyError(sid)
+                    if self._remote(sid).get("closed"):
+                        self.desk.federation.call(name, "POST", f"/api/sessions/{rid}/reopen", {})
+                    code, card = self.desk.federation.call(name, "POST", f"/api/sessions/{rid}/send",
+                                                           {"text": text, "client_id": self._run_key(it, manual, now)})
+                    if code != 200:
+                        raise RuntimeError(f"{name}: {card.get('error') if isinstance(card, dict) else code}")
                 elif it.get("sid"):
                     s = self.desk.get(it["sid"])
                     if s.closed:
@@ -558,6 +692,9 @@ class Scheduler:
                     sid = self.desk.create(cwd=it["cwd"], name=f'{it["name"]} · {stamp}', group=it.get("group", ""))["id"]
                     card = self.desk.send(sid, text)
                 last.update(sid=sid, cid=card["id"])
+                if it.get("done_notify"):
+                    with self.lock:
+                        it["waiting"] = {"sid": sid, "cid": card["id"], "key": self._run_key(it, manual, now), "since": now}
                 with self.lock:
                     self._today_runs(it, now)
                     it["today"] = it.get("today", 0) + 1
@@ -565,6 +702,8 @@ class Scheduler:
                         it["seen"], it["primed"] = (seen + [e["id"] for e in new])[-1000:], True
         except Exception as e:  # noqa: BLE001 - the schedule shows why it could not run
             last["error"] = str(e) if not isinstance(e, KeyError) else "the session is gone"
+            if wake and it.get("done_notify") and not it.get("notify"):  # (it could not even start: the phone hears it)
+                self._done_push(it, self._run_key(it, manual, now), False, last["error"])
         with self.lock:
             it.pop("_running", None)
             if wake or not it.get("check") or last.get("error") or last.get("skipped"):
@@ -573,9 +712,18 @@ class Scheduler:
                 it["checked"] = {"at": now, "events": last.get("events", 0)}  # a quiet check: the last run stays
             if wake or (notified and not last.get("error")):
                 it["runs"] = it.get("runs", 0) + 1
+            follow = bool(it.get("waiting")) and not last.get("error")
             if not manual:
                 if it["spec"]["kind"] == "once":
                     it["enabled"], it["next"] = False, None
                 else:
-                    it["next"] = next_run(it["spec"], now, now)
+                    it["next"] = self._next(it, now, now)
+                    if it["next"] is None:
+                        it["enabled"] = False
         self._changed()
+        if follow:
+            self._follow(it)
+
+    def _run_key(self, it: dict, manual: bool, now: float) -> str:
+        """One run's own key: the schedule and its due time (a run now: its moment)."""
+        return f"sched:{it['id']}:" + (f"manual:{now:.3f}" if manual else str(int(it.get("next") or now)))

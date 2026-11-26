@@ -15,6 +15,7 @@ import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import test_remote
 import test_skeleton
 from orbit.services import push, webpush as wp
 
@@ -338,6 +339,82 @@ class PushTest(test_skeleton.SkeletonTest):
         self.wait_card(s["id"], 1, ("completed",))
         self.assertEqual(self.fake.got, [])  # (and nothing to the phone)
 
+    # ---------- an agent's run, and the phone told when it ends (done_notify)
+    def wait_got(self, n, timeout=15):
+        end = time.time() + timeout
+        while time.time() < end and len(self.fake.got) < n:
+            time.sleep(0.1)
+        self.assertGreaterEqual(len(self.fake.got), n, "no notification came")
+
+    def test_the_phone_hears_when_a_scheduled_run_ends(self):
+        sub, d = self.subscribe()
+        s = self.new_session("news")
+        dn = {"title": "早间新闻总结已完成", "body": "今日重要新闻与AI动态已整理，点开查看。"}
+        code, x = self.req("POST", "/api/schedules", {"when": "in 5m", "text": "summarize the news", "sid": s["id"], "done_notify": dn})
+        self.assertEqual(code, 200, x)
+        self.assertEqual(x["done_notify"], dn)
+        self.desk.scheduler.tick(x["next"] + 1)
+        self.wait_card(s["id"], 1, ("completed",))
+        self.wait_got(1)
+        msg = read(self.fake.got[-1], d, sub)
+        self.assertEqual((msg["title"], msg["body"], msg["sid"]), (dn["title"], dn["body"], s["id"]))
+        end = time.time() + 5
+        while time.time() < end and self.desk.scheduler.get(x["id"]).get("waiting"):
+            time.sleep(0.05)
+        y = self.desk.scheduler.get(x["id"])
+        self.assertNotIn("waiting", y)
+        self.assertTrue(y["last"]["done"]["ok"])
+        self.assertEqual(len(self.fake.got), 1)  # (once: no push at the start)
+
+    def test_a_failed_run_says_so(self):
+        sub, d = self.subscribe()
+        s = self.new_session("failing")
+        _, x = self.req("POST", "/api/schedules", {"when": "every 1h", "text": "x", "sid": s["id"],
+                                                    "done_notify": {"title": "午间新闻总结已完成", "body": "点开查看。"}})
+        card = self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "fail on purpose"})[1]
+        it = self.desk.scheduler.get(x["id"])
+        with self.desk.scheduler.lock:
+            it["waiting"] = {"sid": s["id"], "cid": card["id"], "key": f"sched:{it['id']}:123", "since": time.time()}
+        self.desk.scheduler._follow(it)
+        self.wait_got(1)
+        msg = read(self.fake.got[-1], d, sub)
+        self.assertEqual((msg["title"], msg["body"]), ("午间新闻总结未完成", "error: boom"))
+        end = time.time() + 5
+        while time.time() < end and "done" not in self.desk.scheduler.get(x["id"]).get("last", {}):
+            time.sleep(0.05)
+        self.assertFalse(self.desk.scheduler.get(x["id"])["last"]["done"]["ok"])
+        # a session gone before the run starts: the phone hears that too
+        _, z = self.req("POST", "/api/schedules", {"when": "in 5m", "text": "x", "sid": s["id"], "done_notify": {"title": "T 已完成"}})
+        self.desk.sessions.pop(s["id"], None)
+        self.desk.scheduler.tick(z["next"] + 1)
+        self.wait_got(2)
+        self.assertEqual(read(self.fake.got[-1], d, sub)["title"], "T未完成")
+
+    def test_a_waiting_run_is_followed_after_a_restart(self):
+        sub, d = self.subscribe()
+        s = self.new_session("restarted")
+        _, x = self.req("POST", "/api/schedules", {"when": "every 1h", "text": "x", "sid": s["id"], "done_notify": {"title": "Done 已完成"}})
+        card = self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "slow work"})[1]
+        path = self.desk.scheduler.path
+        data = json.loads(path.read_text())
+        for it in data["schedules"]:  # (as if the last server stopped while this run went on)
+            it["waiting"] = {"sid": s["id"], "cid": card["id"], "key": f"sched:{it['id']}:123", "since": time.time()}
+        type(self)._unserve()
+        path.write_text(json.dumps(data))
+        type(self)._serve()
+        self.wait_got(1, timeout=30)
+        self.assertEqual(read(self.fake.got[-1], d, sub)["title"], "Done 已完成")
+        self.assertEqual(len(self.fake.got), 1)
+
+    def test_expires(self):
+        s = self.new_session("ends")
+        self.assertEqual(self.req("POST", "/api/schedules", {"when": "every 1h", "text": "x", "sid": s["id"], "expires": time.time() + 600})[0], 400)
+        _, x = self.req("POST", "/api/schedules", {"when": "every 1h", "text": "x", "sid": s["id"], "expires": time.time() + 5400})
+        self.desk.scheduler.tick(x["next"] + 1)
+        y = self.desk.scheduler.get(x["id"])
+        self.assertEqual((y["enabled"], y["next"]), (False, None))  # (the next hour is past its end)
+        self.assertEqual(self.req("POST", "/api/schedules", {"when": "daily 9am", "text": "x", "sid": s["id"], "expires": "not a date"})[0], 400)
+
     # ---------- the CLI
     def test_cli_notify_and_remind(self):
         sub, d = self.subscribe()
@@ -365,9 +442,65 @@ class PushTest(test_skeleton.SkeletonTest):
         self.assertIn("no phone has notifications on", r.stderr)
 
 
+class AcrossMachinesTest(test_remote.RemoteTest):
+    """A schedule here wakes a session on another machine (through its server, once per due time); the phone, which
+    this server knows, hears when that run ends and a tap opens the session (NAME~ID)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.fake = FakePushService()
+        push.ALLOW_EXTRA = (cls.fake.base,)
+
+    @classmethod
+    def tearDownClass(cls):
+        push.ALLOW_EXTRA = ()
+        cls.fake.stop()
+        super().tearDownClass()
+
+    def test_wakes_a_remote_session_and_tells_the_phone(self):
+        from orbit.machines.federation import wait_for
+        url = f"http://127.0.0.1:{self.rport}/?token={self.token}"
+        self.assertEqual(self.req("POST", "/api/remotes", {"name": "rbox", "url": url})[0], 200)
+        try:
+            self.assertTrue(wait_for(lambda: any(m["name"] == "rbox" and m["ok"] for m in self.req("GET", "/api/sessions")[1]["machines"])))
+            code, far = self.req("POST", "/api/sessions", {"cwd": self.rwork, "name": "assistant-a", "machine": "rbox", "group": "main"})
+            self.assertEqual(code, 200, far)
+            self.assertTrue(wait_for(lambda: any(s["id"] == far["id"] for s in self.req("GET", "/api/sessions")[1]["sessions"])))
+            sub, d = device(self.fake.base)
+            self.assertEqual(self.req("POST", "/api/push/subscribe", {"subscription": sub})[0], 200)
+            code, x = self.req("POST", "/api/schedules", {"when": "daily 08:20", "text": "summarize the news", "sid": far["id"],
+                                                        "done_notify": {"title": "早间新闻总结已完成", "body": "点开查看。"}})
+            self.assertEqual(code, 200, x)
+            self.assertEqual(x["target_name"], "assistant-a on rbox")
+            rid = far["id"].split("~", 1)[1]
+            due = x["next"]
+            self.desk.scheduler.tick(due + 1)
+            end = time.time() + 15
+            while time.time() < end and not self.fake.got:
+                time.sleep(0.1)
+            cards = self.rdesk.cards(rid)
+            self.assertEqual(len(cards), 1)
+            self.assertTrue(cards[0]["text"].startswith('(schedule "summarize the news") summarize the news'))
+            msg = json.loads(wp.decrypt(self.fake.got[-1]["body"], d, sub["keys"]["auth"]))
+            self.assertEqual((msg["title"], msg["sid"]), ("早间新闻总结已完成", far["id"]))
+            # the same due time again (a restart before its next time was saved): no second request there, no second push
+            it = self.desk.scheduler.get(x["id"])
+            with self.desk.scheduler.lock:
+                it["next"] = due
+            self.desk.scheduler.tick(due + 2)
+            time.sleep(1.5)
+            self.assertEqual(len(self.rdesk.cards(rid)), 1)
+            self.assertEqual(len(self.fake.got), 1)
+            # a session that is not there: refused when made
+            self.assertEqual(self.req("POST", "/api/schedules", {"when": "in 5m", "text": "x", "sid": "rbox~nope"})[0], 404)
+        finally:
+            self.req("POST", "/api/remotes/rbox/delete", {})
+
+
 def load_tests(loader, tests, pattern):  # (their own tests only: not the skeleton's again)
     suite = unittest.TestSuite()
-    for cls in (VectorsTest, PushTest):
+    for cls in (VectorsTest, PushTest, AcrossMachinesTest):
         suite.addTests(cls(n) for n in loader.getTestCaseNames(cls) if n in vars(cls))
     return suite
 
