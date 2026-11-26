@@ -101,7 +101,7 @@ function ensureFrame(spec) {
       fr.setAttribute("referrerpolicy", "no-referrer");
       fr.setAttribute("allow", "clipboard-write; fullscreen");
     } else if (spec.kind === "web") fr.setAttribute("sandbox", "allow-scripts allow-popups allow-forms");
-    fr.addEventListener("focus", () => { renderSide(); followSoon(); });  // (the keyboard went beside: follow follows it)
+    fr.addEventListener("focus", () => { LAST_PANE.side = true; renderSide(); followSoon(); });  // (the keyboard went beside: follow follows it)
     fr.addEventListener("load", () => { fr.dataset.loaded = "1"; sideLoaded(spec, fr); });
     fr.setAttribute("src", src);
     $("#sideframes").appendChild(fr);
@@ -304,7 +304,10 @@ $("#sidetabs").addEventListener("mousedown", e => {
   if (x) closeSide(+x.dataset.sclose);
   else showSideAt(+t.dataset.si, { focus: true });  // a click on a side tab takes the keyboard there
 });
-addEventListener("blur", () => setTimeout(() => { renderSide(); if (sideFocused()) followSoon(); }, 0));  // (into a side frame)
+addEventListener("blur", () => setTimeout(() => { renderSide(); if (sideFocused()) { LAST_PANE.side = true; followSoon(); } }, 0));  // (into a side frame)
+document.addEventListener("focusin", e => {  // (the keyboard in the main pane: the main tab is followed again)
+  const p = $("#pane"); if (!EMBED && p && p.contains(e.target) && LAST_PANE.side) { LAST_PANE.side = false; followSoon(); }
+});
 addEventListener("focus", () => setTimeout(() => { renderSide(); followSoon(); }, 0));  // (back to the main page)
 /* Messages between the page and its side tab (same origin only). */
 /* Orbit's keys from an agent's page beside (its own origin: the server put a small script in it, handler.py

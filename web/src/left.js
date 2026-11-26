@@ -116,11 +116,16 @@ function panelTab(d) {
 }
 function setPanelTab(tab) {
   if (tab !== S.left.tab) S.left.prev = S.left.tab;  // (a plugin tab's shortcut goes back to it)
-  S.left.tab = tab; S.filter = ""; S.pcursor = null; saveUi();
+  const same = tab === S.left.tab;  // (the tab in front clicked again: its cursor stays)
+  S.left.tab = tab; S.filter = ""; if (!same) S.pcursor = null; saveUi();
   if (tab === "misc") loadCalToday();
   else if (plistTab(tab)) loadPluginList(plistTab(tab).plugin, plistTab(tab).source);
   else if (tab.startsWith("p:")) { /* a plugin's doc: it keeps itself */ }
-  else if (tab !== "sessions") { refreshTree(panelRoot()); if (S.file) revealFile(S.file); }
+  else if (tab !== "sessions") {  // (the file where the keyboard is: a side tab's too)
+    refreshTree(panelRoot());
+    const f = focusCtx().path;
+    if (f && !same && (tab === "files" || isNote(f))) revealFile(f);
+  }
   renderLeft();
 }
 /* Folded groups (their sessions hidden; a filter looks inside them anyway): kept in this browser. */

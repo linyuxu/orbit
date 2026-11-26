@@ -15,6 +15,9 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   in it. Its server now puts a small script in it that passes Orbit's own keys (⌘⇧O, ⌘W, ⌥⇧[ ], ⌘\, ⌘1…9, ⌘O, ⌘K…)
   to Orbit, which takes only those, only from a web side tab; the page's own keys stay its own. A website beside
   (another origin, nothing can be put in it) still needs a click back.
+- Follow keeps a side tab's file when the keyboard goes from it to the left panel (it passes the main page on the
+  way: only the keyboard landing in the main pane makes the main tab followed again); the panel's tab clicked again
+  keeps its cursor, and a tab chosen reveals the file where the keyboard is (a side tab's too).
 - Follow follows the keyboard: with a side tab focused, the Files panel shows its file (in its own folder, which
   becomes the current root) or its session's folder, and the Groups panel its session; back in the main pane, the
   main tab's again. A file revealed in a folder still being listed gets the cursor once the listing comes.

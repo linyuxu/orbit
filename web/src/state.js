@@ -114,8 +114,14 @@ const ctxRoot = () => EMBED && EMBED.root && S.file && S.file.startsWith(EMBED.r
   : cur() ? cur().cwd : S.file ? dirname(S.file) : null;
 /* What the keyboard is on (follow follows it): a side tab that has it (its file, its session's folder, its review's
    folder), else the main tab (its file, its session's folder). {path?, root, sid?, side?} */
+/* Which pane had the keyboard last, the main tab or a side tab: going from a side tab to the left panel passes the
+   main page for a moment (a click on the panel does not focus it at once); only the keyboard landing in the main pane
+   (its input, its editor, its conversation) makes it the main tab again. */
+const LAST_PANE = { side: false };
 function focusCtx() {
-  const sp = !EMBED && typeof sideFocused === "function" && sideFocused() ? S.side : null;
+  const inMain = () => { const a = document.activeElement, p = document.getElementById("pane"); return !!(a && p && p.contains(a)); };
+  const sideOn = !EMBED && typeof sideFocused === "function" && (sideFocused() || (LAST_PANE.side && !inMain()));
+  const sp = sideOn ? S.side : null;
   if (sp && sp.kind === "file" && sp.path) return { path: sp.path, root: fileRoot(sp.path), side: true };
   if (sp && sp.kind === "session" && S.sessions.has(sp.sid)) return { root: S.sessions.get(sp.sid).cwd, sid: sp.sid, side: true };
   if (sp && sp.kind === "review" && sp.root) return { root: sp.root, side: true };
