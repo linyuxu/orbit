@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Follow follows the keyboard: with a side tab focused, the Files panel shows its file (in its own folder, which
+  becomes the current root) or its session's folder, and the Groups panel its session; back in the main pane, the
+  main tab's again. A file revealed in a folder still being listed gets the cursor once the listing comes.
 - ⌘O has an All Files tab (after Files): file names everywhere, not only this workspace: every open session's
   folder and the home, on this machine (Spotlight on a Mac, else a bounded walk) and on each connected machine (their
   paths `/@NAME/…`); every word must be in the path, the file's own name first. A hit opens here, or beside from

@@ -97,7 +97,7 @@ function fileRoot(path) {
   api("GET", "/api/file-root?path=" + encodeURIComponent(path)).then(r => {
     if (!r.root || r.root === dir) return;
     FILE_ROOTS.set(dir, r.root);
-    if (S.file === path && S.left.shown && S.left.tab === "files") { refreshTree(panelRoot()); revealFile(path); renderLeft(); }
+    if ((S.file === path || (S.side && S.side.path === path)) && S.left.shown && S.left.tab === "files") { refreshTree(panelRoot()); if (S.follow) followPanel(); renderLeft(); }
   }).catch(() => {});
   return dir;
 }
@@ -112,6 +112,15 @@ const ctxRoot = () => EMBED && EMBED.root && S.file && S.file.startsWith(EMBED.r
   : isView(S.file) ? (cur() ? cur().cwd : null)
   : S.file && !(cur() && (inFolder(S.file, cur().cwd) || inFolder(S.file.replace(/^\/private/, ""), cur().cwd.replace(/^\/private/, "")))) ? fileRoot(S.file)
   : cur() ? cur().cwd : S.file ? dirname(S.file) : null;
+/* What the keyboard is on (follow follows it): a side tab that has it (its file, its session's folder, its review's
+   folder), else the main tab (its file, its session's folder). {path?, root, sid?, side?} */
+function focusCtx() {
+  const sp = !EMBED && typeof sideFocused === "function" && sideFocused() ? S.side : null;
+  if (sp && sp.kind === "file" && sp.path) return { path: sp.path, root: fileRoot(sp.path), side: true };
+  if (sp && sp.kind === "session" && S.sessions.has(sp.sid)) return { root: S.sessions.get(sp.sid).cwd, sid: sp.sid, side: true };
+  if (sp && sp.kind === "review" && sp.root) return { root: sp.root, side: true };
+  return { path: S.file && !isView(S.file) ? S.file : null, root: ctxRoot(), sid: S.file ? null : S.current };
+}
 const isNote = p => !!(S.vault && p && p.startsWith(S.vault + "/") && /\.md$/i.test(p));
 const noteTitle = p => basename(p).replace(/\.md$/i, "");
 /* The folder the left panel's tree shows: the vault on the Notes tab, else the session's folder. */

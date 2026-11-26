@@ -532,6 +532,39 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             self.assertIn("src/fa-two.py", hits)
             page.keyboard.press("Escape")
 
+    def test_follow_follows_the_focused_pane(self):
+        g = self.group("Follow")
+        roots = {}
+        for name in ("fo-main", "fo-side"):
+            d = Path(self.work) / name
+            (d / "docs").mkdir(parents=True, exist_ok=True)
+            (d / "docs" / "communication.md").write_text("# c\n\nhello\n")
+            code, sess = self.req("POST", "/api/sessions", {"cwd": str(d), "name": name})
+            self.req("POST", f"/api/sessions/{sess['id']}/update", {"group": g})
+            roots[name] = (sess["id"], os.path.realpath(d))
+        side_file = roots["fo-side"][1] + "/docs/communication.md"
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"switchTo({json.dumps(roots['fo-main'][0])})")
+            page.wait_for_timeout(400)
+            page.evaluate("closeAllSides(); S.follow = true; S.left.shown = true; applyLeft(); setPanelTab('files')")
+            page.wait_for_timeout(800)
+            page.evaluate("focusMain(); followPanel()")
+            self.assertEqual(page.evaluate("S.pcursor"), "r:" + roots["fo-main"][1], name)  # (the main session's folder)
+            page.evaluate(f"openSide({{kind: 'file', path: {json.dumps(side_file)}}}, {{focus: true}})")  # (a file beside, with the keyboard)
+            page.wait_for_timeout(2000)
+            self.assertTrue(page.evaluate("sideFocused()"))
+            self.assertEqual(page.evaluate("S.pcursor"), "f:" + roots["fo-side"][1] + "|docs/communication.md", name)
+            self.assertEqual(page.evaluate("filesRoots().cur"), roots["fo-side"][1])
+            page.evaluate("focusMain()")  # (back to the main pane: its folder again)
+            page.wait_for_timeout(500)
+            self.assertEqual(page.evaluate("S.pcursor"), "r:" + roots["fo-main"][1], name)
+            page.evaluate("setPanelTab('sessions')")  # (the Groups tab: the session beside, when it has the keyboard)
+            page.evaluate(f"openSide({{kind: 'session', sid: {json.dumps(roots['fo-side'][0])}}}, {{focus: true}})")
+            page.wait_for_timeout(2000)
+            self.assertEqual(page.evaluate("S.pcursor"), f"s:{g}:{roots['fo-side'][0]}", name)
+            page.evaluate("closeAllSides(); setPanelTab('files')")
+
     def test_space_folds_a_group_in_the_left_panel(self):
         gid = self.group("Foldme")
         sid = self.session_in(gid, "inside")

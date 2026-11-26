@@ -101,7 +101,7 @@ function ensureFrame(spec) {
       fr.setAttribute("referrerpolicy", "no-referrer");
       fr.setAttribute("allow", "clipboard-write; fullscreen");
     } else if (spec.kind === "web") fr.setAttribute("sandbox", "allow-scripts allow-popups allow-forms");
-    fr.addEventListener("focus", () => renderSide());
+    fr.addEventListener("focus", () => { renderSide(); followSoon(); });  // (the keyboard went beside: follow follows it)
     fr.addEventListener("load", () => { fr.dataset.loaded = "1"; sideLoaded(spec, fr); });
     fr.setAttribute("src", src);
     $("#sideframes").appendChild(fr);
@@ -304,8 +304,8 @@ $("#sidetabs").addEventListener("mousedown", e => {
   if (x) closeSide(+x.dataset.sclose);
   else showSideAt(+t.dataset.si, { focus: true });  // a click on a side tab takes the keyboard there
 });
-addEventListener("blur", () => setTimeout(renderSide, 0));
-addEventListener("focus", () => setTimeout(renderSide, 0));
+addEventListener("blur", () => setTimeout(() => { renderSide(); if (sideFocused()) followSoon(); }, 0));  // (into a side frame)
+addEventListener("focus", () => setTimeout(() => { renderSide(); followSoon(); }, 0));  // (back to the main page)
 /* Messages between the page and its side tab (same origin only). */
 addEventListener("message", e => {
   if (e.origin !== location.origin || !e.data || !e.data.orbit) return;

@@ -67,7 +67,7 @@ function revealFile(path) {
   if (isView(path)) return;
   const files = S.left.tab === "files";
   const R = files ? filesRoots() : null;  // (the session folder nearest to it; else the context's own root)
-  const root = files ? [...R.all.map(f => f.path).sort((a, b) => b.length - a.length), ctxRoot()].find(r => r && path.startsWith(r + "/")) : panelRoot();
+  const root = files ? [...R.all.map(f => f.path).sort((a, b) => b.length - a.length), focusCtx().root, ctxRoot()].find(r => r && path.startsWith(r + "/")) : panelRoot();
   if (!root || !path.startsWith(root + "/")) return;
   const rel = relTo(root, path), parts = rel.split("/");
   const open = expandedSet(root);
@@ -75,6 +75,7 @@ function revealFile(path) {
   setExpanded(root, open);
   if (files) { setRootOpen(root, true); refreshTree(root); }
   S.pcursor = "f:" + (files ? root + "|" : "") + rel;
+  if (files) FILES.want = { k: S.pcursor, t: Date.now() };  // (its root's tree may still be on its way: the cursor goes there when it comes)
 }
 
 /* ===================================================================== left panel: Sessions · Files · Notes · Misc */
@@ -334,7 +335,7 @@ function setRootOpen(root, on) {
 }
 const rootOpen = root => FILES.open.has(root);
 function filesRoots() {
-  const ctx = ctxRoot(), by = new Map();
+  const ctx = focusCtx().root, by = new Map();  // (the current root: where the keyboard is, a side tab's too)
   for (const s of S.sessions.values()) {
     if (s.fleet || !s.cwd || !machineOk(s)) continue;
     const t = (s.last && s.last.time) || s.created || 0, f = by.get(s.cwd) || { path: s.cwd, t: 0, remote: s.remote || "", here: false, n: 0 };
@@ -416,6 +417,9 @@ function filesTabRows() {
 }
 function renderFilesRoots() {
   PROWS = filesTabRows();
+  const w = FILES.want;
+  if (w && Date.now() - w.t < 3000) { if (PROWS.some(r => r.k === w.k)) { S.pcursor = w.k; FILES.want = null; } else if (!PROWS.some(r => r.k === S.pcursor)) S.pcursor = w.k; }
+  else FILES.want = null;
   if (!PROWS.some(r => r.k === S.pcursor)) {
     const R = filesRoots(), cur = R.cur && S.file && S.file.startsWith(R.cur + "/") ? "f:" + R.cur + "|" + relTo(R.cur, S.file) : null;
     S.pcursor = (PROWS.find(r => r.k === cur) || PROWS.find(r => r.kind === "root" && r.cur) || PROWS.find(r => r.kind !== "fsec") || {}).k || null;
@@ -498,13 +502,21 @@ function renderFilesPanel() {
   revealCursor();
 }
 function revealCursor() { const el = plist.querySelector(".prow.kc"); if (el) el.scrollIntoView({ block: "nearest" }); tipPanelRow(); }
+/* Follow: the left panel shows what the keyboard is on: the main tab, or the side tab when it has the keyboard (its
+   file, its session). */
 function followPanel() {
   if (EMBED || !S.follow || panelFocused()) return;
-  if (S.left.tab === "sessions") S.pcursor = `s:${S.group}:${S.current}`;
-  else if (treeTab() && S.file && !isView(S.file)) revealFile(S.file);
-  else if (S.left.tab === "files" && filesRoots().cur) { const c = filesRoots().cur; setRootOpen(c, true); S.pcursor = "r:" + c; }  // (a session in front: its folder)
+  const f = focusCtx();
+  if (S.left.tab === "sessions") {
+    const sid = f.sid || S.current, s = S.sessions.get(sid);
+    const k = f.side && s ? [`s:${S.group}:${sid}`, `s:${s.group}:${sid}`].find(x => PROWS.some(r => r.k === x)) : null;
+    S.pcursor = k || `s:${S.group}:${S.current}`;
+  }
+  else if (treeTab() && f.path && (S.left.tab === "files" || isNote(f.path))) revealFile(f.path);
+  else if (S.left.tab === "files" && filesRoots().cur) { const c = filesRoots().cur; setRootOpen(c, true); refreshTree(c); S.pcursor = "r:" + c; }  // (a session: its folder)
   renderLeft();
 }
+const followSoon = () => { clearTimeout(followSoon.t); followSoon.t = setTimeout(followPanel, 30); };
 const prow = () => PROWS.find(r => r.k === S.pcursor);
 function movePanel(how) {
   if (!PROWS.length) return;
