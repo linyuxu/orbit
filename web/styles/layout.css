@@ -29,6 +29,8 @@ body.app #titlebar { --bar:max(calc(30px * var(--ui-k)), calc(max(32px, 38px * v
 .tab:first-child::before, .tab.active::before, .tab.active + .tab::before, .tab:hover::before, .tab:hover + .tab::before, .addtab::before { display:none; }
 .tab:hover:not(.active) { background:var(--hover); border-radius:var(--tab-radius); height:var(--tab-pill); margin-bottom:var(--tab-lift); }
 .tab .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.tab .hlogo { margin-left:calc(-2px * var(--ui-k)); }  /* the agent's mark, right after the status: its harness at a glance */
+.tab:not(.active) .hlogo { opacity:.8; }
 .tab.active { color:var(--ink); font-weight:calc(500 + var(--wd)); background:var(--bg); z-index:1;
   box-shadow:inset 1px 0 0 var(--line), inset -1px 0 0 var(--line), inset 0 1px 0 var(--line); }
 .tab.active::after { content:""; position:absolute; left:1px; right:1px; bottom:-1px; height:1px; background:var(--bg); pointer-events:none; }  /* it opens into the page: the strip's foot line stops at its sides */

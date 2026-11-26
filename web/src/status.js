@@ -21,8 +21,8 @@ function renderTabs() {
     const id = key.slice(2);
     const s = S.sessions.get(id);
     const active = !S.file && id === S.current;
-    return `<div class="tab${active ? " active" : ""}" role="tab" data-sid="${id}" title="${esc(s.name)} · ${esc(s.state)} · ${esc(tilde(s.cwd))}">
-      ${stateMark(s)}<span class="name">${esc(s.name)}</span>${machineTag(s)}${s.attention ? `<span class="attn" title="Needs you in its terminal: ${esc(s.attention)} (⌘T)">!</span>` : ""}${S.unread.has(id) && !active ? '<span class="udot" title="New answer"></span>' : ""}
+    return `<div class="tab${active ? " active" : ""}" role="tab" data-sid="${id}" title="${esc(s.name)} · ${esc(harnessLabel(s.harness))} · ${esc(s.state)} · ${esc(tilde(s.cwd))}">
+      ${stateMark(s)}${harnessIcon(s.harness, 13)}<span class="name">${esc(s.name)}</span>${machineTag(s)}${s.attention ? `<span class="attn" title="Needs you in its terminal: ${esc(s.attention)} (⌘T)">!</span>` : ""}${S.unread.has(id) && !active ? '<span class="udot" title="New answer"></span>' : ""}
       <span class="x" data-close="${id}" title="${S.group === FAV && s.favorite ? "Remove from Favorites (⌘W): it stays open in its group" : "Close (⌘W)"}">${I("x", 12)}</span></div>`;
   };
   const fileTabHtml = t => {

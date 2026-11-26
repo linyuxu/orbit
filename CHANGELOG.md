@@ -8,6 +8,8 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A session's tab shows its agent's mark after the status (Claude, Codex, agy, OpenCode, a plugin harness's icon), as
+  the Groups panel does; the tooltip names the harness.
 - Notifications on the phone's lock screen (Web Push), sent by Orbit's server itself: Misc → Notifications turns them
   on (a tap: the browser asks, the app subscribes with the server's VAPID key; iPhone: Orbit on the Home Screen from
   its HTTPS address), Send a test, Remind me, the last sends with the push service's answer, Turn off. A tap on a
