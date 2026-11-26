@@ -308,6 +308,25 @@ def _sender_prefix(text: str, t: "Target | None" = None) -> str:
     return f"(from a terminal session in {name}{where}; it cannot be mentioned back) {text}"
 
 
+def cmd_relay(a: argparse.Namespace) -> None:
+    """The user's own words, word for word, to another session (when the user asks for it): the receiver gets the
+    words alone, its card says they are the user's (via this session). Orbit sends them only if they are the user's:
+    said in a voice call to this session or typed here (orbit/desk/relay.py); a message of yours is orbit-agent send."""
+    if not me():
+        sys.exit("orbit-agent: relay passes on the user's words from an Orbit session ($ORBIT_SESSION is not set)")
+    t = resolve(a.session)
+    if t.mine():
+        sys.exit("orbit-agent: that is this session")
+    text = read_text(a.text)
+    if not text.strip():
+        sys.exit("orbit-agent: nothing to relay (give the user's words, or pipe them in)")
+    target = f"{t.remote}~{t.s['id']}" if t.remote else t.s["id"]
+    card = call("POST", "/api/relay", {"from": me(), "target": target, "text": text})
+    proof = (card.get("origin") or {}).get("proof") or {}
+    again = " (sent before: once is enough)" if card.get("duplicate") else ""
+    print(f"relayed to {t.label} as #{card['id']}: the user's own words ({proof.get('kind', '?')}), nothing added{again}")
+
+
 def cmd_steer(a: argparse.Namespace) -> None:
     t = resolve(a.session)
     if t.mine():
@@ -331,6 +350,9 @@ def cmd_read(a: argparse.Namespace) -> None:
     for c in cards[-max(1, a.last):]:
         text = re.sub(r"^\[orbit\] [^\n]*\n\n", "", c["text"])
         own = " · on its own" if c.get("kind") == "auto" else ""  # (a turn no request started)
+        o = c.get("origin") or {}
+        if o.get("kind") == "user-relay":  # (the user's own words, passed on: where from is here, not in the text)
+            own += f" · the user's own words, via {(o.get('from') or {}).get('name') or 'another session'} ({(o.get('proof') or {}).get('kind', '?')})"
         print(f"## #{c['id']} ({c['state']}{own})\n\n{text.strip()}\n")
         if c.get("answer"):
             print(f"### answer\n\n{c['answer'].strip()}\n")
@@ -644,6 +666,11 @@ def main(argv: list[str] | None = None) -> None:
     ss.add_argument("--json", action="store_true")
     ss.add_argument("--local", action="store_true", help="only this machine's")
     ss.set_defaults(func=cmd_sessions)
+
+    rl = sub.add_parser("relay", help="pass the user's own words, word for word, to another session (when the user asks)")
+    rl.add_argument("session", help="name or id (NAME/session: another machine's)")
+    rl.add_argument("text", nargs="*", help="the user's words (- or none: stdin)")
+    rl.set_defaults(func=cmd_relay)
 
     se = sub.add_parser("send", help="send a request to another session")
     se.add_argument("session", help="name or id")

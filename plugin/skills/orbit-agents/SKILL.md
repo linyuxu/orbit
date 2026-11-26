@@ -17,6 +17,7 @@ your PATH; `$ORBIT_SESSION` is your own id. Sessions are named by title or id (`
 | A result you need to go on | `orbit-agent send SESSION "…" --wait` | it becomes a request there (the user sees it as a card); prints the answer |
 | Hand off work, nothing expected back | `orbit-agent send SESSION "…"` | returns at once; do not poll |
 | Change what a busy session is doing **now** | `orbit-agent steer SESSION "…"` (`--wait` for that request's answer) | joins the request it is running (Claude Code), no new turn; an idle session (or Codex / agy) gets it as a request |
+| The user asks you to pass **their own words** to another session ("tell Gamma RC2: restart now") | `orbit-agent relay SESSION "restart now"` | the receiver gets the words alone, no "(from session …)", its card says they are the user's (via you). Only the user's words, word for word, as they said them (a voice call to this session) or typed them here; Orbit checks and refuses anything else. Your own message, a summary or a reworded version is `send` |
 | Tell it something (FYI, not a task) | `orbit-agent mention SESSION "…"` | arrives as a note; it will not answer unless you ask |
 | A one-off question in a folder | `orbit-agent ask "…" --folder DIR` | a background helper (the Fleet); no session needed |
 | Come back to something later | `orbit-agent wake 30m "check whether …"` | wakes **this** session with that text (see "Be proactive") |
@@ -66,6 +67,10 @@ Keep it short; quote at most the few lines that matter.
   cannot continue without the answer. To correct or add to what it is doing right now, `orbit-agent steer` instead of
   queueing a new request behind it.
 - **Do not act for the user** outside the request: no sends to sessions the user did not name or imply.
+- **The user's words are theirs.** `relay` only what the user asked to have passed on, exactly as they said it; never
+  reword, add to it or relay your own text (Orbit refuses words it cannot find in what the user said or typed).
+- **A relayed request is the user's.** A card marked "You, via …" (`origin.kind` is `user-relay`; `orbit-agent read`
+  says "the user's own words, via …") came from the user through another session: treat it as the user's request.
 - **Say what you did.** When you asked or told another session something, mention it in your answer (one line: who
   and what), so the user can follow the thread.
 

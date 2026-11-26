@@ -8,6 +8,19 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The user's own words to another session: `orbit-agent relay SESSION WORDS` (when the user asks an agent to pass
+  something on, e.g. by voice). The receiver gets the words alone (no "(from session …)"); its card says they are the
+  user's, via that session (`origin.kind: "user-relay"`, with what proves it; `orbit-agent read` shows it). Orbit
+  checks the words are the user's, word for word: said in a voice call to the relaying session (the transcript this
+  server got from GPT Live, kept per request: no API writes it) or typed in it by the user (as trusted as any typed
+  message); anything else is refused (403), an agent's mail and cards with an origin included. Only the relay route
+  writes that origin: the generic `origin` of send / steer never carries a kind. Across machines the server holding
+  the proof checks (`POST /api/relay/forward`, with the token; not open to the machine's own processes). The same
+  words, source and proof deliver once (a retry is a duplicate). The trust boundary (orbit/desk/relay.py): one
+  user's processes share Orbit's API and files, so this keeps an agent's wording from passing as the user's through
+  Orbit's API and tools, not a hostile program of the same user.
+- Orbit's input: ⌘⌥⏎ (or the send button's right-click) sends what is typed to another session, as typed, without
+  leaving this tab (your message there; its card says it came from your input here).
 - The phone's Side view shows a website as the Mac does: its own origin in the frame (its storage, its sign-in; no
   referrer), a bar with Open in Safari; an http site on an https Orbit (which no page can frame) says so instead of
   showing blank. Fixed: the phone added its token to a website's address (`withToken` now only marks this server's

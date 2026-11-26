@@ -252,6 +252,7 @@ const SHORTCUTS = [
   ]],
   ["Input and conversation", [
     ["⌘⏎", "Send (while the agent works: queued as the next request; in a plugin's thread: the reply)", "M:Enter", () => { if (pviewKey("send")) return; if (!S.file && !EMBED_REVIEW) send(); }],
+    ["⌘⌥⏎", "Send the input to another session, as you typed it (your message there; this tab stays; also the send button's right-click)", "MA:Enter", () => { if (!S.file && !EMBED_REVIEW) sendInputTo(); }],
     ["⌘⇧⏎", "Steer: while the agent works, the message joins the running request", "MS:Enter", () => { if (!S.file && !EMBED_REVIEW) send({ steer: true }); }],
     ["⏎", "New line"],
     ["Esc", "Input ⇄ conversation"],

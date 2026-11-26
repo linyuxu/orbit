@@ -346,6 +346,8 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual(c["origin"]["label"], "Voice")
         self.assertEqual(c["origin"]["data"], {"live": "live_1", "delegation": "del_1"})
         self.assertEqual(c["client_id"], "live:live_1:del_1")
+        heard = [h for h in self.desk.live.heard if h["delegation"] == "del_1"]  # (the user's words, kept: a relay's proof)
+        self.assertEqual([(h["sid"], h["words"], h["call"]) for h in heard], [(s["id"], "please check the nightly build now", "live_1")])
         self.assertTrue(wait(lambda: self.commentary("del_1")))
         time.sleep(0.4)
         com = self.commentary("del_1")

@@ -618,6 +618,30 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.wait_for_timeout(800)
             self.assertEqual(page.evaluate("S.file"), roots["op-there"][1] + "/lib/shared_util.py")
 
+    def test_send_the_input_to_another_session(self):
+        g = self.group("Send to")
+        a, b = self.session_in(g, "st-source"), self.session_in(g, "st-target")
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"switchTo({json.dumps(a)})")
+            page.wait_for_timeout(400)
+            words = f"喝杯水 · {name}"
+            page.evaluate(f"input.focus(); input.insertAt({json.dumps(words)}, 0)")
+            page.keyboard.press("Meta+Alt+Enter")  # (to another session: a menu of them)
+            page.wait_for_selector(".menu")
+            page.click(".menu >> text=st-target")
+            page.wait_for_timeout(800)
+            card = self.req("GET", f"/api/sessions/{b}/cards")[1]["cards"][-1]
+            self.assertEqual(card["text"], words, name)  # (as typed: no "(from session …)")
+            self.assertEqual(card["origin"]["label"], "You, from st-source")
+            self.assertEqual(page.evaluate("[S.current, input.value]"), [a, ""])  # (this tab stays; its input is empty)
+            page.evaluate(f"input.insertAt('second', 0)")
+            page.click("#send", button="right")  # (the send button's right-click: the same menu)
+            page.wait_for_selector(".menu")
+            self.assertIn("st-target", page.inner_text(".menu"))
+            page.keyboard.press("Escape")
+            page.evaluate("input.value = ''; saveDraft()")
+
     def test_space_folds_a_group_in_the_left_panel(self):
         gid = self.group("Foldme")
         sid = self.session_in(gid, "inside")

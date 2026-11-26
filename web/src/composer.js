@@ -288,3 +288,25 @@ async function send({ steer = false } = {}) {
   }
 }
 $("#send").addEventListener("click", send);
+/* Send to another session (the send button's right-click, ⌘⌥⏎): what is in this input, as you typed it, as a request
+   there: your message (no "(from session …)"), as if typed in that tab, which stays where it is. Its card says it
+   came from your input here. The input empties once it is there; a failure keeps it. */
+function sendInputTo(where) {
+  const text = input.value;
+  if (!text.trim()) { toast("Type what to send first"); return; }
+  const here = cur();
+  const ss = [...S.sessions.values()].filter(x => !x.fleet && (!here || x.id !== here.id));
+  if (!ss.length) { toast("No other session to send to"); return; }
+  const go = async x => {
+    try {
+      await api("POST", `/api/sessions/${encodeURIComponent(x.id)}/send`, { text, origin: { label: here ? `You, from ${here.name}` : "You" },
+        client_id: "ui:" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) });
+      if (input.value === text) { input.value = ""; autosize(); }
+      saveDraft(); updateSend();
+      toast(`Sent to ${x.name}, as you typed it`);
+    } catch (e) { toast(`Not sent to ${x.name}: ${e.message}`); }
+  };
+  menu(ss.map(x => ({ label: x.name, key: x.remote || (S.groups.find(g => g.id === x.group) || {}).name || "", run: () => go(x) })),
+       where || { anchor: $("#send") });
+}
+$("#send").addEventListener("contextmenu", e => { e.preventDefault(); sendInputTo({ at: { x: e.clientX, y: e.clientY } }); });

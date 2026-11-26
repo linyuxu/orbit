@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import array
 import base64
+import collections
 import copy
 import json
 import queue
@@ -1100,6 +1101,8 @@ class Call:
             self.cut_ms = max(self.cut_ms, d["offset"])
             reply = last_reply(self.frags, d["offset"]) if words and REFERS.search(words) else ""
             prev = next((self.dels[x] for x in reversed(self.order) if x != did and self.dels[x].get("cid")), None)
+        if words:
+            self.live.hear(self.sid, words, self.live_id or self.id, did)  # (the user's own words: relay's proof)
         if not words:
             self.log("delegation_empty", delegation=did)
             self._send({"type": "session.commentary.append", "event_id": f"empty_{did}", "delegation_id": did,
@@ -1539,6 +1542,13 @@ class Live:
         self.desk = desk
         self.call: Call | None = None
         self.lock = threading.Lock()
+        # What the user said for each request of a call (its words, from the transcript GPT Live sent here): the
+        # proof that words an agent relays are the user's own (orbit/desk/relay.py). Memory only; the latest 300.
+        self.heard: collections.deque = collections.deque(maxlen=300)
+
+    def hear(self, sid: str, words: str, call: str, delegation: str) -> None:
+        if words.strip():
+            self.heard.append({"sid": sid, "words": words, "call": call, "delegation": delegation, "at": time.time()})
 
     def model(self) -> str:
         return config.current(self.desk.settings)["live_model"]

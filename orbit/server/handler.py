@@ -384,6 +384,63 @@ class Handler(Forward, Streams, Watch, BaseHTTPRequestHandler):
             return self._json({"error": str(e)}, 400)
 
     # ------------------------------------------------------------------ helpers
+    def _relay(self, b: dict) -> None:
+        """POST /api/relay {from, target, text}: the words, if they are the user's own (said in a voice call to `from`,
+        or typed there), as a request in `target`, alone (orbit/desk/relay.py has the rules and the trust boundary)."""
+        from orbit.desk import relay
+        try:
+            text = relay.check_text(b.get("text"))
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        src, target = str(b.get("from") or ""), str(b.get("target") or "")
+        s = self.desk.sessions.get(src)
+        if s is None:
+            return self._json({"error": "from: the relaying session (yours: $ORBIT_SESSION)"}, 404)
+        if target == src:
+            return self._json({"error": "that is this session"}, 400)
+        proof = relay.find_proof(self.desk, src, text)
+        rem = federation.split(target)
+        if rem:  # another machine's session: that server delivers (and looks itself if nothing was found here)
+            if not self.desk.federation:
+                return self._json({"error": "no other machines here"}, 404)
+            body = {"from": src, "from_name": s.name, "from_machine": relay.host(), "target": rem[1], "text": text}
+            if proof:
+                body.update(proof=proof, client_id=relay.client_id(src, target, text, proof))
+            code, r = self.desk.federation.call(rem[0], "POST", "/api/relay/forward", body)
+            return self._json(r, code)
+        if target not in self.desk.sessions:
+            return self._json({"error": "no such session (target)"}, 404)
+        if not proof:
+            return self._json({"error": relay.NOT_THEIRS}, 403)
+        return self._json(relay.deliver(self.desk, target, text, {"sid": src, "name": s.name}, proof))
+
+    def _relay_forward(self, b: dict) -> None:
+        """POST /api/relay/forward: a relay from the server of another machine (with this one's token; never this
+        machine's own processes, which use /api/relay and its check). Its proof is taken as that server's (marked
+        verified_by it); without one, the words must be found here (a call here to that machine's session)."""
+        from orbit.desk import relay
+        if not self.from_remote:
+            return self._json({"error": "only from another machine's server: here, use /api/relay"}, 403)
+        try:
+            text = relay.check_text(b.get("text"))
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        src, target = str(b.get("from") or "")[:200], str(b.get("target") or "")
+        if target not in self.desk.sessions:
+            return self._json({"error": "no such session (target)"}, 404)
+        machine = str(b.get("from_machine") or "")[:60]
+        proof, verified_by = b.get("proof"), ""
+        if isinstance(proof, dict) and proof.get("kind") in ("voice", "typed"):
+            proof = {k: proof[k] for k in ("kind", "call", "delegation", "card", "at") if k in proof}
+            verified_by = machine or "another machine"
+        else:
+            proof = relay.find_proof(self.desk, src, text)
+        if not proof:
+            return self._json({"error": relay.NOT_THEIRS}, 403)
+        cid = b.get("client_id") if isinstance(b.get("client_id"), str) and b["client_id"].startswith("relay:") else ""
+        info = {"sid": src, "name": str(b.get("from_name") or "")[:120], "machine": machine}
+        return self._json(relay.deliver(self.desk, target, text, info, proof, verified_by=verified_by, cid=cid))
+
     def _show_page(self, data: bytes) -> None:
         """An agent's page (/show/<id>), sandboxed: it runs scripts but in its own origin (no Orbit API). Orbit's
         own keys still work in it (⌘⇧O back to the main tab, ⌘W, …): a small script passes them to the page around
@@ -974,6 +1031,10 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     return self._json(self.desk.side_op(m.group(1), str(b.get("op", "")), b.get("spec"), str(b.get("id") or "")))
                 except KeyError:
                     return self._json({"error": "no such session"}, 404)
+            if p == "/api/relay":  # the user's own words to another session (orbit-agent relay; orbit/desk/relay.py)
+                return self._relay(b)
+            if p == "/api/relay/forward":  # … from another machine's server (its token): delivered here
+                return self._relay_forward(b)
             if p == "/api/show":
                 if b.get("url"):  # a web address beside the conversation
                     return self._json(self.desk.show_url(str(b["url"]), str(b.get("title", "")), str(b.get("by", ""))))
