@@ -8,6 +8,8 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- The Files and Notes panels filtered stay a tree: the matches under their folders (each folder on the way open, a
+  folder matched by its name too), the matched text bold, the cursor on the best match (its very name first).
 - A file clicked in the Files panel shows beside, as a preview (italic) the next click replaces; the session or file
   in front and the keyboard stay where they were (interaction.md principle 9: keep the user's focus). A double-click on
   the side tab or an edit in it keeps it; a double-click on the row opens the file in the main pane, the keyboard in its

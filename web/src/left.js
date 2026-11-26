@@ -56,10 +56,7 @@ function fileRows(root, notesOnly = false, keyed = false) {
   if (!t) return [];
   const list = notesOnly ? t.notes || [] : t.files, index = notesOnly ? t.noteIndex : t.index;
   const K = keyed ? root + "|" : "", d0 = keyed ? 1 : 0, at = keyed ? { root } : {};
-  if (S.filter) {
-    return list.map(f => ({ f, sc: fuzzy(S.filter, notesOnly ? f.replace(/\.md$/i, "") : f) })).filter(x => x.sc >= 0).sort((a, b) => b.sc - a.sc).slice(0, 300)
-      .map(({ f, sc }) => ({ kind: "file", rel: f, depth: 0, flat: true, k: "f:" + K + f, sc, ...at }));
-  }
+  if (S.filter) return filteredRows(root, list, index, notesOnly, K, d0, at);
   const rows = [];
   const open = expandedSet(root);
   const walk = (dir, depth) => {
@@ -74,6 +71,56 @@ function fileRows(root, notesOnly = false, keyed = false) {
   walk("", d0);
   return rows;
 }
+/* A filtered tree is still a tree: the files whose path matches (fuzzy, the best 300) and the folders whose name holds
+   the text, under their folders, each folder on the way open; a folder matched by its name stays folded (opened: all
+   it holds). Folded or opened by hand while filtering: FILTERED (forgotten when the filter changes). The cursor
+   starts on the best match, so ⏎ opens it. */
+const FILTERED = { q: "", shut: new Set(), open: new Set(), state: new Map(), cursorFor: "" };
+function filteredRows(root, list, index, notesOnly, K, d0, at) {
+  if (FILTERED.q !== S.filter) { FILTERED.q = S.filter; FILTERED.shut.clear(); FILTERED.open.clear(); FILTERED.state.clear(); }
+  const q = S.filter, ql = q.toLowerCase().trim();
+  const hits = list.map(f => ({ f, sc: fuzzy(q, notesOnly ? f.replace(/\.md$/i, "") : f) })).filter(x => x.sc >= 0).sort((a, b) => b.sc - a.sc).slice(0, 300);
+  const score = new Map(hits.map(h => [h.f, h.sc])), anc = new Set(), dirHit = new Set();
+  const up = p => { const parts = p.split("/"); for (let i = 1; i < parts.length; i++) anc.add(parts.slice(0, i).join("/")); };
+  for (const { f } of hits) up(f);
+  if (ql.length >= 2 && !/\s/.test(ql)) for (const d of index.keys()) if (d && basename(d).toLowerCase().includes(ql) && dirHit.size < 50) { dirHit.add(d); up(d); }
+  const rows = [];
+  const walk = (dir, depth, all) => {  // all: every child (a folder opened by hand, matched by its name)
+    const node = index.get(dir);
+    if (!node) return;
+    for (const d of [...node.dirs].sort((a, b) => a.localeCompare(b))) {
+      if (!all && !anc.has(d) && !dirHit.has(d)) continue;
+      const fk = root + "|" + d, def = !all && anc.has(d);
+      const open = FILTERED.shut.has(fk) ? false : FILTERED.open.has(fk) || def;
+      FILTERED.state.set(fk, open);
+      rows.push({ kind: "dir", rel: d, depth, open, k: "d:" + K + d, hit: dirHit.has(d), ...at });
+      if (open) walk(d, depth + 1, all || !anc.has(d));
+    }
+    for (const f of [...node.files].sort((a, b) => a.localeCompare(b))) {
+      if (!all && !score.has(f)) continue;
+      rows.push({ kind: "file", rel: f, depth, k: "f:" + K + f, hit: score.has(f), sc: score.get(f) ?? -1, ...at });
+    }
+  };
+  walk("", d0, false);
+  return rows;
+}
+/* Folded or opened while filtering (← →, a click): that filtered tree only. */
+function toggleFilteredDir(rel, open, root) {
+  const fk = root + "|" + rel, want = open ?? !FILTERED.state.get(fk);
+  if (want) { FILTERED.open.add(fk); FILTERED.shut.delete(fk); } else { FILTERED.shut.add(fk); FILTERED.open.delete(fk); }
+  renderLeft();
+}
+/* The cursor on the best match when the filter text changed (a tree's first row is a folder). */
+function cursorToBest() {
+  if (!S.filter) { FILTERED.cursorFor = ""; return; }
+  if (FILTERED.cursorFor === S.filter) return;
+  FILTERED.cursorFor = S.filter;
+  const q = S.filter.toLowerCase().trim(), stem = r => basename(r.rel).toLowerCase().replace(/\.[^.]*$/, "");
+  const rank = r => (stem(r) === q ? 2 : basename(r.rel).toLowerCase().startsWith(q) ? 1 : 0);  // (its very name first: "files" → files.js)
+  const best = PROWS.filter(r => r.kind === "file" && r.hit).sort((a, b) => rank(b) - rank(a) || b.sc - a.sc)[0];
+  if (best) S.pcursor = best.k;
+}
+const hitName = (r, name) => r.hit && S.filter && typeof boldTerms === "function" ? boldTerms(name, S.filter.split(/\s+/)) : esc(name);
 const rowRoot = r => (r && r.root) || panelRoot();
 const rowPath = r => r.path || rowRoot(r) + "/" + r.rel;
 function revealFile(path) {
@@ -403,16 +450,24 @@ async function loadDir(path, force = false) {
 }
 function filesTabRows() {
   const R = filesRoots(), rows = [];
-  if (S.filter) {  // the open session folders' files, best first
-    const hits = [];
-    for (const f of [...R.here, ...R.other]) if (rootOpen(f.path) && S.trees.get(f.path)) hits.push(...fileRows(f.path, false, true));
-    return hits.sort((a, b) => b.sc - a.sc).slice(0, 300);
+  const rootOf = (f, open, depth = 0) => {
+    const t = S.trees.get(f.path);
+    return { kind: "root", root: f.path, k: "r:" + f.path, open, depth, cur: f.path === R.cur, remote: f.remote, off: f.off, place: f.place, added: f.added,
+             name: f.name || basename(f.path.replace(/^\/@[^/]+/, "")) || f.path, sub: f.sub || tilde(dirname(f.path.replace(/^\/@[^/]+/, ""))),
+             branch: !f.place && t && t.git ? t.branch || "git" : "" };
+  };
+  if (S.filter) {  // the open session folders, each a filtered tree (those with a match)
+    for (const f of [...R.here, ...R.other]) {
+      const t = S.trees.get(f.path);
+      if (!rootOpen(f.path) || f.off || !t || t.error) continue;
+      const sub = fileRows(f.path, false, true), open = !FILTERED.shut.has("root|" + f.path);
+      if (sub.length) rows.push(rootOf(f, open), ...(open ? sub : []));
+    }
+    return rows;
   }
   const rootRow = (f, depth = 0) => {
     const open = rootOpen(f.path) && !f.off, t = S.trees.get(f.path);
-    rows.push({ kind: "root", root: f.path, k: "r:" + f.path, open, depth, cur: f.path === R.cur, remote: f.remote, off: f.off, place: f.place, added: f.added,
-                name: f.name || basename(f.path.replace(/^\/@[^/]+/, "")) || f.path, sub: f.sub || tilde(dirname(f.path.replace(/^\/@[^/]+/, ""))),
-                branch: !f.place && t && t.git ? t.branch || "git" : "" });
+    rows.push(rootOf(f, open, depth));
     if (!open) return;
     if (f.place) return dirRows(f.path, depth + 1);
     if (!t) { refreshTree(f.path); rows.push({ kind: "note", k: "n:" + f.path, depth: depth + 1, text: "Loading…" }); return; }
@@ -456,6 +511,7 @@ function leftShowsSession(old, s) {
 function renderFilesRoots() {
   PROWS = filesTabRows();
   FILES.drawn = S.filter ? "" : PROWS.map(r => r.k).join("\n");
+  cursorToBest();
   const w = FILES.want;
   if (w && Date.now() - w.t < 3000) { if (PROWS.some(r => r.k === w.k)) { S.pcursor = w.k; FILES.want = null; } else if (!PROWS.some(r => r.k === S.pcursor)) S.pcursor = w.k; }
   else FILES.want = null;
@@ -482,17 +538,18 @@ function renderFilesRoots() {
     if (r.kind === "ldir") return `<div class="prow ft dir${kc}" data-k="${esc(r.k)}" data-tip="${esc(tilde(r.path))}">${guides}<span class="tw${r.open ? " open" : ""}">${I("chev", 10)}</span><span class="ic">${folderIcon(r.open)}</span><span class="nm">${esc(r.name)}</span></div>`;
     if (r.kind === "lfile") return `<div class="prow ft${kc}${r.path === curFile ? " cur" : ""}" data-k="${esc(r.k)}" data-tip="${esc(tilde(r.path))}">${guides}<span class="tw"></span><span class="ic">${fileIcon(r.name)}</span><span class="nm">${esc(r.name)}</span></div>`;
     const t = S.trees.get(r.root);
-    if (r.kind === "dir") return `<div class="prow ft dir${kc}" data-k="${esc(r.k)}" data-tip="${esc(tilde(r.root + "/" + r.rel))}">${guides}<span class="tw${r.open ? " open" : ""}">${I("chev", 10)}</span><span class="ic">${folderIcon(r.open)}</span><span class="nm">${esc(basename(r.rel))}</span>${t && t.dirty.has(r.rel) ? '<span class="dd2"></span>' : ""}</div>`;
+    if (r.kind === "dir") return `<div class="prow ft dir${kc}" data-k="${esc(r.k)}" data-tip="${esc(tilde(r.root + "/" + r.rel))}">${guides}<span class="tw${r.open ? " open" : ""}">${I("chev", 10)}</span><span class="ic">${folderIcon(r.open)}</span><span class="nm">${hitName(r, basename(r.rel))}</span>${t && t.dirty.has(r.rel) ? '<span class="dd2"></span>' : ""}</div>`;
     const st = t && t.status[r.rel], letter = st === "?" ? "U" : st, full = r.root + "/" + r.rel;
     const name = r.flat ? r.rel : basename(r.rel);
     return `<div class="prow ft${kc}${full === curFile ? " cur" : ""}${st ? ` st-${esc(letter)}` : ""}" data-k="${esc(r.k)}" data-tip="${esc(tilde(full))}">${guides}<span class="tw"></span><span class="ic">${fileIcon(r.rel)}</span>` +
-      `<span class="nm">${esc(name)}</span>${r.flat ? `<span class="fd">${esc(basename(r.root.replace(/^\/@[^/]+/, "")) || r.root)}</span>` : ""}${st ? `<span class="stl st-${esc(letter)}">${esc(letter)}</span>` : ""}</div>`;
+      `<span class="nm">${hitName(r, name)}</span>${r.flat ? `<span class="fd">${esc(basename(r.root.replace(/^\/@[^/]+/, "")) || r.root)}</span>` : ""}${st ? `<span class="stl st-${esc(letter)}">${esc(letter)}</span>` : ""}</div>`;
   }).join("");
   if (typeof opsDecorate === "function") opsDecorate();  // (fileops.js: draggable rows, the cut ones dimmed)
   revealCursor();
 }
 function toggleRoot(r, open) {
   const want = open ?? !r.open;
+  if (S.filter && r.kind === "root") { const fk = "root|" + r.root; if (want) FILTERED.shut.delete(fk); else FILTERED.shut.add(fk); renderLeft(); return; }  // (that filtered tree only)
   if (r.kind === "fsec") { if (!r.fold) return; FILES.other = want; LS.set("filesOther", want); renderLeft(); return; }
   const key = r.kind === "root" ? r.root : r.path;
   setRootOpen(key, want);
@@ -517,6 +574,7 @@ function renderFilesPanel() {
   if (!t) { PROWS = []; plist.innerHTML = `<div class="pempty">Loading ${esc(tilde(root))}…</div>`; refreshTree(root); return; }
   if (t.error) { PROWS = []; plist.innerHTML = `<div class="pempty"><h3>Cannot list the folder</h3>${esc(t.error)}</div>`; return; }
   PROWS = fileRows(root, notesTab);
+  cursorToBest();
   if (notesTab && !S.filter) PROWS.unshift({ kind: "week", k: "w", depth: 0 });  // ⌘⇧D, one ⏎ away
   if (!PROWS.some(r => r.k === S.pcursor)) S.pcursor = (S.file && PROWS.find(r => r.k === "f:" + relTo(root, S.file)) || PROWS[0] || {}).k || null;
   // The tree head: the folder as ~/… (11px, quiet), the branch or the note count at the right.
@@ -531,13 +589,13 @@ function renderFilesPanel() {
     const guides = '<span class="ig"></span>'.repeat(r.depth);
     if (r.kind === "week") return `<div class="prow ft${kc}" data-k="w" title="${esc(journalName()[0].toUpperCase() + journalName().slice(1))} (⌘⇧D)"><span class="tw"></span><span class="ic">${I("calendar", 13)}</span><span class="nm">${esc(JOURNAL.label)}</span><span class="fd">⌘⇧D</span></div>`;
     if (r.kind === "dir") {
-      return `<div class="prow ft dir${kc}" data-k="${esc(r.k)}" data-tip="${esc(tilde(root + "/" + r.rel))}">${guides}<span class="tw${r.open ? " open" : ""}">${I("chev", 10)}</span><span class="ic">${folderIcon(r.open)}</span><span class="nm">${esc(basename(r.rel))}</span>${!notesTab && t.dirty.has(r.rel) ? '<span class="dd2"></span>' : ""}</div>`;
+      return `<div class="prow ft dir${kc}" data-k="${esc(r.k)}" data-tip="${esc(tilde(root + "/" + r.rel))}">${guides}<span class="tw${r.open ? " open" : ""}">${I("chev", 10)}</span><span class="ic">${folderIcon(r.open)}</span><span class="nm">${hitName(r, basename(r.rel))}</span>${!notesTab && t.dirty.has(r.rel) ? '<span class="dd2"></span>' : ""}</div>`;
     }
     const st = notesTab ? null : t.status[r.rel];
     const letter = st === "?" ? "U" : st;
     let name = r.flat ? r.rel : basename(r.rel);
     if (notesTab) name = name.replace(/\.md$/i, "");
-    return `<div class="prow ft${kc}${r.rel === curRel ? " cur" : ""}${st ? ` st-${esc(letter)}` : ""}" data-k="${esc(r.k)}" data-tip="${esc(tilde(root + "/" + r.rel))}">${guides}<span class="tw"></span><span class="ic">${fileIcon(r.rel)}</span><span class="nm">${esc(name)}</span>${st ? `<span class="stl st-${esc(letter)}">${esc(letter)}</span>` : ""}</div>`;
+    return `<div class="prow ft${kc}${r.rel === curRel ? " cur" : ""}${st ? ` st-${esc(letter)}` : ""}" data-k="${esc(r.k)}" data-tip="${esc(tilde(root + "/" + r.rel))}">${guides}<span class="tw"></span><span class="ic">${fileIcon(r.rel)}</span><span class="nm">${hitName(r, name)}</span>${st ? `<span class="stl st-${esc(letter)}">${esc(letter)}</span>` : ""}</div>`;
   }).join("");
   revealCursor();
 }
@@ -658,6 +716,7 @@ function renameRow(r) {
   toast(r.kind === "ftab" ? "A view has no name to change" : "This one cannot be renamed");
 }
 function toggleDir(rel, open, root = panelRoot()) {
+  if (S.filter) return toggleFilteredDir(rel, open, root);
   const set = expandedSet(root);
   const want = open ?? !set.has(rel);
   if (want) set.add(rel); else set.delete(rel);

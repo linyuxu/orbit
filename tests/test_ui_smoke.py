@@ -1086,6 +1086,33 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
         for g in (gid, other):
             self.req("POST", f"/api/groups/{g}/delete")
 
+    def test_a_filtered_files_tree_is_still_a_tree(self):
+        """Filtering the Files panel keeps the tree: the matches under their folders, each folder on the way open, the
+        rest gone; a folder matched by its name too; the cursor on the best match (⏎ opens it); a folder folded while
+        filtering stays folded until the filter changes, and the tree without a filter is as it was."""
+        d = Path(self.work) / "ftree"
+        for rel in ("src/ui/fileops.js", "src/ui/left.js", "src/server/handler.py", "docs/fileops-notes.md", "tests/unit/test_x.py", "assets/fileopsicons/a.png"):
+            (d / rel).parent.mkdir(parents=True, exist_ok=True); (d / rel).write_text("x")
+        sid = self.req("POST", "/api/sessions", {"cwd": str(d), "name": "ftree"})[1]["id"]
+        root = str(d)
+        rows = "PROWS.filter(r => r.root === %s).map(r => r.kind[0] + ':' + (r.rel || '') + (r.open ? '+' : '') + '@' + r.depth)" % json.dumps(root)
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"switchTo({json.dumps(sid)}); S.left.shown = true; applyLeft(); setPanelTab('files'); focusPanel(); 0")
+            page.wait_for_function(f"() => PROWS.some(r => r.k === 'd:{root}|src')", timeout=8000)
+            page.evaluate("S.filter = 'fileops'; renderLeft()")
+            got = page.evaluate(rows)
+            self.assertEqual(got, ["r:+@0", "d:assets+@1", "d:assets/fileopsicons+@2", "f:assets/fileopsicons/a.png@3", "d:docs+@1",
+                                   "f:docs/fileops-notes.md@2", "d:src+@1", "d:src/ui+@2", "f:src/ui/fileops.js@3"], name)
+            self.assertEqual(page.evaluate("S.pcursor"), f"f:{root}|src/ui/fileops.js", name)  # (the best match)
+            self.assertIn("<b>", page.inner_html(f"#plist .prow[data-k='f:{root}|src/ui/fileops.js'] .nm"), name)
+            page.evaluate(f"S.pcursor = 'd:{root}|src'; renderLeft()"); page.keyboard.press("ArrowLeft")  # folded, in this filtered tree
+            self.assertNotIn("f:src/ui/fileops.js@3", page.evaluate(rows), name)
+            self.assertIn("d:src@1", page.evaluate(rows), name)
+            page.evaluate("S.filter = ''; renderLeft()")  # no filter: the tree as it was (src never opened by hand)
+            self.assertIn("d:src@1", page.evaluate(rows), name)
+            self.assertNotIn("d:src/ui@2", page.evaluate(rows), name)
+
     def test_earlier_cards_come_in_only_when_the_scrolling_stops(self):
         """A long conversation draws its latest 40 requests; the earlier ones come in above once the user's scrolling
         stops, the view kept where it was. Never during the scroll: WebKit drops a scrollTop written during a

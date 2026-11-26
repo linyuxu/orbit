@@ -108,7 +108,7 @@ Every list (left-panel lists, the ⌘O finder, menus, the bell list, the shortcu
 | Esc | Back (to the input, or close the list) |
 | ⌘⇧[ ⌘⇧] | Switch the list's tabs (left panel tabs, finder tabs) |
 
-Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it. The mouse (principle 9): a click on a file shows it beside (an italic preview tab; a double-click on that side tab, or an edit in it, keeps it), a click on a folder toggles it, a double-click on a file opens it in the main pane with the keyboard in its editor. Sessions: ← / → fold and unfold a group (← on a session goes to its group); a filter looks inside folded groups.
+Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it. Filtered, a tree is still a tree: the matching files (and folders matched by name) under their folders, each folder on the way open, the matched text bold, the cursor on the best match; a folder folded while filtering stays so until the filter changes. The mouse (principle 9): a click on a file shows it beside (an italic preview tab; a double-click on that side tab, or an edit in it, keeps it), a click on a folder toggles it, a double-click on a file opens it in the main pane with the keyboard in its editor. Sessions: ← / → fold and unfold a group (← on a session goes to its group); a filter looks inside folded groups.
 
 ## 7. Menus, dialogs, dropdowns
 
