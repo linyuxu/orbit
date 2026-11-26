@@ -201,7 +201,9 @@ document.addEventListener("touchstart", () => {}, { passive: true });  // (iOS s
   fitViewport();
   // Opened on a session: #s/<id> (a reload, the back stack) or ?session=<id> (a link from the desktop); else the area
   // it was left on, at once (its pages load their own data).
-  const want = decodeURIComponent((/^#s\/(.+)$/.exec(location.hash) || [])[1] || "") || new URLSearchParams(location.search).get("session");
+  // (?session= first: a notification's tap opens /m/?session=<id>, whatever the address was before)
+  const want = new URLSearchParams(location.search).get("session") || decodeURIComponent((/^#s\/(.+)$/.exec(location.hash) || [])[1] || "");
+  if (q.has("session") || q.has("at")) { q.delete("session"); q.delete("at"); history.replaceState(null, "", location.pathname + (q.size ? "?" + q : "") + location.hash); }
   const tab = LS.get("tab", "sessions");
   if (!want && tab !== "sessions" && TAB_ROOT[tab]) switchTab(tab); else renderTabbar();
   if ("serviceWorker" in navigator) {

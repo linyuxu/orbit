@@ -4,7 +4,7 @@
    (network first: an update shows at the next start, not the one after; the server is the user's own machine), and
    from the cache when it does not (offline, or the tailnet away). /api/* is never cached (live data, the event
    stream, uploads), nor the manifest (it carries the token). */
-const CACHE = "orbit-m-36";
+const CACHE = "orbit-m-37";
 const PUSH_BOX = "orbit-push";  // (a tapped notification's session, for the page to open: kept across versions)
 const WAIT = 2000;
 const SHELL = [
@@ -62,10 +62,24 @@ const pushUrl = d => {
   const sid = typeof d.sid === "string" ? d.sid : "";
   return "/m/" + (sid ? "#s/" + encodeURIComponent(sid) : "");
 };
+/* A declarative message ({web_push: 8030, notification: {title, body, navigate}}, push.py): where the browser takes it
+   itself (iOS 18.4+: the event carries its proposed notification), it shows it and opens navigate on a tap, so nothing
+   is shown here (a notification shown here would replace it, and iOS gives its tap to no one). Elsewhere it is shown
+   from the same message, its session read from navigate's ?session=. */
+const fromDeclarative = d => {
+  const n = d.notification && typeof d.notification === "object" ? d.notification : {};
+  let sid = "";
+  try { const u = new URL(String(n.navigate || ""), location.origin); if (u.origin === location.origin) sid = u.searchParams.get("session") || ""; } catch {}
+  return { title: n.title, body: n.body, sid, tag: sid || "orbit" };
+};
 self.addEventListener("push", e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : "" }; }
   if (!d || typeof d !== "object") d = {};
+  if (d.web_push === 8030) {
+    if (e.notification && typeof e.notification === "object") { e.waitUntil(pushNote("received-declarative", fromDeclarative(d).sid)); return; }
+    d = fromDeclarative(d);
+  }
   const sid = typeof d.sid === "string" ? d.sid : "";
   e.waitUntil(Promise.all([self.registration.showNotification(String(d.title || "Orbit"), {
     body: String(d.body || ""), tag: String(d.tag || sid || "orbit"), data: { sid, url: pushUrl(d) }, icon: "/m/icon-192.png" }),

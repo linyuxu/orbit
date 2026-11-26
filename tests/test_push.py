@@ -190,6 +190,25 @@ class PushTest(test_skeleton.SkeletonTest):
         self.assertEqual((r["sent"], r["devices"], len(self.fake.got) - n), (1, 1, 1))
         self.assertTrue(self.fake.got[-1]["path"].startswith("/ok/phone-"))
 
+    def test_declarative_on_an_https_server(self):
+        """With an HTTPS address: Declarative Web Push, navigate an absolute /m/?session= address (iOS opens it itself)."""
+        sub, d = self.subscribe()
+        s = self.new_session("decl")
+        f = self.state / "https.json"
+        f.write_text(json.dumps({"url": "https://orbit.example.ts.net:8443"}))
+        try:
+            self.req("POST", "/api/push/send", {"title": "Report ready", "body": "Q3", "sid": s["id"]})
+            msg = read(self.fake.got[-1], d, sub)
+            self.assertEqual(set(msg), {"web_push", "notification"})
+            self.assertEqual(msg["web_push"], 8030)
+            n = msg["notification"]
+            self.assertEqual((n["title"], n["body"]), ("Report ready", "Q3"))
+            self.assertRegex(n["navigate"], r"^https://orbit\.example\.ts\.net:8443/m/\?session=" + s["id"] + r"&at=\d+$")
+            self.req("POST", "/api/push/send", {"title": "No session"})
+            self.assertEqual(read(self.fake.got[-1], d, sub)["notification"], {"title": "No session", "navigate": "https://orbit.example.ts.net:8443/m/"})
+        finally:
+            f.unlink()
+
     def test_refused_endpoints_and_keys(self):
         bad_hosts = ["https://evil.example/push", "http://127.0.0.1:9/ok/x", "https://web.push.apple.com.evil.example/x"]
         _, d = device(self.fake.base)

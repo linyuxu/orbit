@@ -777,6 +777,11 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
                     cold0 = ctx.new_page()  # (a cold start at the app's own address: the entry opens it once the sessions are in)
                     cold0.goto(f"http://127.0.0.1:{self.port}/m/")
                     cold0.wait_for_function(f"() => typeof S !== 'undefined' && S.current === {json.dumps(sid)}", timeout=15000)
+                    # a declarative notification's tap (iOS): /m/?session=<sid>, whatever the address was; the query is dropped
+                    cold1 = ctx.new_page()
+                    cold1.goto(f"http://127.0.0.1:{self.port}/m/?session={sid}&at=1#s/{other}")
+                    cold1.wait_for_function(f"() => typeof S !== 'undefined' && S.current === {json.dumps(sid)}", timeout=15000)
+                    self.assertEqual(cold1.evaluate("location.search"), "")
                     # a tap with the app closed: it starts at /m/#s/<sid>
                     cold = ctx.new_page()
                     cold.goto(f"http://127.0.0.1:{self.port}/m/#s/{sid}")
@@ -808,16 +813,26 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
               await pushed({ title: 'Report ready', body: 'Q3', sid: 'abc 1', tag: 'sched:x:1', url: '/m/#s/abc%201' });
               await pushed({ title: 'Evil', sid: '//evil.example', url: 'https://evil.example/' });
               await pushed(null);
+              // declarative (push.py with an HTTPS address): a browser that takes it itself (its event carries the proposed
+              // notification) is left to show it; elsewhere it is shown here, the session read from navigate
+              const decl = { web_push: 8030, notification: { title: 'Decl', body: 'b', navigate: 'https://orbit.test/m/?session=s%202&at=1' } };
+              await run('push', { data: { json: () => decl }, notification: { title: 'Decl' } });
+              const declShown = shown.length;
+              await pushed(decl);
+              await pushed({ web_push: 8030, notification: { title: 'Elsewhere', navigate: 'https://evil.example/m/?session=x' } });
               const tap = n => run('notificationclick', { notification: { data: n.data, close() {} } });
               await tap(shown[0][1]);
               await tap(shown[1][1]);
               wins = [{ url: 'https://orbit.test/m/#s/old', focus: async () => { focused++; }, postMessage: m => posted.push(m) }];
               const first = JSON.parse(JSON.stringify(box));
               await tap(shown[0][1]);
-              return { shown, opened, posted, focused, first };
+              return { shown, opened, posted, focused, first, declShown };
             }""")
             self.assertEqual(r["shown"][0], ["Report ready", {"body": "Q3", "tag": "sched:x:1", "data": {"sid": "abc 1", "url": "/m/#s/abc%201"}, "icon": "/m/icon-192.png"}])
             self.assertEqual(r["shown"][2][0], "Orbit")  # (an empty payload: still a notification, as iOS requires)
+            self.assertEqual(r["declShown"], 3)  # (the browser shows a declarative one itself: nothing here)
+            self.assertEqual((r["shown"][3][0], r["shown"][3][1]["data"]["sid"]), ("Decl", "s 2"))
+            self.assertEqual((r["shown"][4][0], r["shown"][4][1]["data"]["sid"]), ("Elsewhere", ""))  # (another site's navigate: no session)
             self.assertEqual(r["opened"], ["/m/#s/abc%201", "/m/#s/%2F%2Fevil.example"])  # (this app's pages only)
             self.assertEqual((r["posted"], r["focused"]), ([{"t": "open", "sid": "abc 1"}], 1))
             self.assertEqual(r["first"]["orbit-push /m/__open"]["sid"], "//evil.example")  # (the last tap's session, for the page)

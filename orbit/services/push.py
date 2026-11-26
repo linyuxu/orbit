@@ -151,6 +151,29 @@ class Push:
             pass
 
     # ---------- sending
+    def origin(self) -> str:
+        """This server's HTTPS address (the one the phone subscribed from), or '' when HTTPS is off."""
+        from orbit.machines import https
+        return https.saved_url(self.state_dir).rstrip("/")
+
+    def payload(self, title: str, body: str, sid: str, key: str) -> bytes:
+        """Declarative Web Push (WebKit, iOS 18.4+) when this server has an HTTPS address: {"web_push": 8030,
+        "notification": {title, body, navigate}}. iOS opens `navigate` on a tap by itself: it does not reliably give a
+        Home Screen app's service worker the tap (notificationclick). navigate is /m/?session=<id> (a page load, which
+        opens it; a fragment alone would not load it again). Elsewhere the service worker shows it from the same
+        message and opens the session on a tap (sw.js). Without an HTTPS address (no absolute URL to give): the plain
+        message the service worker reads."""
+        from urllib.parse import quote
+        origin = self.origin()
+        if origin:
+            nav = f"{origin}/m/" + (f"?session={quote(sid, safe='')}&at={int(time.time())}" if sid else "")
+            n = {"title": title, "navigate": nav}
+            if body:
+                n["body"] = body
+            return json.dumps({"web_push": 8030, "notification": n}, ensure_ascii=False).encode()
+        return json.dumps({"title": title, "body": body, "sid": sid, "url": "/m/" + (f"#s/{sid}" if sid else ""),
+                           "tag": key or sid or "orbit"}, ensure_ascii=False).encode()
+
     def _subject(self) -> str:
         if self.subject:
             return self.subject
@@ -162,9 +185,7 @@ class Push:
         restart in between: the devices that took it are not sent it again). Returns {sent, devices, results}."""
         title = (str(title or "").strip() or "Orbit")[:TITLE_MAX]
         body = str(body or "").strip()[:BODY_MAX]
-        url = "/m/" + (f"#s/{sid}" if sid else "")
-        payload = json.dumps({"title": title, "body": body, "sid": sid, "url": url, "tag": key or sid or "orbit"},
-                             ensure_ascii=False).encode()
+        payload = self.payload(title, body, sid, key)
         vapid = self.vapid()
         with self.sending:
             return self._send_all(title, body, sid, key, sub, via, payload, vapid)
