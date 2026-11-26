@@ -352,7 +352,7 @@ class PushTest(test_skeleton.SkeletonTest):
         dn = {"title": "早间新闻总结已完成", "body": "今日重要新闻与AI动态已整理，点开查看。"}
         code, x = self.req("POST", "/api/schedules", {"when": "in 5m", "text": "summarize the news", "sid": s["id"], "done_notify": dn})
         self.assertEqual(code, 200, x)
-        self.assertEqual(x["done_notify"], dn)
+        self.assertEqual(x["done_notify"], {**dn, "fail_if": ""})
         self.desk.scheduler.tick(x["next"] + 1)
         self.wait_card(s["id"], 1, ("completed",))
         self.wait_got(1)
@@ -365,6 +365,14 @@ class PushTest(test_skeleton.SkeletonTest):
         self.assertNotIn("waiting", y)
         self.assertTrue(y["last"]["done"]["ok"])
         self.assertEqual(len(self.fake.got), 1)  # (once: no push at the start)
+        # the agent's own word: its answer's first line says it could not
+        _, z = self.req("POST", "/api/schedules", {"when": "in 5m", "text": "x", "sid": s["id"],
+                                                   "done_notify": {**dn, "fail_if": "answer:"}})
+        self.desk.scheduler.tick(z["next"] + 1)
+        self.wait_got(2)
+        msg = read(self.fake.got[-1], d, sub)
+        self.assertEqual(msg["title"], "早间新闻总结未完成")
+        self.assertIn("answer:", msg["body"])
 
     def test_a_failed_run_says_so(self):
         sub, d = self.subscribe()
@@ -482,6 +490,7 @@ class AcrossMachinesTest(test_remote.RemoteTest):
             cards = self.rdesk.cards(rid)
             self.assertEqual(len(cards), 1)
             self.assertTrue(cards[0]["text"].startswith('(schedule "summarize the news") summarize the news'))
+            self.assertNotIn("journal", cards[0]["text"])  # (this machine's journal is no path there)
             msg = json.loads(wp.decrypt(self.fake.got[-1]["body"], d, sub["keys"]["auth"]))
             self.assertEqual((msg["title"], msg["sid"]), ("早间新闻总结已完成", far["id"]))
             # the same due time again (a restart before its next time was saved): no second request there, no second push

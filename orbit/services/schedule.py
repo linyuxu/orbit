@@ -16,9 +16,10 @@ agent; its session, if it names one, is what a tap opens. Each time it is due is
 and that time, so a run fired again after a restart (its next time not yet saved) reaches no device twice.
 
 A schedule may target another machine's session (NAME~ID, as this server lists it): the request goes there
-through that server (a client id per due time, so a run fired again sends once). `done_notify` {title, body}:
+through that server (a client id per due time, so a run fired again sends once). `done_notify` {title, body, fail_if?}:
 when the run's request ends, this server sends the phone a notification (completed: title / body; failed or
-stopped: "…未完成" and why) that opens the session; waiting runs are kept and followed again after a restart.
+stopped, or its answer's first line has fail_if: "…未完成" and why) that opens the session; waiting runs are kept and followed again after a restart. Another machine's session gets no journal (its path is
+this machine's).
 `expires` (a time): no run after it (the schedule turns off).
 
 A watch schedule (`check`) runs a shell command on its interval with no agent and no cost; the command prints one
@@ -423,7 +424,8 @@ class Scheduler:
             if dn:
                 if not isinstance(dn, dict) or not str(dn.get("title") or "").strip():
                     raise ValueError("done_notify: {title, body}")
-                out["done_notify"] = {"title": str(dn["title"]).strip()[:120], "body": str(dn.get("body") or "").strip()[:500]}
+                out["done_notify"] = {"title": str(dn["title"]).strip()[:120], "body": str(dn.get("body") or "").strip()[:500],
+                                      "fail_if": str(dn.get("fail_if") or "").strip()[:40]}
             else:
                 out["done_notify"] = None
         if "expires" in b:
@@ -444,7 +446,7 @@ class Scheduler:
         it["next"] = self._next(it, now, None) if it["enabled"] else None
         if it["enabled"] and it["next"] is None:
             raise ValueError("that time has passed")
-        if it["spec"]["kind"] != "once" and not it.get("notify"):  # a repeating job keeps a journal of its runs
+        if it["spec"]["kind"] != "once" and not it.get("notify") and self._remote(it.get("sid") or "") is None:  # a repeating job keeps a journal of its runs (here)
             j = self.journal(it)
             j.parent.mkdir(parents=True, exist_ok=True)
             if not j.exists():
@@ -591,6 +593,10 @@ class Scheduler:
         ok = bool(card) and card.get("state") == "completed"
         if card and not ok:
             reason = card.get("state", "") + (f": {card['error']}" if card.get("error") else "")
+        marker = (it.get("done_notify") or {}).get("fail_if") or ""
+        first = next((ln.strip() for ln in (card or {}).get("answer", "").splitlines() if ln.strip()), "")
+        if ok and marker and marker in first:  # (the agent says it could not do it: its first line)
+            ok, reason = False, first[:200]
         self._done_push(it, w["key"], ok, reason)
         with self.lock:
             it.pop("waiting", None)
@@ -663,7 +669,8 @@ class Scheduler:
                     wake, last["skipped"] = False, f"after {until} (until)"
             if wake:
                 text = f'(schedule "{it["name"]}") {it["text"]}{extra}'
-                if it["spec"]["kind"] != "once" or it.get("check"):
+                remote = bool(it.get("sid")) and self._remote(it["sid"]) is not None
+                if (it["spec"]["kind"] != "once" or it.get("check")) and not remote:  # (a journal here: not there)
                     text += (f"\n\nThis job's journal is {self.journal(it)}: read it first; before you finish, append one "
                              "entry (the time, what you did, what the next run should know).")
                 if it.get("fleet"):
