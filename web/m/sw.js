@@ -4,7 +4,7 @@
    (network first: an update shows at the next start, not the one after; the server is the user's own machine), and
    from the cache when it does not (offline, or the tailnet away). /api/* is never cached (live data, the event
    stream, uploads), nor the manifest (it carries the token). */
-const CACHE = "orbit-m-35";
+const CACHE = "orbit-m-36";
 const PUSH_BOX = "orbit-push";  // (a tapped notification's session, for the page to open: kept across versions)
 const WAIT = 2000;
 const SHELL = [
@@ -23,7 +23,7 @@ self.addEventListener("install", e => {
     .then(r => r.ok && !r.redirected ? c.put(u, r) : null).catch(() => null)))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== PUSH_BOX).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== PUSH_BOX).map(k => caches.delete(k)))).then(() => self.clients.claim()).then(() => pushNote("activated")));
 });
 self.addEventListener("fetch", e => {
   const req = e.request, url = new URL(req.url);
@@ -56,6 +56,8 @@ self.addEventListener("fetch", e => {
    front, its address unchanged) and may hold a message back, so the session is written first to a cache entry
    (PUSH_BOX /m/__open {sid, at}) the page takes whenever it shows or starts (m-push.js); the message, focus and
    openWindow follow. Each tap is reported to the server's push log (how it went: the device's own record). */
+const pushNote = (how, sid = "", windows = 0) => fetch("/api/push/tap", { method: "POST", credentials: "same-origin",
+  headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sid, how, windows, v: CACHE }) }).catch(() => {});
 const pushUrl = d => {
   const sid = typeof d.sid === "string" ? d.sid : "";
   return "/m/" + (sid ? "#s/" + encodeURIComponent(sid) : "");
@@ -65,13 +67,15 @@ self.addEventListener("push", e => {
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : "" }; }
   if (!d || typeof d !== "object") d = {};
   const sid = typeof d.sid === "string" ? d.sid : "";
-  e.waitUntil(self.registration.showNotification(String(d.title || "Orbit"), {
-    body: String(d.body || ""), tag: String(d.tag || sid || "orbit"), data: { sid, url: pushUrl(d) }, icon: "/m/icon-192.png" }));
+  e.waitUntil(Promise.all([self.registration.showNotification(String(d.title || "Orbit"), {
+    body: String(d.body || ""), tag: String(d.tag || sid || "orbit"), data: { sid, url: pushUrl(d) }, icon: "/m/icon-192.png" }),
+    pushNote("received", sid)]));
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();
   const d = e.notification.data || {}, sid = typeof d.sid === "string" ? d.sid : "", url = pushUrl(d);
   e.waitUntil((async () => {
+    pushNote("tapped", sid);
     try { const c = await caches.open(PUSH_BOX); await c.put("/m/__open", new Response(JSON.stringify({ sid, at: Date.now() }))); } catch {}
     const ws = await self.clients.matchAll({ type: "window", includeUncontrolled: true }).catch(() => []);
     const w = ws.find(x => new URL(x.url).origin === location.origin && new URL(x.url).pathname.startsWith("/m"));
@@ -83,7 +87,6 @@ self.addEventListener("notificationclick", e => {
     } else {
       try { await self.clients.openWindow(url); } catch { how = "open-failed"; }
     }
-    await fetch("/api/push/tap", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sid, how, windows: ws.length }) }).catch(() => {});
+    await pushNote(how, sid, ws.length);
   })());
 });

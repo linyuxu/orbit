@@ -821,7 +821,9 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             self.assertEqual(r["opened"], ["/m/#s/abc%201", "/m/#s/%2F%2Fevil.example"])  # (this app's pages only)
             self.assertEqual((r["posted"], r["focused"]), ([{"t": "open", "sid": "abc 1"}], 1))
             self.assertEqual(r["first"]["orbit-push /m/__open"]["sid"], "//evil.example")  # (the last tap's session, for the page)
-            taps = [l for l in self.req("GET", "/api/push")[1]["log"] if l["outcome"] == "tap"]
+            taps = [l for l in self.req("GET", "/api/push")[1]["log"] if l["outcome"] == "tap" and l["via"] in ("open", "focus")]
+            notes = {l["via"] for l in self.req("GET", "/api/push")[1]["log"] if l["outcome"] == "tap"}
+            self.assertTrue({"received", "tapped"} <= notes, notes)  # (the device's own record: a push came, a tap came)
             self.assertEqual([(t["sid"], t["via"], t["windows"]) for t in taps[-3:]], [("abc 1", "open", 0), ("//evil.example", "open", 0), ("abc 1", "focus", 1)])
         finally:
             ctx.close()

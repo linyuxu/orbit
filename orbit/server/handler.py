@@ -1090,7 +1090,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     return self._json({"removed": gone, **pu.status()})
                 if p == "/api/push/tap":  # sw.js: a notification was tapped (the device's record of how it went)
                     pu._log({"at": time.time(), "outcome": "tap", "sid": str(b.get("sid") or "")[:200],
-                             "via": str(b.get("how") or "")[:40], "windows": int(b.get("windows") or 0)})
+                             "via": str(b.get("how") or "")[:40], "windows": int(b.get("windows") or 0),
+                             "v": str(b.get("v") or "")[:20]})
                     return self._json({"ok": True})
                 if p == "/api/push/send":  # orbit-agent notify; the phone's "Send a test" (to itself: endpoint)
                     sid = str(b.get("sid") or "")
