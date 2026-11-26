@@ -179,7 +179,7 @@ function listPopup({ items, anchor, at, side, sel = 0, onPick, onSel, onClose, a
     A = acc();
     el.innerHTML = (filtering() ? `<div class="q">${q ? "Filter: " + esc(q) : "Type to filter"}</div>` : "") +
       view.map((it, k) => it.sep ? "<hr>" :
-        `<div class="row${k === i ? " sel" : ""}${it.danger ? " danger" : ""}" data-i="${k}"${it.disabled ? ' style="opacity:.45"' : ""}><span class="lbl">${labelHtml(it, k)}</span>${it.key ? `<span class="k">${esc(it.key)}</span>` : ""}${it.sub ? `<span class="sub">${I("chev", 12)}</span>` : ""}</div>`).join("");
+        `<div class="row${k === i ? " sel" : ""}${it.danger ? " danger" : ""}" data-i="${k}"${it.disabled ? ' style="opacity:.45"' : ""}>${it.iconHtml ? `<span class="mic">${it.iconHtml}</span>` : ""}<span class="lbl">${labelHtml(it, k)}</span>${it.key ? `<span class="k">${esc(it.key)}</span>` : ""}${it.sub ? `<span class="sub">${I("chev", 12)}</span>` : ""}</div>`).join("");
     const r = el.querySelector(".row.sel"); if (r) r.scrollIntoView({ block: "nearest" });
     if (onSel && view[i] !== lastSel) { lastSel = view[i]; if (lastSel) onSel(lastSel); }  // (the row the mouse or ↑↓ is on; not the one it opened on)
   };

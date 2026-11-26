@@ -30,7 +30,7 @@ function finder({ title, tabs, start = 0, opener, lead }) {  // lead(q): items a
     const ft = box.querySelector(".ftabs");
     if (ft) ft.innerHTML = tabs.map((x, k) => `<button class="ptab${k === t ? " cur" : ""}" data-t="${k}">${esc(x.name)}</button>`).join("");
   };
-  const row = (it, k) => `<div class="frow${k === i ? " sel" : ""}" data-i="${k}">${it.mark ? stateMark(it.mark) : it.dot ? `<span class="dot ${it.dot}"></span>` : ""}${it.icon ? `<span style="color:var(--ink-3)">${I(it.icon, 13)}</span>` : it.iconHtml ? `<span class="gi">${it.iconHtml}</span>` : ""}<span class="fl">${esc(it.label)}</span>${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ""}<span class="fd">${boldTerms(it.detail || "", it.hl)}</span><span class="fk">${esc(it.key || "")}</span></div>`;
+  const row = (it, k) => `<div class="frow${k === i ? " sel" : ""}" data-i="${k}">${it.mark ? stateMark(it.mark) : it.dot ? `<span class="dot ${it.dot}"></span>` : ""}${it.ficon ? `<span class="gi">${fileIcon(it.ficon)}</span>` : it.icon ? `<span style="color:var(--ink-3)">${I(it.icon, 13)}</span>` : it.iconHtml ? `<span class="gi">${it.iconHtml}</span>` : ""}<span class="fl">${esc(it.label)}</span>${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ""}<span class="fd">${boldTerms(it.detail || "", it.hl)}</span><span class="fk">${esc(it.key || "")}</span></div>`;
   const draw = () => {
     const s = q.value.trim();
     const server = !!tabs[t].search;  // the server already matched these
@@ -145,7 +145,7 @@ function idScore(q, ids) {
 function sessionItem(s, { detail, side } = {}) {
   return {
     ids: [s.id, s.id.replace(/^.*~/, "")],
-    label: s.name, mark: s, tag: s.closed ? "closed" : groupPath(s.group),
+    label: s.name, mark: s, iconHtml: harnessIcon(s.harness, 13), tag: s.closed ? "closed" : groupPath(s.group),
     detail: detail ?? tilde(s.cwd), match: `${tilde(s.cwd)} ${groupPath(s.group)}`,
     key: s.closed ? ago(s.closed_at) : "",
     run: side ? async () => { if (s.closed) await api("POST", `/api/sessions/${s.id}/reopen`); openSide({ kind: "session", sid: s.id }); }
@@ -158,7 +158,7 @@ function sessionItem(s, { detail, side } = {}) {
 function groupItem(gid, { key = "" } = {}) {
   const n = tabIds(gid).length, last = String(S.lastTab[gid] || "");
   const at = last === "f:" + HOME ? "its home" : last.startsWith("f:") ? basename(last.slice(2)) : (S.sessions.get(last.replace(/^s:/, "")) || {}).name || "";
-  return { label: groupPath(gid), iconHtml: groupIconHtml(gid, 13), tag: "group", key, match: `${groupPath(gid)} group`,
+  return { label: groupPath(gid), iconHtml: groupMark(gid, 13), tag: "group", key, match: `${groupPath(gid)} group`, boost: 1000,  // (matched: above every session and file)
            detail: [at ? "→ " + at : "", `${n} session${n === 1 ? "" : "s"}`].filter(Boolean).join(" · "), run: () => switchGroup(gid) };
 }
 /* The Files tab: every file of every open session's folder (this machine's and the connected ones'; a folder inside
@@ -177,7 +177,7 @@ async function fileItems(side) {
     const here = root === cur || (cur && cur.startsWith(root + "/"));
     for (const f of t.files || []) {
       const st = here && t.status[f];
-      out.push({ label: basename(f), detail: name + (f.includes("/") ? "/" + dirname(f) : ""), match: name + "/" + f, icon: "file",
+      out.push({ label: basename(f), detail: name + (f.includes("/") ? "/" + dirname(f) : ""), match: name + "/" + f, ficon: f,
         tag: st ? (st === "?" ? "U" : st) : machine, boost: here ? 0.5 : 0,
         run: () => openFile(root + "/" + f, { side }), alt: () => openFile(root + "/" + f, { pinned: true, side }),
         menu: where => fileMenu(root + "/" + f, where) });
@@ -193,7 +193,7 @@ async function allFileItems(text, side = false) {
   const terms = text.toLowerCase().split(/\s+/).filter(Boolean);
   const items = d.files.map(f => {
     const local = f.path.replace(/^\/@[^/]+/, "");
-    return { label: basename(f.path), detail: tilde(dirname(local)), hl: terms, icon: "file", tag: f.machine || (f.where === "home" ? "home" : ""),
+    return { label: basename(f.path), detail: tilde(dirname(local)), hl: terms, ficon: f.path, tag: f.machine || (f.where === "home" ? "home" : ""),
              key: f.time ? ago(f.time) : "", run: () => openFile(f.path, { side }), alt: () => openFile(f.path, { pinned: true, side }),
              menu: where => fileMenu(f.path, where) };
   });
@@ -208,7 +208,7 @@ async function noteItems(side) {
   const t = S.trees.get(S.vault);
   return (t && t.files || []).filter(f => /\.md$/i.test(f)).map(f => {
     const path = S.vault + "/" + f;
-    return { label: noteTitle(path), detail: f.includes("/") ? dirname(f) : "", match: f, icon: "file", dedup: path,
+    return { label: noteTitle(path), detail: f.includes("/") ? dirname(f) : "", match: f, ficon: path, dedup: path,
              run: () => openFile(path, { side }), alt: () => openFile(path, { pinned: true, side }), menu: where => fileMenu(path, where) };
   });
 }
@@ -217,7 +217,7 @@ async function noteSearch(text, signal, side) {
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
   const terms = text.toLowerCase().split(/\s+/).filter(Boolean);
-  return (d.notes || []).map(n => ({ label: n.title, icon: "file", tag: "text", detail: n.snippet, hl: terms, key: ago(n.time), dedup: n.path,
+  return (d.notes || []).map(n => ({ label: n.title, ficon: n.path, tag: "text", detail: n.snippet, hl: terms, key: ago(n.time), dedup: n.path,
     run: () => side ? openFile(n.path, { side: true }) : openNoteAt(n.path, n.line_text), menu: where => fileMenu(n.path, where) }));
 }
 function openFinder(start, { side = false, opener } = {}) {
@@ -230,7 +230,7 @@ function openFinder(start, { side = false, opener } = {}) {
       const open = all.filter(s => !s.closed);
       const closed = all.filter(s => s.closed && s.named).sort((a, b) => (b.closed_at || 0) - (a.closed_at || 0));
       const groups = side ? [] : S.groups.filter(g => g.id !== S.group).map(g => groupItem(g.id));
-      return [...open.map(s => sessionItem(s, { side })), ...groups, ...closed.map(s => sessionItem(s, { side }))];
+      return [...groups, ...open.map(s => sessionItem(s, { side })), ...closed.map(s => sessionItem(s, { side }))];  // (groups first: switched often)
     } },
     { name: "Files", empty: "No session folders: open a session (All Files also looks in the homes).", items: () => fileItems(side) },
     { name: "All Files", empty: "Type to search file names in every session's folder and in the home folder, on this Mac and on the machines it reaches.",
@@ -323,19 +323,16 @@ function openRecent() {
   if (modal && modal.kind === "finder" && modal.opener === "M:KeyR") { closeModal(); return; }
   finder({ title: "Recent", opener: "M:KeyR", tabs: [{ name: "Recent", empty: "Nothing seen yet.", items: async () => {
     const all = new Map((await api("GET", "/api/sessions?closed=1")).sessions.map(s => [s.id, s]));
-    const here = tabKey(), seenG = new Set([S.group, FAV]), out = [];
+    const here = tabKey(), seenG = new Set([S.group, FAV]), groups = [], out = [];
     const gname = g => g && g !== FAV && S.groups.some(x => x.id === g) ? groupPath(g) : "";
-    // Each group (not the one in front) also as a row of its own, after its latest tab: back to that group as it was left
-    const withGroup = (it, g) => {
-      if (!it) return;
-      out.push(it);
-      if (g && !seenG.has(g) && gname(g)) { seenG.add(g); out.push(groupItem(g, { key: it.key })); }
-    };
+    // The groups visited (not the one in front), latest first, above the tabs: back to a group as it was left
     for (const r of S.recent.filter(r => r.id !== here)) {
-      const s = r.id.startsWith("s:") && all.get(r.id.slice(2));
-      withGroup(item(r), r.g || (s && s.group) || "");
+      const s = r.id.startsWith("s:") && all.get(r.id.slice(2)), it = item(r), g = r.g || (s && s.group) || "";
+      if (!it) continue;
+      out.push(it);
+      if (g && !seenG.has(g) && gname(g)) { seenG.add(g); groups.push(groupItem(g, { key: it.key })); }
     }
-    return out;
+    return [...groups, ...out];
     function item(r) {
       if (r.id.startsWith("f:")) {
         const p = r.id.slice(2);
@@ -343,7 +340,7 @@ function openRecent() {
         if (isView(p)) return { label: viewInfo(p).title, icon: viewInfo(p).icon, detail: isPluginTab(p) ? parsePluginTab(p).plugin : "Orbit", match: viewInfo(p).title,
                                 key: ago(r.t), tag: open ? "" : "closed", run: () => openFile(p, { pinned: true }) };
         const g = gname(r.g);
-        return { label: isNote(p) ? noteTitle(p) : basename(p), icon: "file", detail: tilde(dirname(p)), match: `${p} ${g}`, key: ago(r.t),
+        return { label: isNote(p) ? noteTitle(p) : basename(p), ficon: p, detail: tilde(dirname(p)), match: `${p} ${g}`, key: ago(r.t),
                  tag: [g, isNote(p) ? "note" : "", open ? "" : "closed"].filter(Boolean).join(" · "),
                  run: () => { if (r.g && r.g !== S.group && gname(r.g) && (S.ftabs[r.g] || []).some(t => t.path === p)) switchGroup(r.g, { quiet: true }); openFile(p, { pinned: open }); },
                  menu: where => fileMenu(p, where) };  // a closed file reopens as a preview
@@ -364,7 +361,7 @@ async function historyItems(text, side = false) {
     mark: S.sessions.get(r.sid), run: () => openHit(r, text, side),
     menu: S.sessions.has(r.sid) ? where => tabMenu(r.sid, where) : null }));
   const notesHits = d.notes.map(n => ({
-    time: n.time, label: n.title, icon: "file", tag: "note", detail: n.snippet, hl: terms, key: ago(n.time),
+    time: n.time, label: n.title, ficon: n.path, tag: "note", detail: n.snippet, hl: terms, key: ago(n.time),
     run: () => side ? openFile(n.path, { side: true }) : openNoteAt(n.path, n.line_text), menu: where => fileMenu(n.path, where) }));
   return [...cards, ...notesHits].sort((a, b) => (b.time || 0) - (a.time || 0));
 }
@@ -397,7 +394,7 @@ function browseFolder(dir) {
     for (const e of d.entries) {
       const p = d.path.replace(/\/$/, "") + "/" + e.name;
       items.push(e.dir ? { label: e.name + "/", icon: "folder", run: () => browseFolder(p) }
-                       : { label: e.name, icon: "file", run: () => openFile(p), alt: () => openFile(p, { pinned: true }) });
+                       : { label: e.name, ficon: p, run: () => openFile(p), alt: () => openFile(p, { pinned: true }) });
     }
     return items;
   } }] });

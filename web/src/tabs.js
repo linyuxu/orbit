@@ -281,7 +281,7 @@ $("#tabs").addEventListener("contextmenu", e => {
 });
 $("#grouppill").addEventListener("click", e => {
   if (!e.target.closest(".gcaret")) { openHome(); return; }  // the pill is the group's home tab; its ▾: another group
-  menu([{ label: "Favorites", key: "⌘1", run: () => switchGroup(FAV) },
+  menu([{ label: "Favorites", iconHtml: groupMark(FAV, 14), key: "⌘1", run: () => switchGroup(FAV) },
         ...groupMenuItems(gid => switchGroup(gid), { current: S.group }),
         { sep: true }, { label: "New group…", run: () => newGroup() }], { anchor: $("#grouppill") });
 });

@@ -83,6 +83,7 @@ body.rz-x, body.rz-x * { cursor:ew-resize !important; } body.rz-y, body.rz-y * {
 .gicon { display:inline-grid; place-items:center; flex:none; line-height:1; }
 img.gicon { border-radius:4px; object-fit:cover; }
 .gicon.dflt { color:var(--ink-3); }
+.gicon.gstar { color:var(--ink-3); }
 
 /* lists: files and views, schedules, lately */
 .hlist { display:flex; flex-direction:column; }

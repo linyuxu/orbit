@@ -72,7 +72,7 @@ function groupMenuItems(run, { current = "", disabled = () => false } = {}) {
   const tops = topGroups();
   return groupTree().map(({ g, depth }) => {
     const i = depth ? -1 : tops.indexOf(g);
-    return { label: "\u2003".repeat(depth) + g.name, key: g.id === current ? "current" : i >= 0 && i < 8 ? `⌘${i + 2}` : "",
+    return { label: g.name, iconHtml: (depth ? `<span style="display:inline-block;width:${depth * 16}px"></span>` : "") + groupMark(g.id, 14), key: g.id === current ? "current" : i >= 0 && i < 8 ? `⌘${i + 2}` : "",
              disabled: g.id === current || disabled(g), run: () => run(g.id) };
   });
 }

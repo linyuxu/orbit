@@ -314,6 +314,17 @@ class RemoteTest(test_skeleton.SkeletonTest):
             there = self.rdesk.side_state(rid)["items"][1]
             self.assertEqual((there["root"], there["sid"]), (self.rwork, rid))  # (as that machine writes them)
             self.assertEqual((st3["items"][1]["root"], st3["items"][1]["sid"]), (f"/@sbox{self.rwork}", s["id"]))
+            # this machine's own session and file beside that session: kept there marked, come back as this machine's
+            mine = self.new_session("mine-beside")
+            here_file = os.path.realpath(os.path.join(self.work, "here.txt"))
+            code, st4 = self.req("POST", f"/api/sessions/{s['id']}/side", {"op": "open", "spec": {"kind": "session", "sid": mine["id"]}})
+            self.assertEqual(code, 200, st4)
+            st4 = self.req("POST", f"/api/sessions/{s['id']}/side", {"op": "open", "spec": {"kind": "file", "path": here_file}})[1]
+            self.assertTrue(any(x.get("sid") == mine["id"] and x["kind"] == "session" for x in st4["items"]), st4)
+            self.assertTrue(any(x.get("path") == here_file for x in st4["items"]), st4)
+            kept = [x for x in self.rdesk.side_state(rid)["items"] if x["kind"] == "session" and x["sid"] != rid]
+            self.assertTrue(kept[0]["sid"].endswith("~" + mine["id"]) and not kept[0]["sid"].startswith("sbox"), kept)
+            self.assertEqual(self.req("GET", f"/api/sessions/{s['id']}/side")[1]["items"], st4["items"])
         finally:
             self.req("POST", "/api/remotes/sbox/delete", {})
 

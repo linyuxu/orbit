@@ -264,7 +264,7 @@ function renderLeft() {
     if (r.kind === "fleetgrp") return `<div class="prow grp fleetgrp${kc}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" title="Fleet helpers: quick asks (⌘K), meeting Prep, --fleet schedules. One opens beside, in the side pane"><span class="ix">${I("zap", 11)}</span><span class="nm">Fleet</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     if (r.kind === "group") {
       const gc = r.gid !== FAV && (groupOf(r.gid) || {}).color;
-      return `<div class="prow grp${r.depth ? " sub" : ""}${gc ? " hued" : ""}${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}${gc ? `;--gc:${gc}` : ""}" title="${esc(r.depth ? groupPath(r.gid) : r.key)}"><span class="ix${r.gid === FAV ? " star" : r.ix ? " num" : ""}">${r.gid === FAV ? I("star", 11) : r.depth ? I("folder", 12) : esc(r.ix)}</span>${groupIconHtml(r.gid, 14)}<span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
+      return `<div class="prow grp${r.depth ? " sub" : ""}${gc ? " hued" : ""}${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}${gc ? `;--gc:${gc}` : ""}" title="${esc(r.depth ? groupPath(r.gid) : r.key)}"><span class="ix${r.gid === FAV ? " star" : r.ix ? " num" : ""}">${r.gid === FAV ? I("star", 11) : r.depth ? "" : esc(r.ix)}</span>${r.gid === FAV ? "" : groupMark(r.gid, 14)}<span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     }
     if (r.kind === "ftab") {
       const isCur = S.file === r.path && r.gid === S.group, m = /^\/@([\w-]+)(\/.*)$/.exec(r.path);

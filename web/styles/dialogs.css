@@ -58,6 +58,7 @@
 #editing[hidden] { display:none; }
 #editing button { border:0; background:none; color:var(--link); padding:0; cursor:default; font-size:calc(11px * var(--ui-k)); }
 .menu .row .lbl { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.menu .row .mic { display:inline-flex; flex:none; margin-right:6px; }  /* an item's mark (a group's: groupMark) */
 .menu .row .k { margin-left:auto; padding-left:24px; font-size:calc(12px * var(--ui-k)); color:var(--ink-3); }
 .menu .row .sub { margin-left:auto; padding-left:24px; color:var(--ink-2); display:flex; }
 /* A row's letter key: underlined only in a menu opened from the keyboard (⌘E); the letters work in every menu. */

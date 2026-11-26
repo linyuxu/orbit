@@ -86,6 +86,14 @@ def our_paths(name: str, v, key: str = ""):
     return v
 
 
+def origin() -> str:
+    """This machine as it marks its own values kept on another machine (a side tab of a session there that shows one
+    of this machine's sessions or files): written back as this machine's when they come home."""
+    import re
+    import socket
+    return "o." + (re.sub(r"[^\w.-]", "", socket.gethostname().split(".")[0]) or "here")
+
+
 def join(name: str, sid: str) -> str:
     return f"{name}{SEP}{sid}"
 
@@ -228,10 +236,15 @@ class Federation:
         """Its side panel as written here: paths /@name/…, sessions name~id, its agents' pages through this server."""
         if not isinstance(st, dict) or not isinstance(st.get("items"), list):
             return st
-        items = []
+        items, mine = [], origin()
         for x in st["items"]:
             y = our_paths(name, dict(x))
-            if isinstance(y.get("sid"), str) and y["sid"] and SEP not in y["sid"]:
+            for k in ("path", "root"):  # this machine's own (marked by side_theirs): as they were
+                if isinstance(y.get(k), str) and y[k].startswith(f"{PFX}{mine}/"):
+                    y[k] = y[k][len(PFX + mine):]
+            if isinstance(y.get("sid"), str) and y["sid"].startswith(mine + SEP):
+                y["sid"] = y["sid"][len(mine) + 1:]
+            elif isinstance(y.get("sid"), str) and y["sid"] and SEP not in y["sid"]:
                 y["sid"] = join(name, y["sid"])
             if isinstance(y.get("url"), str) and y["url"].startswith("/show/"):
                 y["url"] = f"/api/remote-show/{name}/{y['url'][6:]}"
@@ -242,9 +255,16 @@ class Federation:
         """A side tab named here, as that machine writes it."""
         if not isinstance(spec, dict):
             return spec
-        y = local_paths(name, dict(spec))
+        y, mine = dict(spec), origin()
+        for k in ("path", "root"):  # that machine's: as it writes them; this machine's own: marked (a third's: as is)
+            if isinstance(y.get(k), str) and y[k].startswith("/"):
+                m = machine_of(y[k])
+                y[k] = m[1] if m and m[0] == name else y[k] if y[k].startswith(PFX) else f"{PFX}{mine}{y[k]}"
+        y = local_paths(name, y)
         if isinstance(y.get("sid"), str) and y["sid"].startswith(name + SEP):
             y["sid"] = y["sid"][len(name) + 1:]
+        elif isinstance(y.get("sid"), str) and y["sid"] and SEP not in y["sid"]:  # one of this machine's sessions
+            y["sid"] = join(mine, y["sid"])
         pre = f"/api/remote-show/{name}/"
         if isinstance(y.get("url"), str) and y["url"].startswith(pre):
             y["url"] = "/show/" + y["url"][len(pre):]

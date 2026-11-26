@@ -1060,6 +1060,9 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             # ⌘O: the groups among the sessions; chosen, that group in front
             page.evaluate("openFinder('Sessions')")
             page.wait_for_selector(".finder .frow")
+            self.assertIn("group", page.inner_text(".finder .flist .frow"), name)  # (groups first)
+            self.assertTrue(page.evaluate("!!document.querySelector('.finder .frow .gi .gicon')"), name)  # (a group's mark)
+            self.assertTrue(page.evaluate("!!document.querySelector('.finder .frow .si + .gi')"), name)  # (a session: status, then its agent)
             page.keyboard.type("Elsewhere grp")
             page.wait_for_timeout(200)
             first = page.inner_text(".finder .flist .frow")
@@ -1071,6 +1074,10 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.wait_for_selector(".finder .frow")
             rows = page.evaluate("[...document.querySelectorAll('.finder .frow')].map(r => r.innerText.replace(/\\s+/g, ' '))")
             self.assertTrue(any("Beside files" in r and "group" in r for r in rows), rows)
+            self.assertIn("group", rows[0])  # (groups first)
+            page.keyboard.press("Escape")
+            page.click("#grouppill .gcaret")  # the group menu: each group with its mark, as in the Groups panel
+            page.wait_for_selector(".menu .row .mic .gicon")
             page.keyboard.press("Escape")
             page.evaluate(f"closeGroupTab({{gid: {json.dumps(gid)}, path: {json.dumps(str(d / 'one.py'))}}})")
             page.wait_for_timeout(300)

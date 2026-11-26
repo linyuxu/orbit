@@ -40,6 +40,13 @@ function homeSoon() {
 const groupStyleOf = gid => gid === FAV ? { icon: "", color: "", cover: "" } : (groupOf(gid) || {});
 /* Its icon: an emoji (or a few letters), or a picture; "" when it has none. */
 function groupIconHtml(gid, size = 16) { return iconHtml(groupStyleOf(gid).icon, size); }
+/* A group's mark wherever a group is listed (the title bar's pill, the Groups panel, the group menu, ⌘O, ⌘R): its own
+   icon, else a folder in its colour (a subgroup: its parent's); Favorites: the star. One look tells a group anywhere. */
+function groupMark(gid, size = 14) {
+  if (gid === FAV) return `<span class="gicon gstar">${I("star", size - 1)}</span>`;
+  const g = groupStyleOf(gid), color = g.color || (g.parent && (groupOf(g.parent) || {}).color) || "";
+  return iconHtml(g.icon, size) || `<span class="gicon dflt"${color ? ` style="color:${esc(color)}"` : ""}>${I("folder", size - 1)}</span>`;
+}
 /* An icon (a group's, a widget's): an emoji or a few letters, or img:<path> of a picture. */
 function iconHtml(icon, size = 16) {
   if (!icon) return "";

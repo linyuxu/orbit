@@ -13,8 +13,13 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   the side tab or an edit in it keeps it; a double-click on the row opens the file in the main pane, the keyboard in its
   editor. Side tabs wear their main tab's marks (a session's status and agent, a file's type) and have a menu (open as
   a main tab, keep open, copy path or link, reload, close the others).
-- ⌘O Sessions lists the groups too, and ⌘R names each tab's group and lists the group after its latest tab: chosen, the
-  group in front on the tab it was left on.
+- ⌘O Sessions and ⌘R list the groups first (and a matching group above every session and file): chosen, the group in
+  front on the tab it was left on. ⌘R names each tab's group.
+- One mark per thing wherever it is listed: a group's (its icon, else a folder in its colour; a subgroup takes its
+  parent's) in the title bar, the Groups panel, the group menu, ⌘O and ⌘R; a session's status and agent, a file's type
+  in tabs, side tabs, the panels and the finders.
+- A session of this machine opened beside another machine's session shows (its id and files were taken for that
+  machine's on the way back: "no such session").
 - The conversation and the left panel no longer jump while scrolled: earlier cards come in once the scrolling stops;
   the Files tree keeps its place through redraws and answers a click that a redraw used to swallow.
 - A click in the left panel opens the row and the keyboard stays in the panel (↑↓, ⏎, ⌥W… go on there; Esc goes to
