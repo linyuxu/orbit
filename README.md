@@ -292,6 +292,10 @@ each with what is next.
   Notifications (iPhone: Orbit added to the Home Screen from its HTTPS address, iOS 18.4+ for a tap to open the
   session); the server sends them itself (Web Push, declarative on an HTTPS server; `<state>/push/`: its VAPID keys,
   the devices, what was sent and the push service's answer).
+- **Another machine's session**: a schedule here can wake a session on a remote (`NAME~ID`): the request goes
+  through that server, once per due time. With `done_notify` {title, body, fail_if} this server tells the phone
+  when the run ends (`…未完成` with why when it failed, stopped, or the answer's first line has `fail_if`); a run
+  still going when the server stops is followed again after it starts. `expires` turns a schedule off after a date.
 - **Watch**: `orbit-agent schedule watch --every 30s --check CMD TEXT` runs CMD on its interval with no agent and no
   cost; each line it prints is an event (JSON with an `id`, or text). Only new events wake the agent, with TEXT and the
   events; the first run only learns what is there (`--include-existing` to act on it). `schedule check ID` tries it.

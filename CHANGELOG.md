@@ -25,6 +25,10 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   (orbit/services/webpush.py: P-256, ECDSA with RFC 6979, AES-128-GCM), checked against the RFCs' vectors.
   `GET/POST /api/push`, `/api/push/subscribe`, `/unsubscribe`, `/send`, behind the pairing token like every `/api`.
   Ordinary schedules wake their agent as before.
+- Schedules wake another machine's session (`NAME~ID`, through its server, a client id per due time so a re-fired
+  run sends once); `done_notify` {title, body, fail_if} pushes to the phone when that run ends, or says it did not
+  (failed, stopped, the answer's first line has fail_if, gone, 6 h with no end); a waiting run is followed again
+  after a restart. `expires`: no run after a date. A remote session gets no journal (the path is this machine's).
 - The user's own words to another session: `orbit-agent relay SESSION WORDS` (when the user asks an agent to pass
   something on, e.g. by voice). The receiver gets the words alone (no "(from session …)"); its card says they are the
   user's, via that session (`origin.kind: "user-relay"`, with what proves it; `orbit-agent read` shows it). Orbit
