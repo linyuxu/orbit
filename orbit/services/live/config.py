@@ -44,6 +44,7 @@ DEFAULTS: dict[str, Any] = {
     "live_language": "auto",
     "live_idle_s": 30,       # standby after this many seconds without speech either way; 0: never (always active)
     "live_wake": 0.5,        # how clear speech must be to wake it from standby (vad_threshold)
+    "live_turn_pause": 1.5,  # seconds without words that end what the user says: a request waits for it (GPT Live hands over sooner)
     "live_ack": True,        # say a short "on it" when a task starts (off: silent until there is something to say)
     "live_chime": True,      # the page's sounds: a rising ding when the call is connected (speak now), a falling one at its end
     "live_chime_sound": "single",  # which (the page makes them: web/src/voice-core.js CHIMES)
@@ -68,6 +69,8 @@ def check(k: str, v: Any) -> None:
         raise ValueError(f"live_language is one of {', '.join(LANGUAGES)}")
     if k == "live_idle_s" and not (v == 0 or 5 <= v <= 60):
         raise ValueError("live_idle_s is 5–60 seconds, or 0 (never standby)")
+    if k == "live_turn_pause" and not 0.5 <= v <= 5:
+        raise ValueError("live_turn_pause is 0.5–5 seconds")
     if k == "live_wake" and v not in WAKE:
         raise ValueError(f"live_wake is one of {', '.join(map(str, WAKE))}")
     if k == "live_chime_sound" and v not in CHIME_SOUNDS:

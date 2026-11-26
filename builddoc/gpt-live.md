@@ -49,6 +49,7 @@ What the user may change (desk settings `live_*`, `orbit/services/live/config.py
 | `live_model` | `gpt-live-1.1`, `gpt-live-1` | `model` |
 | `live_idle_s` | 5–60, or 0 (never) (30) | `idle_timeout_s` (left out for 0: active until hang-up) |
 | `live_wake` | 0.3, 0.5, 0.7 (0.5) | `wake_policy.vad_threshold` |
+| `live_turn_pause` | 0.5–5 s (1.5; the menu: 0.8 … 4) | Orbit's own (GPT Live has no such setting): how long a pause ends what the user says, so a request waits for it (§ Transcripts) |
 | `live_context` | on/off (on) | `input`: the session's facts, plus its last three requests when on |
 | `live_language` | auto, zh, en, ja, ko, es, fr, de, pt | a line in the instructions (the API has no language field) |
 | `live_detail` | brief, detailed | the result line in the instructions |
@@ -310,9 +311,9 @@ Built: `orbit/services/live/` (`session.py` the call, `ws.py` the websocket clie
   previous delegation's offset, joined exactly as received. GPT Live delegates on its own, often while the user is
   still talking (258 real delegations: the pause before one had a median of 200 ms; in 67 the user went on within
   2 s, and the rest of the sentence became a second request), so a request waits for the user to finish: until no
-  fragment of theirs came for 1.2 s (at most 8 s); their run of fragments after the offset with no gap over 1.2 s is
-  part of it, and a delegation made meanwhile joins it (one card; its result is said for the latest, the earlier is
-  superseded, as a correction's is). Words after a pause over 1.2 s belong to the next one. Logged `turn_waited`.
+  fragment of theirs came for the turn pause (`live_turn_pause`, 1.5 s; at most 8 s); their run of fragments after
+  the offset with no gap over that pause is part of it, and a delegation made meanwhile joins it (one card; its result is said for the latest, the earlier is
+  superseded, as a correction's is). Words after a longer pause belong to the next one. Logged `turn_waited`.
   A request's silent status is never sent after its result (it said "don't state the answer until the result
   arrives"); a result's detail and commentary go together. The voice's last reply (its last run of fragments, pauses under 1.5 s)
   goes along, marked as context, only when the words refer to something (that, it, this, the second one …).

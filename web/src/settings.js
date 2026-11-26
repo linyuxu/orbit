@@ -382,6 +382,9 @@ async function settingsVoice(pane, keys) {
     value: String(st().live_idle_s ?? 30), onChange: v => put("live_idle_s", +v),
     options: [10, 20, 30, 45, 60].map(n => ({ value: String(n), label: `${n} seconds${n === 30 ? " (default)" : ""}` }))
       .concat([{ value: "0", label: "Never (always active)" }]) }));
+  keys.push(dropdown(setRow(pane, "End of what you say", "A pause this long ends your request: it goes to the agent then, with everything you said until then. The voice model may hand a task over at a shorter pause; Orbit waits this long. Longer: room to think mid-sentence; shorter: the agent starts sooner."), {
+    value: String(st().live_turn_pause ?? 1.5), onChange: v => put("live_turn_pause", +v),
+    options: [0.8, 1, 1.2, 1.5, 2, 2.5, 3, 4].map(n => ({ value: String(n), label: `${n} s${n === 1.5 ? " (default)" : ""}` })) }));
   keys.push(segmented(setRow(pane, "Wake on", "How clear speech must be to wake it from standby. “Clear speech” ignores more background noise."), {
     value: String(st().live_wake ?? 0.5), onChange: v => put("live_wake", +v),
     options: [{ value: "0.3", label: "Quiet speech" }, { value: "0.5", label: "Normal" }, { value: "0.7", label: "Clear speech" }] }));

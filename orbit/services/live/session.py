@@ -36,10 +36,11 @@ GRACE_S = 0.4  # after a delegation, late transcript fragments still join its re
 # GPT Live delegates on its own (no turn-detection setting) and often while the user is still talking: in 258 real
 # delegations the pause before it had a median of 200 ms, and in 67 the user went on within 2 s (the rest of the
 # sentence became a second request). So a request waits for the user to finish: until no fragment of theirs came for
-# USER_HOLD_S (they arrive every ~200 ms while someone talks), at most TURN_WAIT_S; their words up to then (a run of
-# fragments with no gap over TURN_GAP_MS after the delegation's offset) are its words, and a delegation GPT Live makes
-# meanwhile joins it (the request is answered once, for the latest).
-TURN_GAP_MS, TURN_WAIT_S = 1200, 8.0
+# the turn pause (Settings → Voice, live_turn_pause: 1.5 s; fragments arrive every ~200 ms while someone talks), at
+# most TURN_WAIT_S; their words up to then (a run of fragments with no gap over that pause after the delegation's
+# offset) are its words, and a delegation GPT Live makes meanwhile joins it (the request is answered once, for the
+# latest).
+TURN_WAIT_S = 8.0
 SPEAKING_HOLD_S = 1.2  # "speaking" this long after the last fragment of the voice's speech
 # The session's state, told silently (§6): changes within COALESCE_S go out as one snapshot; one that only moves the
 # agent's step on, at most every STEP_EVERY_S (each append is a chance for the voice to speak: real calls answered a
@@ -552,7 +553,7 @@ def assemble(frags: list[dict], offset_ms: int, since_ms: int, used: set) -> tup
     return "".join(f["text"] for f in take).strip(), [f["key"] for f in take]
 
 
-def turn_end(frags: list[dict], offset_ms: int, used: set, gap_ms: int = TURN_GAP_MS) -> int:
+def turn_end(frags: list[dict], offset_ms: int, used: set, gap_ms: int = 1500) -> int:
     """Where the user's turn ends after a delegation at offset_ms: the end of their run of fragments (not taken yet)
     that goes on from before it with no gap over gap_ms; offset_ms when they stopped before it."""
     end = offset_ms
@@ -1128,7 +1129,8 @@ class Call:
         with self.lock:
             if self.ended:
                 return
-            wait = self._talking() and time.time() - self.dels[did]["at"] < TURN_WAIT_S
+            wait = (time.time() - self.last_user < self.cfg["live_turn_pause"]
+                    and time.time() - self.dels[did]["at"] < TURN_WAIT_S)
         if wait:
             self._later(0.2, self._await_turn, did)
         else:
@@ -1142,7 +1144,8 @@ class Call:
             d = self.dels[did]
             d["waiting"] = False
             joined = list(d.get("joined") or [])
-            upto = turn_end(self.frags, max([d["offset"]] + [self.dels[j]["offset"] for j in joined]), self.used)
+            upto = turn_end(self.frags, max([d["offset"]] + [self.dels[j]["offset"] for j in joined]), self.used,
+                            int(self.cfg["live_turn_pause"] * 1000))
             words, keys_ = assemble(self.frags, upto, self.cut_ms, self.used)
             self.used.update(keys_)
             self.cut_ms = max(self.cut_ms, upto)

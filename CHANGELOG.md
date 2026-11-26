@@ -9,8 +9,8 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
 - A voice request waits for you to finish: GPT Live hands a task over at a 200 ms pause (a quarter of real requests
-  were cut mid-sentence, the rest becoming a second request); Orbit now sends it once no words came for 1.2 s (at most
-  8 s), with everything said until then, and a hand-over made meanwhile joins it. A request's status is never told
+  were cut mid-sentence, the rest becoming a second request); Orbit now sends it once no words came for 1.5 s (Settings → Voice
+  → End of what you say: 0.8–4 s; at most 8 s), with everything said until then, and a hand-over made meanwhile joins it. A request's status is never told
   after its result.
 - No ★ Favorites view (another group's session beside the one in front is a side tab): ⌘1…⌘9 are the groups in
   left-panel order, ⌘W closes a session everywhere, ⌘⌃P and the session's star are gone, the phone lists the groups

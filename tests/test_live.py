@@ -139,7 +139,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         context, model, the user's instructions, the spoken acknowledgement)."""
         for k, v in (("live_voice", "nobody"), ("live_idle_s", 3), ("live_idle_s", 61), ("live_wake", 0.4),
                      ("live_language", "xx"), ("live_detail", "long"), ("live_prompt", "x" * 4001), ("live_ack", "yes"),
-                     ("live_chime", 1), ("live_chime_sound", "loud")):
+                     ("live_chime", 1), ("live_chime_sound", "loud"), ("live_turn_pause", 0.2), ("live_turn_pause", 6.0)):
             self.assertEqual(self.req("POST", "/api/settings", {k: v})[0], 400, (k, v))
         code, o = self.req("GET", "/api/live/options")
         self.assertEqual(code, 200)
@@ -149,7 +149,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.wait_card(s["id"], 1, ("completed",))
         set_ = {"live_voice": "cedar", "live_language": "zh", "live_detail": "detailed", "live_idle_s": 0, "live_wake": 1,
                 "live_context": False, "live_model": "gpt-live-1", "live_prompt": "Call me Sam.", "live_ack": True,
-                "live_chime": False}
+                "live_chime": False, "live_turn_pause": 2.5}
         self.assertEqual(self.req("POST", "/api/settings", {**set_, "live_wake": 0.7})[0], 200)
         try:
             r = self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})[1]
@@ -168,6 +168,7 @@ class LiveTest(test_skeleton.SkeletonTest):
             self.wait_card(s["id"], 2, ("completed",))
             self.fake.wait_got("session.commentary.append")
             self.assertEqual([e for e in self.fake.got("session.thinking.append") if e.get("content") == ""], [])  # it may say "on it"
+            self.assertEqual(self.desk.live.call.cfg["live_turn_pause"], 2.5)  # (the request waited for a 2.5 s pause)
         finally:
             self.req("POST", "/api/settings", {**{k: live.config.DEFAULTS[k] for k in set_}, "live_ack": False})
         self.assertEqual(self.req("POST", "/api/settings", {"live_wake": 1})[0], 400)  # (an int for a float: 1.0, not a choice)
@@ -335,7 +336,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.fake.emit(t_in("nightly build", 1400, 2000, "e2"), t_in("check the ", 1000, 1400, "e1"),
                        t_in(" now", 2100, 2400, "e3"), delegation("del_1", 2200, "ed1"))
         time.sleep(0.1)
-        self.fake.emit(t_in("please ", 600, 1000, "e0"), t_in("Also, ", 3700, 4000, "e4"),  # (after a 1.3 s pause: the next one's)
+        self.fake.emit(t_in("please ", 600, 1000, "e0"), t_in("Also, ", 4000, 4300, "e4"),  # (after a 1.6 s pause: the next one's)
                        delegation("del_1", 2200, "ed1b"))  # (the same delegation again: nothing new)
         quiet = self.fake.wait_got("session.thinking.append")
         self.assertEqual(quiet[0]["content"], "")
@@ -386,10 +387,10 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual(self.commentary("del_a"), [])  # (answered once, for the latest)
         log = Path(self.state, "live", r["call"] + ".jsonl").read_text()
         self.assertIn('"turn_waited"', log)
-        # a pause longer than TURN_GAP_MS ends the turn: the words after it are the next request's
+        # a pause longer than the turn pause (live_turn_pause, 1.5 s) ends the turn: the words after it are the next request's
         self.fake.emit(t_in("check the build", 6000, 6600, "u4"), delegation("del_c", 6700, "dc"))
-        time.sleep(1.6)
-        self.fake.emit(t_in("and the tests", 8200, 8800, "u5"), delegation("del_d", 8900, "dd"))
+        time.sleep(2.0)
+        self.fake.emit(t_in("and the tests", 8400, 8900, "u5"), delegation("del_d", 9000, "dd"))
         c3 = self.wait_card(s["id"], 2, ("completed",))
         self.assertEqual(c3["text"], "check the build")
         self.assertEqual(self.wait_card(s["id"], 3, ("completed",))["text"], "and the tests")
@@ -831,8 +832,8 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertTrue(any(x["stage"] == "held" for x in log))
         self.assertGreater(next(x for x in log if x["stage"] == "result")["held_ms"], 900)
         # talking on and on: the result goes out after HOLD_MAX_S anyway
-        old = live.HOLD_MAX_S
-        live.HOLD_MAX_S = 1.0
+        old, old_turn = live.HOLD_MAX_S, live.TURN_WAIT_S
+        live.HOLD_MAX_S = live.TURN_WAIT_S = 1.0  # (the request too waits at most this long for the talk to end)
         talking.set()
         threading.Thread(target=talk, daemon=True).start()
         try:
@@ -843,7 +844,7 @@ class LiveTest(test_skeleton.SkeletonTest):
             self.assertTrue(talking.is_set())
         finally:
             talking.clear()
-            live.HOLD_MAX_S = old
+            live.HOLD_MAX_S, live.TURN_WAIT_S = old, old_turn
 
     def test_a_status_after_the_result_is_not_sent(self):
         """A request done before its status goes (an idle agent, quick): the status is stale ("don't state the answer
