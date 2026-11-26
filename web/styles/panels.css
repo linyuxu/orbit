@@ -254,3 +254,23 @@ body.dragsort, body.dragsort * { cursor:grabbing !important; -webkit-user-select
 #sideweb .sw-host { font-weight:calc(600 + var(--wd)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 #sideweb .sw-note { color:var(--ink-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
 #sideweb .btn { height:20px; }
+/* the Files tab's roots (left.js filesTabRows): a section head (the group in front, Other groups (folds), Places),
+   each root (a session folder, a home, an added place) a bold row with where it is, its machine, its branch */
+.prow.fsec { height:calc(var(--row) - 6px); margin-top:8px; padding-left:8px; gap:6px; font-size:calc(11px * var(--ui-k)); font-weight:calc(600 + var(--wd));
+  letter-spacing:.04em; text-transform:uppercase; color:var(--ink-3); }
+.prow.fsec:first-child { margin-top:0; }
+.prow.fsec .nm { flex:0 1 auto; }
+.prow.fsec .cnt { font-weight:calc(400 + var(--wd)); }
+.prow.fsec .fold { width:16px; height:16px; display:grid; place-items:center; }
+.prow.fsec .fold svg { transition:transform .12s; transform:rotate(90deg); }
+.prow.fsec.shut .fold svg { transform:none; }
+.prow.fsec.fold { cursor:pointer; }
+.prow.froot .nm { font-weight:calc(600 + var(--wd)); flex:0 0 auto; max-width:65%; overflow:hidden; text-overflow:ellipsis; margin-right:6px; }
+.prow.froot .fd { flex:1 1 0; max-width:none; min-width:0; direction:rtl; text-align:left; }  /* (cut at the start: the folder's own end shows) */
+.prow.froot .fd.br { flex:none; margin-left:6px; font-family:var(--mono); }
+.prow.froot .mtag { margin-left:6px; flex:none; }
+.prow.froot.curroot .nm::after { content:"•"; margin-left:5px; color:var(--focus, var(--ink-3)); font-weight:400; }
+.prow.froot.off { opacity:.5; }
+.prow.fnote { color:var(--ink-3); font-size:calc(12px * var(--ui-k)); cursor:default; }
+.prow.fgoto { color:var(--ink-3); margin-top:2px; }
+.prow.fgoto:hover { color:var(--ink); }

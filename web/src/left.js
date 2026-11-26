@@ -13,11 +13,11 @@ async function refreshTree(root, force = false) {
     d.dirty = new Set();
     for (const p of Object.keys(d.status)) { const parts = p.split("/"); for (let i = 1; i < parts.length; i++) d.dirty.add(parts.slice(0, i).join("/")); }
     S.trees.set(root, d);
-    if (S.left.shown && S.left.tab !== "sessions" && panelRoot() === root) renderLeft();
   } catch (e) {
     S.trees.set(root, { error: e.message, at: Date.now(), files: [], index: buildIndex([]), status: {}, dirty: new Set() });
-    renderLeft();
   }
+  // (drawn outside the try: a drawing error is no failure of this folder's listing)
+  if (S.left.shown && S.left.tab !== "sessions" && (panelRoot() === root || S.left.tab === "files")) renderLeft();
 }
 function buildIndex(files) {
   const kids = new Map([["", { dirs: new Set(), files: [] }]]);
@@ -36,13 +36,16 @@ function buildIndex(files) {
 }
 const expandedSet = root => new Set(S.expanded[root] || []);
 function setExpanded(root, set) { S.expanded[root] = [...set]; saveUi(); }
-function fileRows(root, notesOnly = false) {
+/* A tree's rows. keyed (the Files tab, several roots): each row says its root, its key has it, and it sits a level
+   under the root's own row. */
+function fileRows(root, notesOnly = false, keyed = false) {
   const t = S.trees.get(root);
   if (!t) return [];
   const list = notesOnly ? t.notes || [] : t.files, index = notesOnly ? t.noteIndex : t.index;
+  const K = keyed ? root + "|" : "", d0 = keyed ? 1 : 0, at = keyed ? { root } : {};
   if (S.filter) {
     return list.map(f => ({ f, sc: fuzzy(S.filter, notesOnly ? f.replace(/\.md$/i, "") : f) })).filter(x => x.sc >= 0).sort((a, b) => b.sc - a.sc).slice(0, 300)
-      .map(({ f }) => ({ kind: "file", rel: f, depth: 0, flat: true, k: "f:" + f }));
+      .map(({ f, sc }) => ({ kind: "file", rel: f, depth: 0, flat: true, k: "f:" + K + f, sc, ...at }));
   }
   const rows = [];
   const open = expandedSet(root);
@@ -50,23 +53,28 @@ function fileRows(root, notesOnly = false) {
     const node = index.get(dir);
     if (!node) return;
     for (const d of [...node.dirs].sort((a, b) => a.localeCompare(b))) {
-      rows.push({ kind: "dir", rel: d, depth, open: open.has(d), k: "d:" + d });
+      rows.push({ kind: "dir", rel: d, depth, open: open.has(d), k: "d:" + K + d, ...at });
       if (open.has(d)) walk(d, depth + 1);
     }
-    for (const f of [...node.files].sort((a, b) => a.localeCompare(b))) rows.push({ kind: "file", rel: f, depth, k: "f:" + f });
+    for (const f of [...node.files].sort((a, b) => a.localeCompare(b))) rows.push({ kind: "file", rel: f, depth, k: "f:" + K + f, ...at });
   };
-  walk("", 0);
+  walk("", d0);
   return rows;
 }
+const rowRoot = r => (r && r.root) || panelRoot();
+const rowPath = r => r.path || rowRoot(r) + "/" + r.rel;
 function revealFile(path) {
   if (isView(path)) return;
-  const root = panelRoot();
+  const files = S.left.tab === "files";
+  const R = files ? filesRoots() : null;  // (the session folder nearest to it; else the context's own root)
+  const root = files ? [...R.all.map(f => f.path).sort((a, b) => b.length - a.length), ctxRoot()].find(r => r && path.startsWith(r + "/")) : panelRoot();
   if (!root || !path.startsWith(root + "/")) return;
   const rel = relTo(root, path), parts = rel.split("/");
   const open = expandedSet(root);
   for (let i = 1; i < parts.length; i++) open.add(parts.slice(0, i).join("/"));
   setExpanded(root, open);
-  S.pcursor = "f:" + rel;
+  if (files) { setRootOpen(root, true); refreshTree(root); }
+  S.pcursor = "f:" + (files ? root + "|" : "") + rel;
 }
 
 /* ===================================================================== left panel: Sessions · Files · Notes · Misc */
@@ -311,7 +319,153 @@ $("#pmach").addEventListener("click", e => {
 });
 /* Where the caret is in the filter (it is drawn, not an <input>); cleared filter → at the start. */
 function filterPos() { return S.filter ? Math.min(S.filterPos ?? S.filter.length, S.filter.length) : 0; }
+/* ---------- the Files tab: several roots
+   The folders of the sessions of the group in front (the current one first, then by their last answer), the other
+   groups' folders under a fold, then the places: this Mac's home, each connected machine's, and folders added with
+   "Go to a folder…". A session folder lists its whole tree at once (git: tracked + untracked, its status); a place
+   lists a folder at a time (a home is too big for one listing). Which roots are open is kept; a root seen for the
+   first time is open if it is the current one. Follow (the panel's eye) opens the current root at the open file. */
+const FILES = { open: new Set(LS.get("filesOpen", [])), seen: new Set(LS.get("filesSeen", [])), other: LS.get("filesOther", false),
+                places: LS.get("filesPlaces", []), dirs: new Map() };
+function setRootOpen(root, on) {
+  if (on === FILES.open.has(root)) return;
+  on ? FILES.open.add(root) : FILES.open.delete(root);
+  LS.set("filesOpen", [...FILES.open]);
+}
+const rootOpen = root => FILES.open.has(root);
+function filesRoots() {
+  const ctx = ctxRoot(), by = new Map();
+  for (const s of S.sessions.values()) {
+    if (s.fleet || !s.cwd || !machineOk(s)) continue;
+    const t = (s.last && s.last.time) || s.created || 0, f = by.get(s.cwd) || { path: s.cwd, t: 0, remote: s.remote || "", here: false, n: 0 };
+    f.t = Math.max(f.t, t); f.n++; if (S.group === FAV ? s.favorite : inView(s, S.group)) f.here = true; by.set(s.cwd, f);
+  }
+  // The current root: the session folder that holds the context (a file of another session's folder: that folder),
+  // else the context itself (a file outside every session's folder: its repo or folder).
+  const holder = ctx && [...by.keys()].filter(p => ctx === p || ctx.startsWith(p + "/")).sort((a, b) => b.length - a.length)[0];  // (the nearest)
+  const cur = holder || ctx;
+  if (cur && !by.has(cur)) by.set(cur, { path: cur, t: Infinity, remote: (/^\/@([^/]+)/.exec(cur) || [])[1] || "", here: true, n: 0 });
+  if (holder) by.get(holder).here = true;
+  const order = (a, b) => (b.path === cur) - (a.path === cur) || b.t - a.t;
+  const all = [...by.values()];
+  const here = all.filter(f => f.here).sort(order), other = all.filter(f => !f.here).sort(order);
+  const places = [{ path: "~", name: "Home", sub: "This Mac", place: true },
+    ...(S.machines || []).map(m => ({ path: `/@${m.name}/~`, name: "Home", sub: m.name, remote: m.name, off: !m.ok, place: true })),
+    ...FILES.places.map(p => ({ path: p, name: basename(p.replace(/^\/@[^/]+/, "")) || p, sub: tilde(p), added: true, place: true }))];
+  if (cur && !FILES.seen.has(cur)) { FILES.seen.add(cur); LS.set("filesSeen", [...FILES.seen].slice(-300)); setRootOpen(cur, true); }
+  return { cur, here, other, places, all };
+}
+/* A place's folder, a level at a time (/api/dirlist; another machine's home through its server). */
+async function loadDir(path, force = false) {
+  const c = FILES.dirs.get(path);
+  if (c && (c.loading || (!force && Date.now() - c.at < 5000))) return;
+  FILES.dirs.set(path, { ...(c || {}), loading: true, at: Date.now() });
+  try {
+    const home = /^\/@([a-z0-9][a-z0-9_-]*)\/~$/i.exec(path);
+    let d;
+    if (home) { d = await api("GET", `/api/remote/${home[1]}/api/dirlist?path=~`); d = { ...d, path: `/@${home[1]}${d.path}` }; }
+    else d = await api("GET", "/api/dirlist?path=" + encodeURIComponent(path));
+    FILES.dirs.set(path, { at: Date.now(), real: d.path, entries: d.entries || [] });
+  } catch (e) { FILES.dirs.set(path, { at: Date.now(), error: e.message, entries: [] }); }
+  if (S.left.shown && S.left.tab === "files") renderLeft();
+}
+function filesTabRows() {
+  const R = filesRoots(), rows = [];
+  if (S.filter) {  // the open session folders' files, best first
+    const hits = [];
+    for (const f of [...R.here, ...R.other]) if (rootOpen(f.path) && S.trees.get(f.path)) hits.push(...fileRows(f.path, false, true));
+    return hits.sort((a, b) => b.sc - a.sc).slice(0, 300);
+  }
+  const rootRow = (f, depth = 0) => {
+    const open = rootOpen(f.path) && !f.off, t = S.trees.get(f.path);
+    rows.push({ kind: "root", root: f.path, k: "r:" + f.path, open, depth, cur: f.path === R.cur, remote: f.remote, off: f.off, place: f.place, added: f.added,
+                name: f.name || basename(f.path.replace(/^\/@[^/]+/, "")) || f.path, sub: f.sub || tilde(dirname(f.path.replace(/^\/@[^/]+/, ""))),
+                branch: !f.place && t && t.git ? t.branch || "git" : "" });
+    if (!open) return;
+    if (f.place) return dirRows(f.path, depth + 1);
+    if (!t) { refreshTree(f.path); rows.push({ kind: "note", k: "n:" + f.path, depth: depth + 1, text: "Loading…" }); return; }
+    if (t.error) { rows.push({ kind: "note", k: "n:" + f.path, depth: depth + 1, text: t.error }); return; }
+    for (const r of fileRows(f.path, false, true)) rows.push({ ...r, depth: r.depth + depth });
+    if (t.truncated) rows.push({ kind: "note", k: "n:" + f.path, depth: depth + 1, text: "The first 20 000 files" });
+  };
+  const dirRows = (path, depth) => {
+    const c = FILES.dirs.get(path);
+    if (!c || !c.entries) { loadDir(path); rows.push({ kind: "note", k: "n:" + path, depth, text: "Loading…" }); return; }  // (the first listing on its way)
+    if (Date.now() - c.at > 5000) loadDir(path);
+    if (c.error) { rows.push({ kind: "note", k: "n:" + path, depth, text: c.error }); return; }
+    const base = c.real || path;
+    for (const e of c.entries) {
+      if (e.name.startsWith(".")) continue;  // (a home's dotfiles: Go to a folder reaches them)
+      const p = base.replace(/\/$/, "") + "/" + e.name;
+      if (e.dir) { const open = rootOpen(p); rows.push({ kind: "ldir", path: p, k: "l:" + p, depth, open, name: e.name }); if (open) dirRows(p, depth + 1); }
+      else rows.push({ kind: "lfile", path: p, k: "lf:" + p, depth, name: e.name });
+    }
+    if (!c.entries.length) rows.push({ kind: "note", k: "n:" + path, depth, text: "Empty folder" });
+  };
+  const gname = S.group === FAV ? "Favorites" : (groupOf(S.group) || {}).name || "This group";
+  rows.push({ kind: "fsec", k: "h:here", name: gname, n: R.here.length });
+  R.here.forEach(f => rootRow(f));
+  if (R.other.length) {
+    rows.push({ kind: "fsec", k: "h:other", name: "Other groups", n: R.other.length, fold: true, open: FILES.other });
+    if (FILES.other) R.other.forEach(f => rootRow(f));
+  }
+  rows.push({ kind: "fsec", k: "h:places", name: "Places" });
+  R.places.forEach(f => rootRow(f));
+  rows.push({ kind: "goto", k: "goto", depth: 0 });
+  return rows;
+}
+function renderFilesRoots() {
+  PROWS = filesTabRows();
+  if (!PROWS.some(r => r.k === S.pcursor)) {
+    const R = filesRoots(), cur = R.cur && S.file && S.file.startsWith(R.cur + "/") ? "f:" + R.cur + "|" + relTo(R.cur, S.file) : null;
+    S.pcursor = (PROWS.find(r => r.k === cur) || PROWS.find(r => r.kind === "root" && r.cur) || PROWS.find(r => r.kind !== "fsec") || {}).k || null;
+  }
+  if (S.filter && !PROWS.length) { hideTip(); plist.innerHTML = `<div class="pempty">Nothing matches “${esc(S.filter)}” in the open folders.</div>`; return; }
+  const curFile = S.file || "";
+  plist.innerHTML = PROWS.map(r => {
+    const kc = r.k === S.pcursor ? " kc" : "", guides = '<span class="ig"></span>'.repeat(r.depth || 0);
+    if (r.kind === "fsec") return `<div class="prow fsec${kc}${r.fold ? " fold" : ""}${r.fold && !r.open ? " shut" : ""}" data-k="${esc(r.k)}"><span class="nm">${esc(r.name)}</span>` +
+      `${r.fold ? `<span class="fold">${I("chev", 10)}</span>` : ""}${r.n != null ? `<span class="cnt">${r.n}</span>` : ""}</div>`;
+    if (r.kind === "goto") return `<div class="prow ft fgoto${kc}" data-k="goto"><span class="tw"></span><span class="ic">${I("plus", 12)}</span><span class="nm">Go to a folder…</span></div>`;
+    if (r.kind === "note") return `<div class="prow ft fnote" data-k="${esc(r.k)}">${guides}<span class="tw"></span><span class="nm">${esc(r.text)}</span></div>`;
+    if (r.kind === "root") {
+      const t = r.place ? null : S.trees.get(r.root);
+      return `<div class="prow ft froot${kc}${r.cur ? " curroot" : ""}${r.off ? " off" : ""}" data-k="${esc(r.k)}" data-tip="${esc(tilde(r.root))}">${guides}` +
+        `<span class="tw${r.open ? " open" : ""}">${I("chev", 10)}</span><span class="ic">${r.place && !r.added ? I(r.remote ? "server" : "home", 13) : folderIcon(r.open)}</span>` +
+        `<span class="nm">${esc(r.name)}</span><span class="fd">\u200e${esc(r.sub)}\u200e</span>` +  // (left-to-right marks: cut at the start, its order kept)
+        (r.remote ? `<span class="mtag${machineUp(r.remote) ? "" : " off"}">${esc(r.remote)}</span>` : "") +
+        (r.branch ? `<span class="fd br">${esc(r.branch)}</span>` : "") + (t && Object.keys(t.status || {}).length ? '<span class="dd2"></span>' : "") + `</div>`;
+    }
+    if (r.kind === "ldir") return `<div class="prow ft dir${kc}" data-k="${esc(r.k)}" data-tip="${esc(tilde(r.path))}">${guides}<span class="tw${r.open ? " open" : ""}">${I("chev", 10)}</span><span class="ic">${folderIcon(r.open)}</span><span class="nm">${esc(r.name)}</span></div>`;
+    if (r.kind === "lfile") return `<div class="prow ft${kc}${r.path === curFile ? " cur" : ""}" data-k="${esc(r.k)}" data-tip="${esc(tilde(r.path))}">${guides}<span class="tw"></span><span class="ic">${fileIcon(r.name)}</span><span class="nm">${esc(r.name)}</span></div>`;
+    const t = S.trees.get(r.root);
+    if (r.kind === "dir") return `<div class="prow ft dir${kc}" data-k="${esc(r.k)}" data-tip="${esc(tilde(r.root + "/" + r.rel))}">${guides}<span class="tw${r.open ? " open" : ""}">${I("chev", 10)}</span><span class="ic">${folderIcon(r.open)}</span><span class="nm">${esc(basename(r.rel))}</span>${t && t.dirty.has(r.rel) ? '<span class="dd2"></span>' : ""}</div>`;
+    const st = t && t.status[r.rel], letter = st === "?" ? "U" : st, full = r.root + "/" + r.rel;
+    const name = r.flat ? r.rel : basename(r.rel);
+    return `<div class="prow ft${kc}${full === curFile ? " cur" : ""}${st ? ` st-${esc(letter)}` : ""}" data-k="${esc(r.k)}" data-tip="${esc(tilde(full))}">${guides}<span class="tw"></span><span class="ic">${fileIcon(r.rel)}</span>` +
+      `<span class="nm">${esc(name)}</span>${r.flat ? `<span class="fd">${esc(basename(r.root.replace(/^\/@[^/]+/, "")) || r.root)}</span>` : ""}${st ? `<span class="stl st-${esc(letter)}">${esc(letter)}</span>` : ""}</div>`;
+  }).join("");
+  revealCursor();
+}
+function toggleRoot(r, open) {
+  const want = open ?? !r.open;
+  if (r.kind === "fsec") { if (!r.fold) return; FILES.other = want; LS.set("filesOther", want); renderLeft(); return; }
+  const key = r.kind === "root" ? r.root : r.path;
+  setRootOpen(key, want);
+  if (want && r.kind === "root" && !r.place) refreshTree(r.root);
+  renderLeft();
+}
+async function gotoFolder() {
+  const v = await dialog({ title: "Go to a folder", ok: "Add to Places", fields: [{ key: "p", label: "Folder (~/…, /…, or /@machine/…)", value: "~/" }],
+    validate: v => v.p.trim() ? null : "Which folder?" });
+  if (!v) return;
+  const p = v.p.trim().replace(/(.)\/+$/, "$1");
+  try { await api("GET", "/api/dirlist?path=" + encodeURIComponent(p)); } catch (e) { toast(e.message); return; }
+  if (!FILES.places.includes(p)) { FILES.places.push(p); LS.set("filesPlaces", FILES.places); }
+  setRootOpen(p, true); S.pcursor = "r:" + p; renderLeft();
+}
 function renderFilesPanel() {
+  if (S.left.tab === "files") return renderFilesRoots();
   const notesTab = S.left.tab === "notes";
   const root = panelRoot();
   if (!root) { PROWS = []; plist.innerHTML = notesTab ? `<div class="pempty">Loading the vault…</div>` : `<div class="pempty"><h3>No folder</h3>Open a session: its folder shows here.</div>`; return; }
@@ -347,7 +501,8 @@ function revealCursor() { const el = plist.querySelector(".prow.kc"); if (el) el
 function followPanel() {
   if (EMBED || !S.follow || panelFocused()) return;
   if (S.left.tab === "sessions") S.pcursor = `s:${S.group}:${S.current}`;
-  else if (treeTab() && S.file) revealFile(S.file);
+  else if (treeTab() && S.file && !isView(S.file)) revealFile(S.file);
+  else if (S.left.tab === "files" && filesRoots().cur) { const c = filesRoots().cur; setRootOpen(c, true); S.pcursor = "r:" + c; }  // (a session in front: its folder)
   renderLeft();
 }
 const prow = () => PROWS.find(r => r.k === S.pcursor);
@@ -380,10 +535,13 @@ function openRow(r, { focus = true, pinned = false } = {}) {
   }
   if (S.left.tab !== "sessions") {
     if (r.kind === "week") { weekNote(); return; }
-    if (r.kind === "dir") { toggleDir(r.rel); return; }
+    if (r.kind === "root" || r.kind === "fsec" || r.kind === "ldir") { toggleRoot(r); return; }
+    if (r.kind === "goto") { gotoFolder(); return; }
+    if (r.kind === "note") return;
+    if (r.kind === "dir") { toggleDir(r.rel, undefined, rowRoot(r)); return; }
     S.filter = "";
     fromList = true;
-    try { openFile(panelRoot() + "/" + r.rel, { pinned, focus }); } finally { fromList = false; }
+    try { openFile(rowPath(r), { pinned, focus }); } finally { fromList = false; }
     return;
   }
   if (r.kind === "group") { openHome(r.gid, { focus: false }); S.pcursor = r.k; renderLeft(); return; }  // (a group itself: its home)
@@ -434,8 +592,8 @@ function renameRow(r) {
   if (r.kind === "ftab" && !/^(orbit|plugin):/.test(r.path)) return renamePath(r.path);
   toast(r.kind === "ftab" ? "A view has no name to change" : "This one cannot be renamed");
 }
-function toggleDir(rel, open) {
-  const root = panelRoot(), set = expandedSet(root);
+function toggleDir(rel, open, root = panelRoot()) {
+  const set = expandedSet(root);
   const want = open ?? !set.has(rel);
   if (want) set.add(rel); else set.delete(rel);
   setExpanded(root, set);
@@ -450,9 +608,12 @@ function rowMenu(r, where) {
     return;
   }
   if (S.left.tab !== "sessions") {
-    if (r.kind === "week") return;
-    const root = panelRoot();
-    return r.kind === "dir" ? folderMenu(root + "/" + r.rel, where) : fileMenu(root + "/" + r.rel, where);
+    if (r.kind === "week" || r.kind === "note") return;
+    if (r.kind === "goto") return gotoFolder();
+    if (r.kind === "fsec") return r.fold ? toggleRoot(r) : undefined;
+    if (r.kind === "root") return folderMenu(r.root, where, r);
+    if (r.kind === "ldir") return folderMenu(r.path, where);
+    return r.kind === "dir" ? folderMenu(rowPath(r), where, null, rowRoot(r)) : fileMenu(rowPath(r), where);
   }
   if (r.kind === "session") return tabMenu(r.sid, where);
   if (r.kind === "ftab") return menu([
@@ -464,16 +625,19 @@ function rowMenu(r, where) {
   if (r.gid === FAV) return menu([{ label: "Show Favorites", key: "⌘1", run: () => switchGroup(FAV) }], where);
   groupMenu(r.gid, where);
 }
-function folderMenu(dir, where) {
-  const isRoot = dir === panelRoot();
+function folderMenu(dir, where, rootRow = null, treeRoot = null) {
+  const isRoot = dir === panelRoot() || !!rootRow;
   const inVault = S.vault && (dir === S.vault || dir.startsWith(S.vault + "/"));
+  const lazy = (rootRow && rootRow.place) || (!rootRow && !treeRoot && S.left.tab === "files");  // (a place's folder: listed a level at a time)
+  const real = rootRow && rootRow.place ? ((FILES.dirs.get(dir) || {}).real || dir) : dir;
   menu([
     inVault ? { label: "New note…", run: () => newNote(relTo(S.vault, dir) === dir ? "" : relTo(S.vault, dir)) }
-            : { label: "New file…", run: () => newFileIn(dir) },
-    { label: "Refresh", run: () => refreshTree(panelRoot(), true) },
+            : { label: "New file…", run: () => newFileIn(real) },
+    { label: "Refresh", run: () => lazy ? loadDir(dir, true) : refreshTree(treeRoot || (rootRow && rootRow.root) || panelRoot(), true) },
+    rootRow && rootRow.added ? { label: "Remove from Places", run: () => { FILES.places = FILES.places.filter(p => p !== dir); LS.set("filesPlaces", FILES.places); renderLeft(); } } : null,
     { sep: true },
-    { label: "Copy path", run: () => copyText(dir) },
-    { label: "Open in Finder", run: () => openExternal(dir, "finder") },
+    { label: "Copy path", run: () => copyText(real) },
+    { label: "Open in Finder", run: () => openExternal(real, "finder") },
     isRoot ? null : { label: "Rename…", run: () => renamePath(dir) },
     isRoot ? null : { label: "Delete…", danger: true, run: () => trashPath(dir) },
   ].filter(Boolean), where);
@@ -586,13 +750,26 @@ function panelKey(e, combo) {
   if (combo === "Enter") { openRow(r); return true; }
   if (combo === "M:Enter") { openRow(r, { pinned: true }); return true; }
   if (combo === "M:KeyE") { rowMenu(r, { anchor: plist.querySelector(".prow.kc") }); return true; }
-  if ((tab === "files" || tab === "notes") && r && r.rel) {
+  if (tab === "files" && r && (r.kind === "root" || r.kind === "ldir" || r.kind === "fsec" || r.kind === "lfile" || r.kind === "note")) {  // (fold, unfold, up a level)
+    const upTo = () => {  // the row of the folder it is in: the one above at a smaller depth
+      const i = PROWS.indexOf(r); for (let j = i - 1; j >= 0; j--) if ((PROWS[j].depth || 0) < (r.depth || 0) && PROWS[j].kind !== "fsec") return PROWS[j];
+    };
     if (combo === "ArrowLeft") {
-      if (r.kind === "dir" && r.open) toggleDir(r.rel, false);
-      else if (r.rel.includes("/")) { S.pcursor = "d:" + r.rel.replace(/\/[^/]*$/, ""); renderLeft(); }
+      if ((r.kind === "root" || r.kind === "ldir" || (r.kind === "fsec" && r.fold)) && r.open) toggleRoot(r, false);
+      else { const up = upTo(); if (up) { S.pcursor = up.k; renderLeft(); } }
       return true;
     }
-    if (combo === "ArrowRight") { if (r.kind === "dir" && !r.open) toggleDir(r.rel, true); else movePanel(1); return true; }
+    if (combo === "ArrowRight") { if ((r.kind === "root" || r.kind === "ldir" || (r.kind === "fsec" && r.fold)) && !r.open && !r.off) toggleRoot(r, true); else movePanel(1); return true; }
+  }
+  if ((tab === "files" || tab === "notes") && r && r.rel) {
+    const K = r.root ? "r:" + r.root : null, P = r.root ? r.root + "|" : "";  // (the Files tab: keys say the root)
+    if (combo === "ArrowLeft") {
+      if (r.kind === "dir" && r.open) toggleDir(r.rel, false, rowRoot(r));
+      else if (r.rel.includes("/") && !r.flat) { S.pcursor = "d:" + P + r.rel.replace(/\/[^/]*$/, ""); renderLeft(); }
+      else if (K) { S.pcursor = K; renderLeft(); }
+      return true;
+    }
+    if (combo === "ArrowRight") { if (r.kind === "dir" && !r.open) toggleDir(r.rel, true, rowRoot(r)); else movePanel(1); return true; }
   }
   if (tab === "sessions" && r && !S.filter && (combo === "ArrowLeft" || combo === "ArrowRight")) {  // fold, unfold, as in a tree
     const grp = r.kind === "group" || r.kind === "fleetgrp";
@@ -656,7 +833,7 @@ plist.addEventListener("mousedown", e => {
   S.pcursor = el.dataset.k;
   const r = prow();
   if (!r) return;
-  if (e.target.closest(".fold") && r.fold) { plist.focus(); setFolded(r.gid, !r.shut); return; }
+  if (e.target.closest(".fold") && r.fold && r.gid) { plist.focus(); setFolded(r.gid, !r.shut); return; }
   const rs = e.target.closest("[data-resume]"); if (rs) { sessionAction(rs.dataset.resume, "resume"); return; }  // the chevron folds; the rest of the row opens the group
   if (r.kind === "pgrp") { plist.focus(); renderLeft(); return; }
   byMouse = true;
@@ -667,7 +844,7 @@ plist.addEventListener("dblclick", e => {
   const el = e.target.closest(".prow[data-k]");
   if (!el || S.left.tab === "sessions") return;
   const r = PROWS.find(x => x.k === el.dataset.k);
-  if (r && r.kind === "file") pinFile(panelRoot() + "/" + r.rel);
+  if (r && (r.kind === "file" || r.kind === "lfile")) pinFile(rowPath(r));
 });
 plist.addEventListener("contextmenu", e => {
   e.preventDefault();
@@ -676,12 +853,18 @@ plist.addEventListener("contextmenu", e => {
   if (el) { S.pcursor = el.dataset.k; renderLeft(); rowMenu(prow(), at); }
   else if (S.left.tab.startsWith("p:")) return;
   else if (S.left.tab === "misc") menu([{ label: "New schedule…", run: () => scheduleDialog() }, { label: "Settings…", key: "⌘,", run: settingsDialog }], at);
+  else if (S.left.tab === "files") menu([{ label: "Go to a folder…", run: gotoFolder }, ctxRoot() ? { label: "Refresh", run: () => refreshTree(ctxRoot(), true) } : null].filter(Boolean), at);
   else if (S.left.tab !== "sessions" && panelRoot()) folderMenu(panelRoot(), at);  // empty space = the folder's menu
   else if (S.groups.length) groupMenu(S.group === FAV ? S.groups[0].id : S.group, at);
 });
 plist.addEventListener("focus", () => renderLeft());
 plist.addEventListener("blur", () => setTimeout(() => { if (!panelFocused()) renderLeft(); }, 0));
-setInterval(() => { if (!document.hidden && S.left.shown && treeTab()) refreshTree(panelRoot()); }, 5000);
+setInterval(() => {
+  if (document.hidden || !S.left.shown || !treeTab()) return;
+  if (S.left.tab !== "files") return refreshTree(panelRoot());
+  const R = filesRoots();  // (the open session folders, the current one first: a few at most)
+  [R.cur, ...R.all.map(f => f.path).filter(p => p !== R.cur && rootOpen(p))].filter(Boolean).slice(0, 6).forEach(p => refreshTree(p));
+}, 5000);
 
 /* Resize: drag a split, or ⌃⌥H / ⌃⌥L. Drag math divides by the page zoom (rectScale). */
 $("#lsplit").addEventListener("mousedown", e => {

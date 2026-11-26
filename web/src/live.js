@@ -161,7 +161,7 @@ function removeFromView(sid, old) {
 setInterval(() => {
   for (const c of S.cards.get(S.current) || []) {
     if (!ACTIVE.has(c.state)) continue;
-    const el = document.querySelector(`#card-${c.id} [data-foot]`);
+    const card = document.getElementById("card-" + c.id), el = card && card.querySelector("[data-foot]");  // (an id may hold a dot: 356.501)
     if (el) el.textContent = footHtml(c);
   }
 }, 1000);

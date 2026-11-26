@@ -68,7 +68,9 @@
       return;
     }
     const msg = String(e.message || (e.error && e.error.message) || "an error").replace(/^Uncaught\s+/, "");
-    const counts = e.error instanceof SyntaxError || /^SyntaxError/.test(msg) || !started;
+    // (a DOMException named SyntaxError, a bad selector at run time, is no script that failed to load)
+    const dom = typeof DOMException !== "undefined" && e.error instanceof DOMException;
+    const counts = (!dom && (e.error instanceof SyntaxError || (!e.error && /^SyntaxError/.test(msg)))) || !started;
     if (!e.filename) {  // (see unloaded above: named a moment later, when the scripts fetched meanwhile have loaded)
       if (counts && !orphan) orphan = { msg, tm: setTimeout(() => { orphan = null; say(unloaded(), msg); }, 100) };
       return;

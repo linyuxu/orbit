@@ -93,6 +93,7 @@ const ICONS = {
   type: '<path d="M2 13l3.3-9h.4L9 13M3.2 10h4.6"/><path d="M10.5 8.6c.5-.5 1.1-.8 1.9-.8 1.1 0 1.8.6 1.8 1.7V13M14.2 10.6h-1.9c-1.1 0-1.8.5-1.8 1.3s.6 1.2 1.4 1.2c.9 0 1.6-.4 2.3-1.1"/>',
   clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.6"/>',
   plug: '<path d="M6 2v3.5M10 2v3.5M4 5.5h8v2.5a4 4 0 0 1-8 0zM8 12v2.5"/>',
+  home: '<path d="M2 7.2 8 2.2l6 5"/><path d="M3.6 6v7.3h3.2V9.8h2.4v3.5h3.2V6"/>',
   server: '<rect x="2" y="2.5" width="12" height="4.5" rx="1.2"/><rect x="2" y="9" width="12" height="4.5" rx="1.2"/><path d="M4.6 4.75h.01M4.6 11.25h.01"/>',
   info: '<circle cx="8" cy="8" r="6"/><path d="M8 7.3V11M8 5h.01"/>',
   quote: '<path d="M3 9.5h3v3.5H2.5V9c0-2.5 1-4 3-5M9.5 9.5h3v3.5H9V9c0-2.5 1-4 3-5"/>',

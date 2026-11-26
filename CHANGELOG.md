@@ -8,6 +8,20 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- ⌘O has an All Files tab (after Files): file names everywhere, not only this workspace: every open session's
+  folder and the home, on this machine (Spotlight on a Mac, else a bounded walk) and on each connected machine (their
+  paths `/@NAME/…`); every word must be in the path, the file's own name first. A hit opens here, or beside from
+  ⌘⌃O (`GET /api/findfiles`, `orbit/workspace/findfiles.py`). A finder tab that fails says so in its list, not
+  "Nothing found".
+- Fixed: a card whose id holds a dot (356.501) broke the working cards' clock (an unescaped selector), and the
+  script guard took that run-time error for live.js failing to load: it now counts only script errors (not a
+  DOMException) once the page is up.
+- The Files panel has several roots: the folders of the group's sessions (the current one first, open), the other
+  groups' folders under a fold, then Places: this Mac's home, each connected machine's, and folders added with "Go to
+  a folder…" (removed from their menu). A session folder lists its tree at once (its git status, its branch on its
+  row); a place lists a folder at a time. Which roots are open is kept; typing filters the open session folders'
+  files together (each hit says its root). Follow opens the current root at the file in front. ← → fold, unfold, go up
+  a level, as in any tree.
 - A website in the side panel: `orbit-agent show URL` puts it beside the conversation (`--browser`: the browser, as
   before), and a web address typed in ⌘O / ⌘⌃O offers "Open beside" (or in the browser). Its bar: the host, Reload,
   Copy link, Open in browser; a site that refuses to be framed (most sign-in pages, GitHub, Google) shows blank, which
