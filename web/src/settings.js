@@ -85,7 +85,7 @@ function segmented(wrap, { options, value, onChange }) {
   };
   el.addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (b) set(b.dataset.v, true); });
   el.addEventListener("keydown", e => {
-    const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    const d = { ArrowRight: 1, ArrowLeft: -1 }[arrowOf(e)];  // (⌃F ⌃B too)
     if (!d) return;
     e.preventDefault(); e.stopPropagation();
     const i = options.findIndex(o => o.value === value);

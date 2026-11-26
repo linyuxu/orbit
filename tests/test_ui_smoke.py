@@ -664,6 +664,70 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             self.assertFalse(page.query_selector(row))
             self.assertEqual(page.evaluate("S.pcursor"), "g:" + gid)
 
+    def test_emacs_motion_keys_are_arrows_everywhere(self):
+        """⌃F ⌃B ⌃P ⌃N are → ← ↑ ↓ in the lists and trees (the left panel, Schedules); where text is edited they stay
+        the editor's (the composer with text, the code editor); the empty composer's ⌃P is its ↑ (earlier requests)."""
+        gid = self.group("Emacs keys")
+        sid = self.session_in(gid, "emacs-a")
+        sid2 = self.session_in(gid, "emacs-b")
+        self.req("POST", f"/api/sessions/{sid}/send", {"text": "an earlier request"})
+        self.wait_card(sid, 1, ("completed",))
+        f = Path(self.work) / "emacs.txt"
+        f.write_text("one\ntwo\nthree\n")
+        row = f"#plist .prow[data-k='s:{gid}:{sid}']"
+        x = self.req("POST", "/api/schedules", {"when": "every 2h", "text": "a", "name": "E1", "sid": sid})[1]
+        y = self.req("POST", "/api/schedules", {"when": "every 3h", "text": "b", "name": "E2", "sid": sid})[1]
+        p_ = self.req("POST", "/api/schedules", {"when": "daily 9am", "text": "c", "name": "E3", "sid": sid})[1]
+        self.req("POST", f"/api/schedules/{p_['id']}/update", {"enabled": False})
+        try:
+            for name, page in self.each():
+                page.add_init_script("try { localStorage.removeItem('orbit.schedFold'); } catch (e) {}")
+                self.open(page)
+                # the left panel: ⌃B folds the group, ⌃F unfolds it, ⌃N ⌃P move
+                page.evaluate("S.left.shown = true; applyLeft(); setPanelTab('sessions'); focusPanel()")
+                page.evaluate(f"S.pcursor = 'g:' + {json.dumps(gid)}; renderLeft()")
+                self.assertTrue(page.is_visible(row), name)
+                page.keyboard.press("Control+b"); page.wait_for_timeout(150)
+                self.assertFalse(page.query_selector(row), name)
+                page.keyboard.press("Control+f"); page.wait_for_timeout(150)
+                self.assertTrue(page.is_visible(row), name)
+                page.keyboard.press("Control+n"); page.wait_for_timeout(100)
+                first = page.evaluate("S.pcursor")
+                self.assertTrue(first.startswith(f"s:{gid}:"), first)
+                page.keyboard.press("Control+n"); page.keyboard.press("Control+p"); page.wait_for_timeout(100)
+                self.assertEqual(page.evaluate("S.pcursor"), first)
+                self.assertEqual(page.evaluate("S.filter"), "")  # (nothing typed into the filter)
+                # Schedules: ⌃N to the next card, ⌃F opens a fold
+                page.evaluate("openFile('orbit:schedules', { pinned: true }); 0")
+                page.wait_for_selector("#xbody .scard")
+                page.evaluate(f"XV.cur = {json.dumps(x['id'])}; renderX(); document.querySelector('#xbody').focus(); 0")
+                ks = page.evaluate("XV.rows.map(r => r.k)")
+                page.keyboard.press("Control+n")
+                self.assertEqual(page.evaluate("XV.cur"), ks[ks.index(x["id"]) + 1])
+                page.evaluate("XV.cur = 'fold:off'; renderX(); document.querySelector('#xbody').focus(); 0")
+                page.keyboard.press("Control+f")
+                page.wait_for_selector(f"#xbody .scard[data-xk='{p_['id']}']", timeout=5000)
+                # the composer: empty, ⌃P is ↑ (its earlier requests); with text, ⌃B is the text area's own
+                page.evaluate(f"switchTo({json.dumps(sid)}); 0")
+                page.wait_for_timeout(400)
+                page.evaluate("input.value = ''; input.focus(); 0")
+                page.keyboard.press("Control+p")
+                page.wait_for_function("() => modal && modal.kind === 'bell'", timeout=5000)
+                page.keyboard.press("Escape")
+                page.evaluate("input.value = 'abc'; input.focus(); inputEd.view.dispatch({ selection: { anchor: 3 } }); 0")
+                page.keyboard.press("Control+b")  # (the composer is an editor: its own ⌃B moves the caret)
+                self.assertEqual(page.evaluate("inputEd.view.state.selection.main.head"), 2, name)
+                self.assertFalse(page.evaluate("!!modal"))
+                # the code editor: ⌃N is its own line down
+                page.evaluate(f"openFile({json.dumps(str(f))}, {{pinned: true}}); 0")
+                page.wait_for_function(f"() => EDITORS.get({json.dumps(str(f))}) && EDITORS.get({json.dumps(str(f))}).ed", timeout=8000)
+                page.evaluate(f"(() => {{ const v = EDITORS.get({json.dumps(str(f))}).ed.view; v.focus(); v.dispatch({{selection: {{anchor: 0}}}}); }})()")
+                page.keyboard.press("Control+n")
+                self.assertEqual(page.evaluate(f"(() => {{ const v = EDITORS.get({json.dumps(str(f))}).ed.view; return v.state.doc.lineAt(v.state.selection.main.head).number; }})()"), 2, name)
+        finally:
+            for it in list(self.desk.scheduler.items):
+                self.desk.scheduler.delete(it["id"])
+
     def test_phone_usage_has_openai(self):
         self.new_session("usage")
         code, e = self.req("POST", "/api/settings", {"live_budget": 10})

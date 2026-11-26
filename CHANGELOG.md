@@ -8,6 +8,10 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Emacs motion keys everywhere: ⌃F ⌃B ⌃P ⌃N are → ← ↑ ↓ (⇧ too) in every list, tree, menu, picker and view (the
+  left panel folds with ⌃B / ⌃F, Schedules, ⌘O, menus and their submenus, dialogs' lists). Where text is edited they
+  stay the editor's own: a one-line field's ⌃F ⌃B move its caret, the code and Markdown editors and the composer bind
+  all four, a text area and the terminal keep theirs; the empty composer's ⌃P is its ↑ (earlier requests).
 - A session's tab shows its agent's mark after the status (Claude, Codex, agy, OpenCode, a plugin harness's icon), as
   the Groups panel does; the tooltip names the harness.
 - Fork into another harness (a session's menu → Fork to, `orbit-agent fork [SESSION] --harness opencode [--model M]`),

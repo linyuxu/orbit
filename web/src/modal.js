@@ -318,7 +318,7 @@ function completer(wrap, inp, fetcher, recent) {
     b.innerHTML = I("caret", 12);
     b.addEventListener("mousedown", e => { e.preventDefault(); inp.focus(); if (lp) lp.close(); else show(true); });
     wrap.appendChild(b);
-    inp.addEventListener("keydown", e => { if (e.key === "ArrowDown" && !lp && !e.isComposing) { e.preventDefault(); show(true); } });
+    inp.addEventListener("keydown", e => { if (arrowOf(e) === "ArrowDown" && !e.shiftKey && !lp && !e.isComposing) { e.preventDefault(); show(true); } });
   }
   return {
     get: () => inp.value, focusEl: inp, isOpen: () => !!lp, closeList: () => lp && lp.close(),

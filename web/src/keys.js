@@ -16,6 +16,28 @@ function comboOf(e) {
   const k = named.includes(e.key) ? (e.key === " " ? "Space" : e.key) : (e.code || codeFromKey(e.key));
   return m ? m + ":" + k : k;
 }
+/* Emacs motion keys everywhere (the user's habit): ⌃F ⌃B ⌃P ⌃N are → ← ↑ ↓ (⇧ too) for every list, menu, tree, picker
+   and view. Where text is edited they stay the editor's own: a one-line field's ⌃F ⌃B move its caret (lineedit.js,
+   before this); the code / Markdown editors bind all four themselves (web/cm/entry.js); a text area and the terminal
+   keep macOS's (and the shell's) meaning. The composer is a text area, but empty (↑: earlier requests) or with its @
+   list open its ↑ ↓ are a list's. Listeners of their own that read e.key use arrowOf(e). */
+const EMACS_ARROWS = { "C:KeyF": "ArrowRight", "C:KeyB": "ArrowLeft", "C:KeyP": "ArrowUp", "C:KeyN": "ArrowDown",
+  "CS:KeyF": "S:ArrowRight", "CS:KeyB": "S:ArrowLeft", "CS:KeyP": "S:ArrowUp", "CS:KeyN": "S:ArrowDown" };
+function emacsArrow(combo) {
+  const to = EMACS_ARROWS[combo];
+  if (!to) return combo;
+  const a = document.activeElement;
+  if (typeof input !== "undefined" && a === input) return !input.value || (typeof MENTION !== "undefined" && MENTION.open) ? to : combo;
+  if (a && (a.isContentEditable || a.tagName === "TEXTAREA" || (a.closest && a.closest(".cm-editor, .xterm, .terminal")))) return combo;
+  if (typeof shellFocused === "function" && shellFocused()) return combo;
+  return to;
+}
+/* The arrow a key means for a listener of its own (e.key): an arrow, or ⌃F ⌃B ⌃P ⌃N as one; else "". */
+function arrowOf(e) {
+  if (/^Arrow/.test(e.key)) return e.key;
+  if (!e.ctrlKey || e.metaKey || e.altKey || !e.key || e.key.length !== 1) return "";
+  return { f: "ArrowRight", b: "ArrowLeft", p: "ArrowUp", n: "ArrowDown" }[e.key.toLowerCase()] || "";
+}
 const MODAL_PASS = new Set(["M:KeyC", "M:KeyV", "M:KeyX", "M:KeyA", "M:KeyZ", "MS:KeyZ"]);
 function handleEsc() {
   if ($("#lightbox").classList.contains("show")) { closeLightbox(); return; }       // 1
@@ -33,7 +55,7 @@ let ctrlX = 0;  // ⌃X prefix (Emacs): the next key within 1.5 s completes it
 function onKey(e) {
   if (e.isComposing || e.keyCode === 229) return;  // IME: ⏎ / Esc only confirm a candidate
   if (["Meta", "Control", "Alt", "Shift"].includes(e.key)) return;
-  const combo = comboOf(e);
+  let combo = comboOf(e);
   const consume = () => { e.preventDefault(); e.stopPropagation(); };
   // The image viewer first: every key stops there while it shows (a view with keys of its own never sees Esc).
   if (typeof lbOn === "function" && lbOn()) { consume(); e.stopImmediatePropagation(); lightboxKey(combo); return; }
@@ -58,6 +80,7 @@ function onKey(e) {
   }
   // Emacs line keys in a text field (⌃A ⌃E ⌃F ⌃B ⌥F ⌥B ⌃D ⌥D ⌃H ⌥⌫ ⌃W ⌃K ⌃U ⌃Y), as in the editors.
   if (LINE_KEYS.has(combo) && isLineInput(document.activeElement) && lineEditInput(document.activeElement, combo)) { consume(); return; }
+  combo = emacsArrow(combo);  // ⌃F ⌃B ⌃P ⌃N: → ← ↑ ↓ from here on (not where text is edited)
   // A review comment box owns ⌘⏎ (add) and Esc (cancel).
   if (EMBED_REVIEW && !modal && e.target.closest && e.target.closest(".cbox") && (combo === "M:Enter" || combo === "Escape")) return;
   if (MENTION.open && document.activeElement === input && !modal && mentionKey(combo)) { consume(); return; }
