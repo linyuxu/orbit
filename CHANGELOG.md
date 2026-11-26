@@ -8,6 +8,8 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- ⌃D in the Files and Notes panels sends the row (or the Files selection) to the Trash, asked first, as it closes or
+  deletes a row in the Groups panel.
 - A file pasted or dropped into a Markdown document (an image or any attachment) goes into the attachments/ folder
   beside the document, here and in the vault alike (the vault's Obsidian attachmentFolderPath when it sets one), not
   the vault's top attachments/ nor assets/. A wiki link to an image opens it: it no longer makes a "x.png.md" note.

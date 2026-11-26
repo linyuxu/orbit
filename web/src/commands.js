@@ -252,7 +252,7 @@ const SHORTCUTS = [
     ["⌘R", "Recent: sessions (with their last answer) and files, open or closed (in the Groups panel: rename the row: a group, a session, a file tab's file)", "M:KeyR", openRecent],
     ["⌘W", "Close what has the keyboard: the side tab, else the file tab, else the session tab", "M:KeyW", closeWhatHasKeyboard],
     ["⌘⇧T", "Reopen the last closed tab, in its group (again: the one before)", "MS:KeyT", reopenLast],
-    ["⌃D", "In the Groups panel: close the row's session or tab, or delete its group (asked first)"],
+    ["⌃D", "In the Groups panel: close the row's session or tab, or delete its group; in Files and Notes: the row (or the selection) to the Trash (asked first)"],
     ["Space · ← →", "In the Groups panel: fold / unfold the group (on a row in it: its group folds)"],
     ["Tab · ⇧Tab", "In the Groups panel on a group: into the group above it (a subgroup) · out a level. Groups nest 3 deep"],
     ["⌘1 · ⌘2…⌘9", "Favorites · the groups in left-panel order",

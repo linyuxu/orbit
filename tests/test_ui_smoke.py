@@ -877,6 +877,24 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
                 page.click(".dialog [data-ok]")
                 self.wait_gone(d / "f.txt"); self.wait_gone(d / "g.txt")
                 self.assertTrue((d / "e.txt").exists())
+                # ⌃D: the row to the Trash (asked first), in the filter too when the caret is at its end
+                page.wait_for_function(f"() => !PROWS.some(r => r.k === 'f:{root}|g.txt')", timeout=8000)
+                page.evaluate(f"S.filter = 'e.tx'; S.filterPos = 4; renderLeft(); S.pcursor = 'f:{root}|e.txt'; renderLeft(); focusPanel(); 0")
+                page.keyboard.press("Control+d")
+                page.wait_for_selector(".dialog")
+                self.assertIn("e.txt", page.inner_text(".dialog .title"))
+                page.click(".dialog [data-ok]")
+                self.wait_gone(d / "e.txt")
+                page.evaluate("S.filter = ''; renderLeft()")
+                # and in the Notes tab
+                n = self.req("POST", "/api/notes/create", {"name": f"Doomed {name}"})[1]["path"]
+                page.evaluate("setPanelTab('notes'); focusPanel(); 0")
+                page.wait_for_function(f"() => PROWS.some(r => r.rel === {json.dumps(f'Doomed {name}.md')})", timeout=8000)
+                page.evaluate(f"S.pcursor = PROWS.find(r => r.rel === {json.dumps(f'Doomed {name}.md')}).k; renderLeft(); focusPanel(); 0")
+                page.keyboard.press("Control+d")
+                page.wait_for_selector(".dialog")
+                page.click(".dialog [data-ok]")
+                self.wait_gone(n)
         finally:
             transfer._jxa, wfiles.trash = old_jxa, old_trash
 

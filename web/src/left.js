@@ -967,6 +967,13 @@ function panelKey(e, combo) {
     if (combo === "M:KeyW" && r && r.kind === "session") { closeOrUnfavorite(r.sid, r.gid); return true; }  // (a Favorites row: off the favorites)
     if (combo === "M:KeyW" && r && r.kind === "ftab") { closeGroupTab(r); return true; }
   }
+  // ⌃D in the Files and Notes trees: the row (or the Files selection) to the Trash, asked first; as in the Groups panel,
+  // in the filter it deletes a character except at its end
+  if ((tab === "files" || tab === "notes") && combo === "C:KeyD" && r && (!S.filter || filterPos() >= S.filter.length)) {
+    if (tab === "files" && typeof filesTrash === "function") filesTrash(r);
+    else if (r.kind === "file" || r.kind === "dir") trashPath(rowPath(r));
+    return true;
+  }
   if (LINE_KEYS.has(combo) || combo === "Backspace") {  // the filter is a line: the editors' Emacs keys move and edit in it
     const r = lineEdit(S.filter, filterPos(), combo);
     if (r) { const changed = r.value !== S.filter; S.filter = r.value; S.filterPos = r.pos; if (changed) S.pcursor = null; renderLeft(); }
