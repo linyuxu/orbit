@@ -843,7 +843,7 @@ async function nestGroup(gid, parent, after = "") {
     S.pcursor = "g:" + gid; renderLeft();
   } catch (e) { toast(e.message); }
 }
-/* A group's name: given, and no other group's (case and every space ignored: "Invest Assistant" is "InvestAssistant";
+/* A group's name: given, and no other group's (case and every space ignored: "Data Pipeline" is "DataPipeline";
    the Fleet counts). The server checks the same. */
 const groupKey = n => String(n || "").replace(/\s+/g, "").toLowerCase();
 function groupNameError(name, gid = "", parent = "") {

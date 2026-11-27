@@ -103,7 +103,7 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   (orbit/services/webpush.py: P-256, ECDSA with RFC 6979, AES-128-GCM), checked against the RFCs' vectors.
   `GET/POST /api/push`, `/api/push/subscribe`, `/unsubscribe`, `/send`, behind the pairing token like every `/api`.
   Ordinary schedules wake their agent as before.
-- Schedules as cards (the request room's proposal): the active jobs first (soonest next), "Paused and finished"
+- Schedules as cards: the active jobs first (soonest next), "Paused and finished"
   and "Archived" folded until opened (remembered). A card: name, state pill, labelled actions (Run now / Check
   now · Pause / Resume · Edit · Journal · Remove); a grid of When, Wakes, Next, Runs, the phone, Ends, Id (a watch:
   its check, last check, result, seen); the last run; Task and journal folded (the journal read when unfolded, not

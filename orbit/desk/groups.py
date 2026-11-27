@@ -150,7 +150,7 @@ class Groups:
 
     def _check_name(self, name: str, gid: str = "", parent: str | None = None) -> str:
         """The name, trimmed (inner runs of spaces as one): ValueError when empty or a sibling has it (case and every
-        space ignored: "Invest Assistant" is "InvestAssistant"); at the top, Fleet is Orbit's own."""
+        space ignored: "Data Pipeline" is "DataPipeline"); at the top, Fleet is Orbit's own."""
         name = " ".join(name.split())
         if not name:
             raise ValueError("a group needs a name")

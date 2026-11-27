@@ -1,6 +1,6 @@
 """The user's own words, passed on to another session (`orbit-agent relay SESSION TEXT`).
 
-The user asks an agent ("send 'restart now' to Gamma RC2"); the agent relays those words. The receiving session gets
+The user asks an agent ("send 'restart now' to trainer"); the agent relays those words. The receiving session gets
 the words alone (no "(from session …)" line), and its card says where they came from, outside the text:
 origin {"kind": "user-relay", "from": {...}, "proof": {...}}. Only this module writes that origin: the API's
 generic origin (handler._origin: label, url, data, plugin) can never carry a "kind".

@@ -264,7 +264,7 @@ orbit-agent show report.html             # show a page in the side tab (sandboxe
 orbit-agent show https://docs.example    # a website in the side tab (its bar: Open in browser); --browser opens it there
 orbit-agent sessions                     # the open sessions
 orbit-agent send helper "check the migration" --wait   # ask another session; prints its answer
-orbit-agent relay "Gamma RC2" "restart now"             # the user's own words, word for word, to another session (checked)
+orbit-agent relay "trainer" "restart now"             # the user's own words, word for word, to another session (checked)
 orbit-agent steer helper "skip the slow tests"           # add to the request it is running now (no new turn)
 orbit-agent read helper --last 10                      # another session's recent turns
 orbit-agent new ~/src/api --name api "run the tests"     # start a session (and its first request)
