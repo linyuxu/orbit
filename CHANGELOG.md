@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A voice call ends when you say so ("挂断", "关掉", "关闭实时语音", "hang up"): the voice says goodbye and Orbit hangs
+  up (GPT Live cannot end a call itself). The session's agent can end it too, `orbit-agent hangup`, also when another
+  machine holds the call.
 - `orbit-agent show` (and any side tab opened from the server) shows again in a session whose side tabs had all been
   closed: its state was dropped then and its revision began again at 1, which a page that had seen more took for stale
   until it reloaded. The revision now only grows.

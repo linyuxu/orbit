@@ -41,6 +41,7 @@ GRACE_S = 0.4  # after a delegation, late transcript fragments still join its re
 # offset) are its words, and a delegation GPT Live makes meanwhile joins it (the request is answered once, for the
 # latest).
 TURN_WAIT_S = 8.0
+HANG_UP_WAIT_S = 6.0  # the voice's goodbye, at most this long, before Orbit hangs up when the user asked
 SPEAKING_HOLD_S = 1.2  # "speaking" this long after the last fragment of the voice's speech
 # The session's state, told silently (§6): changes within COALESCE_S go out as one snapshot; one that only moves the
 # agent's step on, at most every STEP_EVERY_S (each append is a chance for the voice to speak: real calls answered a
@@ -125,6 +126,23 @@ def _only(w: str, verbs: tuple, fill: tuple) -> bool:
     for t in sorted(verbs + fill, key=len, reverse=True):
         w = w.replace(t, "")
     return not w
+
+
+# "Hang up": the user's words are only that (a verb of ending the call, and words naming it): the call ends, after a
+# short goodbye. GPT Live cannot end a call itself; told to, it delegates the words and Orbit does it. Anything more
+# ("close the file", "关掉这个服务") is a task.
+HANG_UP_VERBS = ("挂断", "挂掉", "挂了", "挂电话", "结束通话", "结束语音", "结束对话", "退出语音", "关闭实时语音", "关掉实时语音",
+                 "关闭语音", "关掉语音", "停止语音", "关闭通话", "关掉通话", "关闭", "关掉", "关了", "再见", "拜拜",
+                 "hangup", "endthecall", "endcall", "endthevoice", "stopthecall", "stopvoice", "turnoffvoice",
+                 "turnoffthevoice", "closethecall", "goodbye", "bye")
+HANG_UP_FILL = ("你", "请", "帮我", "麻烦", "把", "这个", "那个", "实时", "语音", "通话", "电话", "模式", "吧", "了", "一下",
+                "啊", "嗯", "呃", "好", "好的", "ok", "okay", "现在", "先", "就", "可以", "掉", "the", "call", "voice", "live",
+                "realtime", "mode", "now", "please", "you", "can", "this", "it", "for", "today", "那", "我们", "今天", "到这",
+                "到这里", "就到这", "就这样", "thanks", "thank", "谢谢")
+
+
+def hangs_up(words: str) -> bool:
+    return _only(_norm(words), HANG_UP_VERBS, HANG_UP_FILL)
 
 
 def takes_back(words: str) -> bool:
@@ -369,6 +387,8 @@ Delegate to the backend when:
 - The answer needs the session's files, tools or history.
 - A correction changes the work already requested.
 - The user wants to stop, add to, withdraw or cancel a request.
+- The user wants to end the call ("挂断", "关闭实时语音", "关掉", "hang up", "end the call"): you cannot end it \
+yourself; delegate their words and Orbit hangs up after your goodbye.
 What Orbit can do with requests (answer questions about it yourself): they run one at a time in this session; to do \
 a new request first (interrupting the running one, ahead of what waits), or to stop \
 the running request, add something to it while it runs, or take back one that has not started, delegate the user's \
@@ -1165,6 +1185,8 @@ class Call:
             with self.lock:
                 d.update(done=True, how="none")
             return
+        if hangs_up(words):
+            return self._hang_up_asked(did, d, words)
         if moves_in(words):
             return self._move_in(did, d, prev, words)
         if takes_back(words):
@@ -1218,6 +1240,25 @@ class Call:
         if not c.get("duplicate") and c["state"] not in FINAL:
             self._status(did, c, how, cant_steer)
         self._on_card(c)  # (a duplicate may already be done)
+
+    def _hang_up_asked(self, did: str, d: dict, words: str) -> None:
+        """"挂断" / "hang up": the voice says a short goodbye, then the call ends (as the page's hang-up does)."""
+        with self.lock:
+            d.update(done=True, how="hangup", text=words)
+        self.log("hang_up_asked", delegation=did, words=words)
+        self._send({"type": "session.commentary.append", "event_id": f"bye_{did}", "delegation_id": did,
+                    "content": "The user asked to end the call. Say a short goodbye (a few words) now; Orbit hangs up "
+                               "right after."})
+        self._later(0, self._hang_up_after_bye)
+
+    def _hang_up_after_bye(self) -> None:
+        start = time.time()
+        while not self.ended and time.time() - start < HANG_UP_WAIT_S:  # (its goodbye spoken, or a few seconds)
+            if time.time() - start > 1.2 and time.time() - self.last_voice > 1.0:
+                break
+            time.sleep(0.2)
+        if not self.ended:
+            self.hang_up()
 
     def _move_in(self, did: str, d: dict, prev: dict | None, words: str) -> None:
         """"Put it in the running one": the waiting request (the call's last, else the session's latest) is withdrawn
@@ -1656,6 +1697,17 @@ class Live:
         if c is None or (call and c.id != call):
             raise KeyError(call or "call")
         return c.hang_up()
+
+    def hang_up_for(self, sid: str) -> dict:
+        """`orbit-agent hangup` from a session's agent: this server's call with that session ends; with no call here
+        (the call is held by another machine's server, this one's session its backend) the ask goes out as an event,
+        which that server's federation takes."""
+        c = self.call
+        if c is not None and not c.ended and (not sid or c.sid == sid):
+            c.hang_up()
+            return {"ended": True, "call": c.id}
+        self.desk.broadcast({"t": "live-hangup", "sid": sid})
+        return {"ended": False, "asked": True}
 
     def state(self) -> dict:
         c = self.call

@@ -602,6 +602,11 @@ def cmd_notify(a: argparse.Namespace) -> None:
     print(line)
 
 
+def cmd_hangup(a: argparse.Namespace) -> None:
+    r = call("POST", "/api/live/hangup", {"sid": me()})
+    print("the voice call ended" if r.get("ended") else "asked the machine that holds the voice call to end it")
+
+
 def cmd_remind(a: argparse.Namespace) -> None:
     from orbit.services import schedule as sched
     when = a.when
@@ -794,6 +799,9 @@ def main(argv: list[str] | None = None) -> None:
     nt.add_argument("--session", default="", help="the session a tap opens (default: this one)")
     nt.add_argument("--key", default="", help="sent once per key (a retry with the same key sends nothing again)")
     nt.set_defaults(func=cmd_notify)
+
+    hu = sub.add_parser("hangup", help="end the voice call with this session (when the user asks)")
+    hu.set_defaults(func=cmd_hangup)
 
     rm = sub.add_parser("remind", help="a reminder to the user's phone at a time (once or repeating); no agent wakes")
     rm.add_argument("when", help="in 30m, tomorrow 9am, daily 08:00, weekdays 9:00, every 2h, cron …")

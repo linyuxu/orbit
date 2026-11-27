@@ -1131,6 +1131,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     return self._json({"keys": keys.edit_keys(self.desk.state_dir, name, str(b["op"]), str(b.get("id") or ""),
                                                               b.get("value"), b.get("label"), to if isinstance(to, int) else None)})
                 return self._json({"keys": keys.set_key(self.desk.state_dir, name, b.get("value"))})
+            if p == "/api/live/hangup":  # a session's agent asked to end the call with it (orbit-agent hangup)
+                return self._json(self.desk.live.hang_up_for(str(b.get("sid") or "")))
             if p in ("/api/live/start", "/api/live/stop"):  # a voice call (GPT Live): this machine, or a client with the
                 # token (the phone): the key stays here, the client gets only the call's SDP answer
                 from orbit.services.live import Busy, NoKey

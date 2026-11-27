@@ -499,7 +499,13 @@ class RemoteVoiceTest(RemoteTest):
                             and 'Last finished: request #3 ("typed over there")' in e["content"]]
             self.assertTrue(wait_for(snap, 10), [e["content"] for e in fake.got("session.thinking.append")])
             self.assertIn('"far" is idle', snap()[-1])
-            self.req("POST", "/api/live/stop", {})
+            # its agent over there is asked to end the call (orbit-agent hangup): the call is this server's, it ends
+            hreq = urllib.request.Request(f"http://127.0.0.1:{self.rport}/api/live/hangup", method="POST",
+                                          data=json.dumps({"sid": rid}).encode(),
+                                          headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.token}"})
+            with urllib.request.urlopen(hreq, timeout=10) as resp:
+                self.assertEqual(json.loads(resp.read())["asked"], True)
+            self.assertTrue(wait_for(lambda: self.req("GET", "/api/live")[1].get("phase") in ("ended", None), 10))
             ok = wait_for(lambda: any(x.get("kind") == "note" for x in self.rdesk.cards(rid)), 10)
             self.assertTrue(ok, [l for f in Path(self.state, "live").glob("*.jsonl") for l in f.read_text().splitlines() if "note" in l])
             note = next(x for x in self.rdesk.cards(rid) if x.get("kind") == "note")

@@ -356,7 +356,8 @@ class Driving:
                 if o.get("label") == "Voice" and not o.get("plugin") and "live" in (o.get("data") or {}):  # GPT Live
                     hint = (hint + " This request came by voice (the user's transcribed speech: it may mishear words); "
                             "the start of your answer is spoken back to them, so lead with the takeaway in a sentence "
-                            "or two; code, tables and details stay in Orbit.").strip()
+                            "or two; code, tables and details stay in Orbit. If they ask to end the call (hang up, turn the voice "
+                            "off), run `orbit-agent hangup`.").strip()
                 elif o.get("label") or o.get("plugin"):  # a plugin sent it: the agent knows where its answer goes
                     via = " ".join(f"This request came via {o.get('label') or o.get('plugin')}"
                                    f"{' (the ' + o['plugin'] + ' plugin)' if o.get('plugin') else ''}; your answer is "

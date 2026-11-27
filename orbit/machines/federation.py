@@ -218,6 +218,12 @@ class Federation:
                 self.desk.broadcast({"t": "card", "card": self.card(name, c)})
             elif have is None or (have.get("rev") or 0) < (ev.get("rev") or 0):
                 threading.Thread(target=self._fetch_card, args=(name, sid, ev.get("id")), daemon=True).start()
+        elif t == "live-hangup":  # its agent was asked to end the voice call: the call is this server's (with that session)
+            sid = str(ev.get("sid", ""))
+            live = getattr(self.desk, "live", None)
+            c = live.call if live is not None else None
+            if sid and c is not None and not c.ended and c.sid == join(name, sid):
+                threading.Thread(target=c.hang_up, daemon=True).start()
         elif t == "side":  # a side panel changed over there: on every screen here too
             sid = str(ev.get("sid", ""))
             if SEP in sid or not sid:

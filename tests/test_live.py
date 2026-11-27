@@ -395,6 +395,32 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual(c3["text"], "check the build")
         self.assertEqual(self.wait_card(s["id"], 3, ("completed",))["text"], "and the tests")
 
+    def test_hang_up_when_the_user_asks(self):
+        """GPT Live cannot end a call: told to, it delegates "挂断" / "关掉" / "hang up", and Orbit has the voice say
+        goodbye and hangs up; no card. Words that only mention closing something are a request as usual."""
+        for w in ("挂断", "关掉吧", "你关闭实时语音", "关闭语音模式", "好的拜拜", "hang up", "OK, end the call please", "今天就到这，挂了吧"):
+            self.assertTrue(live.hangs_up(w), w)
+        for w in ("这个session关掉了会怎样", "关掉这个服务", "把浏览器关闭", "close the file", "stop the server", "结束这个任务"):
+            self.assertFalse(live.hangs_up(w), w)
+        s, r = self.start_call("Bye")
+        self.fake.emit(t_in("好，你关掉吧", 500, 1300, "h1"), delegation("del_h", 1400, "dh"))
+        bye = wait(lambda: [e for e in self.fake.got("session.commentary.append") if e["event_id"] == "bye_del_h"], 8)
+        self.assertIn("goodbye", bye[0]["content"])
+        self.assertTrue(wait(lambda: self.live_state().get("phase") in ("ended", None), 12))
+        self.assertEqual([c for c in self.cards(s["id"]) if c.get("kind") != "note"], [])  # (no request: only the call's note)
+        log = Path(self.state, "live", r["call"] + ".jsonl").read_text()
+        self.assertIn('"hang_up_asked"', log)
+
+    def test_the_sessions_agent_hangs_up(self):
+        """orbit-agent hangup (POST /api/live/hangup with its session): the call with that session ends; another
+        session's agent ends nothing here."""
+        s, r = self.start_call("Agent bye")
+        other = self.new_session("Not the call's")
+        self.assertEqual(self.req("POST", "/api/live/hangup", {"sid": other["id"]})[1], {"ended": False, "asked": True})
+        self.assertNotIn(self.live_state().get("phase"), ("ended", None))
+        self.assertEqual(self.req("POST", "/api/live/hangup", {"sid": s["id"]})[1]["ended"], True)
+        self.assertTrue(wait(lambda: self.live_state().get("phase") in ("ended", None), 8))
+
     def test_one_call_at_a_time(self):
         """A second call, from any session or device, is refused while one is on (409, saying which); after the first
         hangs up, a new one starts."""

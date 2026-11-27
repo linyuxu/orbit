@@ -317,6 +317,12 @@ Built: `orbit/services/live/` (`session.py` the call, `ws.py` the websocket clie
   A request's silent status is never sent after its result (it said "don't state the answer until the result
   arrives"); a result's detail and commentary go together. The voice's last reply (its last run of fragments, pauses under 1.5 s)
   goes along, marked as context, only when the words refer to something (that, it, this, the second one …).
+- **Hanging up by voice.** GPT Live cannot end a call; its instructions say to delegate a request to end it. Words
+  that are only that ("挂断", "关掉", "关闭实时语音", "hang up", "end the call", with fillers: `hangs_up`) are no
+  request: the voice is told to say a short goodbye, and Orbit hangs up once it stops speaking (6 s at most). A
+  session's agent asked by voice runs `orbit-agent hangup` (`POST /api/live/hangup {sid}`): this server's call with
+  that session ends, or, with no call here, a `live-hangup` event goes out and the server holding the call (its
+  federation, for `NAME~sid`) ends it.
 - **Sending.** In-process, `desk.send(sid, text, origin, client_id)`: the same code as the route. The card shows the
   words as said; the `[orbit] voice` marker is Orbit's existing `[orbit]` line, which for a `Voice` origin tells the
   agent that the request was spoken (it may be misheard) and that the start of its answer is read back. A correction
