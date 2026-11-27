@@ -1,6 +1,6 @@
 # Orbit
 
-**An ADE (agentic development environment) where sessions, not files, are the documents.** Run Claude Code, Codex, agy and OpenCode side by side and have them work together, talk to them by voice, put them on schedules, across
+**An ADE (agentic development environment) where sessions, not files, are the documents.** Run Claude Code, Codex, agy and OpenCode side by side and have them work together, hand work between them and between machines, talk to them by voice, put them on schedules, across
 your projects and machines, in one window: each session is a tab with its conversation, its files and its diff;
 groups keep the work apart; the agents keep running when the window closes, and your phone shows the same.
 
@@ -22,6 +22,11 @@ groups keep the work apart; the agents keep running when the window closes, and 
   agent's commands, pasted screenshots and dropped files, quotes from an answer or a file. Answers render as rich
   documents: Markdown with tables, syntax-highlighted code, KaTeX math, images, links that open files at the line,
   and an agent can show a full HTML page (a report, a chart) beside the conversation (`orbit-agent show`).
+- **Across machines and agents.** One window drives the agents of every machine you reach (a Linux box over
+  Tailscale): their sessions, files, diffs and shells show in your groups like local ones, and files move between
+  machines by drag and drop. Fork a session to another agent (a Claude Code conversation picked up by Codex), another
+  folder or another machine: the new session reads a hand-over of the latest turns, checks its working tree and
+  reports, ready to go on. Conversations started in a terminal can be resumed in Orbit.
 - **Scheduler.** Requests on a schedule (`every 2h`, `weekdays 9am`, cron), to a session, a folder or a helper; watches
   that run a check and wake an agent only when something changed; reminders pushed to the phone; agents schedule their
   own follow-ups (`orbit-agent schedule`). A missed run catches up after a restart; each run is journaled.
@@ -29,10 +34,9 @@ groups keep the work apart; the agents keep running when the window closes, and 
 ### And
 
 - **Sessions as tabs.** A session runs one agent in one folder. See a request's steps as they happen (folded once it
-  is done), queue the next while it works; stop, steer, edit or resend; fork a session (also to another agent, folder
-  or machine).
+  is done), queue the next while it works; stop, steer, edit or resend.
 - **Every agent, one way of working.** Claude Code, Codex, agy and OpenCode out of the box, any other agent through the
-  [Orbit Harness Protocol](builddoc/harness-protocol.md). Conversations started in a terminal can be resumed in Orbit.
+  [Orbit Harness Protocol](builddoc/harness-protocol.md).
 - **Groups.** Sessions and files are arranged by what the work is about (nested up to three deep), each group with a
   home page of widgets: its sessions, what happened lately, pinned decisions, its schedules. ⌘1…⌘9 switch groups.
 - **The code next to the conversation.** ± Review shows the uncommitted diff (revert a hunk, comment on lines and send
@@ -40,8 +44,6 @@ groups keep the work apart; the agents keep running when the window closes, and 
   machines); a click shows a file in the side panel without leaving your work; a code and Markdown editor.
 - **The agents outlive the window.** A server owns the agents; the app is only its face. Close the window, quit the
   app, restart the server: requests at work go on, and the next window picks up where they are.
-- **Other machines.** Point the server at a Linux box (over Tailscale, with a token) and its sessions, files and shells
-  show in your groups like local ones.
 - **Phone.** The same server on your iPhone's home screen: the sessions, their answers, notifications when a request
   finishes or needs you, and voice.
 - **Notes.** A Markdown vault (Obsidian-compatible: wiki links, attachments, a weekly journal) that agents write to
