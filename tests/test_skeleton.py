@@ -84,6 +84,21 @@ class SkeletonTest(unittest.TestCase):
         return s
 
     # ------------------------------------------------------------------ tests
+    def test_new_session_makes_a_missing_folder(self):
+        """New session in a folder that does not exist yet: it is made; a file there, or bad settings: refused, nothing made."""
+        d = Path(self.work, "fresh", "project")
+        code, s = self.req("POST", "/api/sessions", {"cwd": str(d), "name": "fresh"})
+        self.assertEqual(code, 200, s)
+        self.assertTrue(d.is_dir())
+        self.assertEqual(s["cwd"], os.path.realpath(d))
+        Path(self.work, "afile").write_text("x")
+        code, r = self.req("POST", "/api/sessions", {"cwd": str(Path(self.work, "afile"))})
+        self.assertEqual(code, 400)
+        self.assertIn("not a folder", r["error"])
+        code, r = self.req("POST", "/api/sessions", {"cwd": str(Path(self.work, "never")), "harness": "nope"})
+        self.assertEqual(code, 400)
+        self.assertFalse(Path(self.work, "never").exists())
+
     def test_page_served_from_disk(self):
         with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/") as r:
             self.assertIn(b"<title>Orbit</title>", r.read())

@@ -229,8 +229,8 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
     def create(self, cwd: str, model: str = "", mode: str = "default", name: str = "",
                harness: str = "claude", group: str = "", effort: str = "") -> dict:
         cwd = os.path.realpath(os.path.expanduser(cwd or "~"))
-        if not os.path.isdir(cwd):
-            raise ValueError(f"no such folder: {cwd}")
+        if os.path.exists(cwd) and not os.path.isdir(cwd):
+            raise ValueError(f"not a folder: {cwd}")
         if harness not in DRIVERS:
             raise ValueError(f"unknown harness: {harness}")
         if mode not in MODES:
@@ -239,6 +239,11 @@ class Desk(Groups, Fleet, Driving, Requests, Agents, Sides, Layout, Meetings, Ha
             raise ValueError(f"{DRIVERS[harness].label} has no {mode} mode (it has {', '.join(DRIVERS[harness].modes)})")
         if effort and effort not in DRIVERS[harness].efforts:
             raise ValueError(f"unknown effort for {harness}: {effort}")
+        if not os.path.isdir(cwd):  # a new folder for new work: made (the checks above passed first)
+            try:
+                os.makedirs(cwd)
+            except OSError as e:
+                raise ValueError(f"cannot create {cwd}: {e.strerror}") from None
         s = Session({"id": str(uuid.uuid4()), "name": name.strip(), "cwd": cwd, "model": model.strip(),
                      "mode": mode, "harness": harness, "group": self._group_id(group), "effort": effort})
         s.loaded = True

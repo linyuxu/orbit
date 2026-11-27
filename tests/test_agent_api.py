@@ -314,7 +314,7 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         h = self.agent("history", sid)
         self.assertEqual(h.returncode, 0, h.stderr)
         self.assertIn("count the files", h.stdout)  # history reaches a closed one
-        self.assertIn("no such folder", self.agent("new", "/nope/nowhere").stderr)
+        self.assertIn("no such folder", self.agent("new", "/nope/nowhere").stderr)  # (an agent's typo makes no folder; the dialog does)
 
     # ------------------------------------------------------------------ @@ mentions, orbit-agent read
     def test_mention_from_user_and_agent(self):

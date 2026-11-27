@@ -8,6 +8,8 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- New session in a folder that does not exist yet makes it (also on another machine); a file there is refused.
+  `orbit-agent new` still refuses a missing folder (an agent's typo makes nothing).
 - A session's agent shapes the voice of a call with it: `orbit-agent voice instruct FILE` (how the voice runs the call:
   a quiz, an interview; kept with the session, else the folder's `.orbit/voice.md`; appended into a running call),
   `voice context FILE` (silent material for the running call, each part with a one-line reminder of the rules),
