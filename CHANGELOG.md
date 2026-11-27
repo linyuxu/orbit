@@ -8,6 +8,9 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- `orbit-agent show` (and any side tab opened from the server) shows again in a session whose side tabs had all been
+  closed: its state was dropped then and its revision began again at 1, which a page that had seen more took for stale
+  until it reloaded. The revision now only grows.
 - The README says what Orbit is and does, with pictures, and how to start; the detailed reference moved to
   docs/guide.md. The pictures come from a demo (docs/make_screenshots.py: a throwaway home, the tests' fake agents).
 - Paths under the server's home show as ~ wherever the home is (Linux's /home/… too): the page is told it.

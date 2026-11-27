@@ -184,6 +184,12 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         (self.desk.show_dir / f"{bells}.html").unlink()
         st = side()
         self.assertEqual(([x["kind"] for x in st["items"]], st["i"]), (["file"], 0))
+        # every tab closed, then a new one: its rev goes on growing (a page that saw the old ones takes it)
+        before = side()["rev"]
+        post({"op": "clear"})
+        self.assertEqual(side()["items"], [])
+        again = post({"op": "open", "spec": {"kind": "web", "url": "https://example.com/", "title": "Again"}})[1]
+        self.assertGreater(again["rev"], before)
 
     def test_the_favorites_tabs_go_to_the_first_group(self):
         """The ★ Favorites view is gone: a layout kept with its file tabs gives them to the first group (once, not twice

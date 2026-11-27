@@ -135,10 +135,10 @@ class Sides:
             else:
                 raise ValueError(f"no such op: {op} (open, replace, close, select, clear)")
             new = {"items": items, "i": max(0, i), "rev": int(st.get("rev") or 0) + 1}
-            if items:
-                d[sid] = new
-            else:
-                d.pop(sid, None)
+            # Kept with no tabs too: its rev only grows. (Dropped, the next tab started again at rev 1, and a page that
+            # had seen a higher one took every new state for a stale one: `orbit-agent show` said "showing" and
+            # nothing came, until the page reloaded.)
+            d[sid] = new
             self._sides_write(d)
         self.broadcast({"t": "side", "sid": sid, "side": new})
         return new
