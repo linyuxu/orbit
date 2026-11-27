@@ -224,6 +224,15 @@ class Federation:
             c = live.call if live is not None else None
             if sid and c is not None and not c.ended and c.sid == join(name, sid):
                 threading.Thread(target=c.hang_up, daemon=True).start()
+        elif t == "live-op":  # its agent shapes the voice (agentvoice.py): the call is this server's, with that session
+            sid = str(ev.get("sid", ""))
+            live = getattr(self.desk, "live", None)
+            c = live.call if live is not None else None
+            if sid and c is not None and not c.ended and c.sid == join(name, sid) and isinstance(ev.get("b"), dict):
+                try:
+                    c.voice_op(str(ev.get("op", "")), ev["b"])
+                except ValueError:
+                    pass
         elif t == "side":  # a side panel changed over there: on every screen here too
             sid = str(ev.get("sid", ""))
             if SEP in sid or not sid:

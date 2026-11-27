@@ -130,6 +130,31 @@ progress appends gone; spoken result text 6 181 → 1 573 tokens (estimated) and
 would have waited 2.2 s and 5.5 s for the user to finish. Next (not built): a warmer one-assistant persona and one
 next-step offer, results not yet told at the next call's start, the conversation sent to the agent with each request.
 
+### The session's agent shapes the voice (2026-11-27)
+
+Orbit has no tutor or interviewer mode; a session's agent composes one from three primitives
+(`services/live/agentvoice.py`, `orbit-agent voice`, POST `/api/sessions/<sid>/voice`):
+
+| op | at a call's start | mid-call |
+|---|---|---|
+| `instruct` (≤4000 tokens, kept with the session, else the folder's `.orbit/voice.md`) | in `instructions`, after Orbit's delegation and grounding, before Settings' style prompt | `session.instructions.append` in ≤450-token chunks, the first marked as replacing every earlier version |
+| `context` (≤6000 tokens a time) | (no call: refused only by size; nothing kept) | `session.thinking.append`, `delegation_id` null, each chunk headed by the instructions' one-line `--remind` ("Rules still in force: …") |
+| `ack` (on, off, default) | `live_ack` for this session's calls | `live_ack` of the running call |
+
+Priority is fixed in the text: Orbit's rules come first and the session's instructions say they "may make you hand over
+to the backend more often, never less"; the delegation list gains "Session instructions say to". No reconnect mid-call:
+everything after the start is appended. A call held by another machine (this session its backend) gets the op as a
+`live-op` event that machine's federation takes, as `orbit-agent hangup`.
+
+Measured (gpt-live-1.1, 2026-11-27, scratchpad probe): appends are a queue injected one after another, about 1.6 s
+per 400-token block (60 blocks, 24k tokens: 98 s, ≈240 tokens/s; instructions ≈650); a block sent behind 60 others
+lands about 100 s later (`voice context` says when it lands), and what has not landed when the call closes is dropped (`context_injection_incomplete`). 37 × 450
+tokens of appended instructions were accepted (past the 16 384 of `instructions`). `session.usage.updated` carries
+`context_window.usage_ratio` (128k window; at 0.9 a replacement engine starts with the original instructions, the
+appended ones and ≤8 192 tokens of history); call logs record it at each tenth. The rules held after all 60 blocks had landed (usage_ratio 0.20; the regression
+scene: no answer given away, no wrap-up, a reply outside the material handed over); before they had landed the voice
+quizzed from whichever block it had, the latest still queued.
+
 ## 4. Startup context (`session.input`)
 
 Small and relevant, as text messages (developer role for facts, user/assistant for the last exchanges):

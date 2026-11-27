@@ -133,6 +133,7 @@ class Session:
         self.origins: dict[str, dict] = meta.get("origins", {})  # card id → where the request came from (a plugin)
         self.client_ids: dict[str, int] = meta.get("client_ids", {})  # a sender's id for a request → its card (sent once)
         self.notes: list[dict] = meta.get("notes", [])  # note cards (a voice call's transcript): not requests, kept here
+        self.voice: dict = meta.get("voice") or {}  # its agent's voice instructions, reminder, ack (services/live/agentvoice.py)
         self.interrupted: bool = meta.get("interrupted", False)  # a request was running when the server stopped
         self.was_running: bool = meta.get("running", False)  # a request ran at the last save (after a crash: cut off)
         self.catching_up = False  # its handed-off process's output is being read (no new request goes to it yet)
@@ -156,6 +157,7 @@ class Session:
                 **({"origins": dict(list(self.origins.items())[-ORIGINS_KEPT:])} if self.origins else {}),
                 **({"client_ids": dict(list(self.client_ids.items())[-ORIGINS_KEPT:])} if self.client_ids else {}),
                 **({"notes": self.notes[-NOTES_KEPT:]} if self.notes else {}),
+                **({"voice": self.voice} if self.voice else {}),
                 **({"interrupted": True} if self.interrupted else {}),
                 **({"running": True} if (self.current_request() is not None if self.loaded else self.was_running) else {}),
                 **({"fork_carry": self.fork_carry} if self.fork_carry else {}),

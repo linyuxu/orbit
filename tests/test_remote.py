@@ -480,10 +480,24 @@ class RemoteVoiceTest(RemoteTest):
             rid = s["id"].split("~", 1)[1]
             self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "earlier"})
             self.assertTrue(wait_for(lambda: any(c["state"] == "completed" for c in self.rdesk.cards(rid)), 15))
+            def rpost(path, body):  # (as that machine's own agent calls its server)
+                rq = urllib.request.Request(f"http://127.0.0.1:{self.rport}{path}", method="POST", data=json.dumps(body).encode(),
+                                            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.token}"})
+                with urllib.request.urlopen(rq, timeout=10) as resp:
+                    return json.loads(resp.read())
+            # its agent over there gives the voice instructions (orbit-agent voice instruct): they are in the call's
+            self.assertEqual(rpost(f"/api/sessions/{rid}/voice", {"op": "instruct", "text": "Quiz the user; one question at a time."})["ok"], True)
             code, r = self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
             self.assertEqual(code, 200, r)
             self.assertTrue(fake.wait_attached(1))
             se = fake.bodies[-1]["session"]
+            self.assertIn("Session instructions (from this session's agent", se["instructions"])
+            self.assertIn("Quiz the user; one question at a time.", se["instructions"])
+            # mid-call, from over there: a live-op event this server's federation takes into the call
+            self.assertEqual(rpost(f"/api/sessions/{rid}/voice", {"op": "context", "text": "Block 2: the watt."})["asked"], True)
+            ctx = lambda: [e for e in fake.got("session.thinking.append") if e["event_id"].startswith("vctx_")]
+            self.assertTrue(wait_for(ctx, 10))
+            self.assertIn("Block 2: the watt.", ctx()[0]["content"])
             self.assertIn('session named "far"', se["instructions"])
             self.assertIn(f"folder {self.rwork}", se["instructions"])  # (that machine's path, not /@vbox/…)
             self.assertIn("answer: earlier", json.dumps(se["input"]))  # its recent work, read over there

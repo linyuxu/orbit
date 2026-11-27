@@ -607,6 +607,57 @@ def cmd_hangup(a: argparse.Namespace) -> None:
     print("the voice call ended" if r.get("ended") else "asked the machine that holds the voice call to end it")
 
 
+def cmd_voice(a: argparse.Namespace) -> None:
+    """The voice of a call with this session: its instructions, silent material, the ack (services/live/agentvoice.py)."""
+    if not me():
+        sys.exit("orbit-agent: voice works from inside an Orbit session ($ORBIT_SESSION)")
+    path = f"/api/sessions/{me()}/voice"
+
+    def text_of(src: str) -> str:
+        if src == "-":
+            return sys.stdin.read()
+        try:
+            return Path(src).read_text(encoding="utf-8")
+        except OSError as e:
+            sys.exit(f"orbit-agent: cannot read {src}: {e.strerror}")
+
+    if a.op == "show":
+        r = call("POST", path, {"op": "get"})
+        src = {"session": "this session's", "folder": "the folder's .orbit/voice.md", "": "none"}[r.get("source", "")]
+        print(f"instructions: {src}, about {r.get('tokens', 0)} of {r.get('max', 0)} tokens"
+              + (f"\nreminder: {r['remind']}" if r.get("remind") else "")
+              + f"\nack: {'Settings' if r.get('ack') is None else ('on' if r['ack'] else 'off')}"
+              + f"\ncall on this server: {'yes' if r.get('call') else 'no'}")
+        if r.get("instructions"):
+            print("\n" + r["instructions"])
+        return
+    if a.op == "instruct":
+        if not a.clear and not a.src:
+            sys.exit("orbit-agent: voice instruct FILE (- : stdin), or --clear")
+        body: dict = {"op": "instruct", "text": "" if a.clear else text_of(a.src), "clear": a.clear}
+        if a.remind is not None:
+            body["remind"] = a.remind
+    elif a.op == "context":
+        if not a.src:
+            sys.exit("orbit-agent: voice context FILE (- : stdin)")
+        body = {"op": "context", "text": text_of(a.src)}
+    else:  # ack
+        if a.src not in ("on", "off", "default"):
+            sys.exit("orbit-agent: voice ack on | off | default")
+        body = {"op": "ack", "ack": {"on": True, "off": False, "default": None}[a.src]}
+    r = call("POST", path, body)
+    where = ("into the call now" if r.get("applied") else
+             "sent to the machine holding the call, if there is one" if r.get("asked") else "")
+    if a.op == "instruct":
+        print(f"voice instructions {'cleared' if a.clear else 'set'} (about {r.get('tokens', 0)} tokens, "
+              f"{r.get('left', 0)} left); at the next call" + (f", and {where}" if where else ""))
+    elif a.op == "context":
+        print(f"material sent (about {r.get('tokens', 0)} tokens; the voice has it in about {r.get('lands_s', 0)} s, "
+              f"after what was sent before it): {where}")
+    else:
+        print(f"ack {a.src}" + (f"; {where}" if where else ""))
+
+
 def cmd_remind(a: argparse.Namespace) -> None:
     from orbit.services import schedule as sched
     when = a.when
@@ -802,6 +853,13 @@ def main(argv: list[str] | None = None) -> None:
 
     hu = sub.add_parser("hangup", help="end the voice call with this session (when the user asks)")
     hu.set_defaults(func=cmd_hangup)
+
+    vo = sub.add_parser("voice", help="shape the voice of a call with this session: instructions, silent material, ack")
+    vo.add_argument("op", choices=["instruct", "context", "ack", "show"])
+    vo.add_argument("src", nargs="?", default="", help="instruct/context: FILE (- : stdin); ack: on | off | default")
+    vo.add_argument("--remind", default=None, help="instruct: a one-line reminder sent with each context batch")
+    vo.add_argument("--clear", action="store_true", help="instruct: drop this session's instructions")
+    vo.set_defaults(func=cmd_voice)
 
     rm = sub.add_parser("remind", help="a reminder to the user's phone at a time (once or repeating); no agent wakes")
     rm.add_argument("when", help="in 30m, tomorrow 9am, daily 08:00, weekdays 9:00, every 2h, cron …")

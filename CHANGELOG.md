@@ -8,6 +8,11 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A session's agent shapes the voice of a call with it: `orbit-agent voice instruct FILE` (how the voice runs the call:
+  a quiz, an interview; kept with the session, else the folder's `.orbit/voice.md`; appended into a running call),
+  `voice context FILE` (silent material for the running call, each part with a one-line reminder of the rules),
+  `voice ack on|off|default`. Orbit's delegation and grounding rules stay above them: the session's instructions can
+  make the voice hand over more, never less. Across machines too; call logs record the context window's fill.
 - A voice call ends when you say so ("挂断", "关掉", "关闭实时语音", "hang up"): the voice says goodbye and Orbit hangs
   up (GPT Live cannot end a call itself). The session's agent can end it too, `orbit-agent hangup`, also when another
   machine holds the call.

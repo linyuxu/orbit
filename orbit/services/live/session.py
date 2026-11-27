@@ -312,6 +312,16 @@ class Target:
                 return copy.deepcopy(s.cards)
         return self._call("GET", "/cards")["cards"]
 
+    def voice(self) -> dict:
+        """Its agent's voice settings (instructions, reminder, ack: agentvoice.effective), from its own server."""
+        from orbit.services.live import agentvoice
+        try:
+            if self.remote is None:
+                return agentvoice.effective(self.desk.get(self.sid))
+            return self._call("POST", "/voice", {"op": "get"}) or {}
+        except (KeyError, RuntimeError, OSError):
+            return {}
+
     def _call(self, method: str, action: str, body: dict | None = None):
         name, rsid = self.remote
         code, d = self.desk.federation.call(name, method, f"/api/sessions/{rsid}{action}", body)
@@ -352,7 +362,7 @@ class Target:
 
 
 # ---------------------------------------------------------------------------------------------- the session's setup
-def instructions(name: str, cwd: str, model: str, cfg: dict | None = None) -> str:
+def instructions(name: str, cwd: str, model: str, cfg: dict | None = None, session_text: str = "") -> str:
     """§3, in the structure of OpenAI's live prompting template (its Backchannel / Interruption / Delegation policy
     headings), with Orbit's noise rule; then Settings → Voice (its language, how much of a result to say, the user's own
     instructions). For gpt-live-1 the guide's handoff words are its token."""
@@ -389,6 +399,7 @@ Delegate to the backend when:
 - The user wants to stop, add to, withdraw or cancel a request.
 - The user wants to end the call ("挂断", "关闭实时语音", "关掉", "hang up", "end the call"): you cannot end it \
 yourself; delegate their words and Orbit hangs up after your goodbye.
+- Session instructions (given below or later in this call) say to.
 What Orbit can do with requests (answer questions about it yourself): they run one at a time in this session; to do \
 a new request first (interrupting the running one, ahead of what waits), or to stop \
 the running request, add something to it while it runs, or take back one that has not started, delegate the user's \
@@ -412,6 +423,9 @@ still working, unless the user asks or a meaningful change happened (a step that
 matters, or the user must answer something).
 Avoid unnecessary narration: no repeated confirmations, filler, re-acknowledgements or play-by-play. When a result \
 arrives, {detail}; code, tables and logs stay in Orbit."""
+    if session_text.strip():  # the session's agent's (agentvoice.py): under Orbit's rules, over the user's style
+        from orbit.services.live.agentvoice import INSTRUCT_HEAD
+        text += "\n\n" + INSTRUCT_HEAD + "\n" + session_text.strip()
     if cfg["live_prompt"].strip():
         text += ("\n\nThe user's own instructions for this voice (they win over the style rules above, never over the "
                  "delegation and grounding rules):\n" + cfg["live_prompt"].strip())
@@ -519,10 +533,14 @@ def session_body(desk, s, sdp: str, model: str, cfg: dict | None = None) -> dict
     cfg = cfg or config.current(desk.settings)
     t = s if isinstance(s, Target) else Target(desk, s.id)
     pub = t.info()
+    v = t.voice()
+    if v.get("ack") is not None:  # (this session's agent chose; cfg is the call's own: it stays so)
+        cfg["live_ack"] = bool(v["ack"])
+    cfg["_voice_remind"] = v.get("remind") or ""
     return {
         "session": {
             "model": model,
-            "instructions": instructions(pub["name"], pub["cwd"], model, cfg),
+            "instructions": instructions(pub["name"], pub["cwd"], model, cfg, v.get("instructions") or ""),
             "input": startup_input(desk, t, history=cfg["live_context"]),
             "audio": {"output": {"voice": cfg["live_voice"]}},
             "delegation": {"type": "client", "acknowledgement_delay_ms": ACK_DELAY_MS},
@@ -1078,8 +1096,18 @@ class Call:
         elif typ == "session.resumed":
             self._set_phase("listening")
         elif typ == "session.usage.updated":
+            r = (ev.get("context_window") or {}).get("usage_ratio")
             with self.lock:
                 self.usage = ev.get("usage") or {}
+                if r is not None:  # (at 0.9 GPT Live replaces the engine: instructions + 8 192 tokens of history)
+                    self.usage["context_ratio"] = r
+                    step = int(r * 10)
+                    log = step > getattr(self, "ratio_step", 0)
+                    self.ratio_step = max(step, getattr(self, "ratio_step", 0))
+                else:
+                    log = False
+            if log:
+                self.log("context_window", usage_ratio=round(r, 3))
         elif typ == "session.closed":
             with self.lock:
                 self.reason = str(ev.get("reason") or "closed")
@@ -1240,6 +1268,32 @@ class Call:
         if not c.get("duplicate") and c["state"] not in FINAL:
             self._status(did, c, how, cant_steer)
         self._on_card(c)  # (a duplicate may already be done)
+
+    # ------------------------------------------------------------------ the session's agent shapes the voice
+    def voice_op(self, op: str, b: dict) -> dict:
+        """agentvoice.py: new session instructions (appended, replacing the earlier), silent material, the ack."""
+        from orbit.services.live import agentvoice
+        with self.lock:
+            if self.ended:
+                return {"call": "ended"}
+            self.vn = getattr(self, "vn", 0) + 1
+            n = self.vn
+        if op == "instruct":
+            if b.get("remind") is not None:
+                self.cfg["_voice_remind"] = str(b.get("remind") or "")
+            evs = agentvoice.instruct_events(n, str(b.get("text") or ""))
+        elif op == "context":
+            evs = agentvoice.context_events(n, str(b.get("text") or ""), self.cfg.get("_voice_remind") or "")
+        elif op == "ack":
+            self.cfg["live_ack"] = config.current(self.desk.settings)["live_ack"] if b.get("ack") is None else bool(b["ack"])
+            evs = []
+        else:
+            raise ValueError(f"no such voice op: {op}")
+        for ev in evs:
+            self._send(ev)
+        self.log("voice_op", op=op, events=[e["event_id"] for e in evs],
+                 tokens=sum(agentvoice.tokens(e["content"]) for e in evs))
+        return {"call": self.id, "appends": len(evs)}
 
     def _hang_up_asked(self, did: str, d: dict, words: str) -> None:
         """"挂断" / "hang up": the voice says a short goodbye, then the call ends (as the page's hang-up does)."""
@@ -1697,6 +1751,15 @@ class Live:
         if c is None or (call and c.id != call):
             raise KeyError(call or "call")
         return c.hang_up()
+
+    def voice_op_for(self, sid: str, op: str, b: dict) -> dict:
+        """A voice op of a session's agent: into this server's call with that session, else out as an event for the
+        server holding a call with it (its federation takes it, as hang_up_for)."""
+        c = self.call
+        if c is not None and not c.ended and c.sid == sid:
+            return {"applied": True, **c.voice_op(op, b)}
+        self.desk.broadcast({"t": "live-op", "sid": sid, "op": op, "b": b})
+        return {"applied": False, "asked": True}
 
     def hang_up_for(self, sid: str) -> dict:
         """`orbit-agent hangup` from a session's agent: this server's call with that session ends; with no call here

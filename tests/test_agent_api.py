@@ -69,6 +69,25 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         self.assertTrue(self.inputs(s["id"])[2].startswith("[orbit] "))
 
     # ------------------------------------------------------------------ ctx
+    def test_voice_cli(self):
+        """orbit-agent voice: instruct from a file or stdin, show, ack; over the budget: non-zero, with the tokens left."""
+        s = self.new_session("Voice cli")
+        r = self.agent("voice", "instruct", "-", "--remind", "no answers", inp="Never give the answer away.", session=s["id"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("left); at the next call", r.stdout)
+        out = self.agent("voice", "show", session=s["id"]).stdout
+        self.assertIn("instructions: this session's", out)
+        self.assertIn("reminder: no answers", out)
+        self.assertIn("Never give the answer away.", out)
+        r = self.agent("voice", "instruct", "-", inp="word " * 5000, session=s["id"])
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("at most 4000", r.stderr)
+        self.assertIn("0 left", r.stderr)
+        self.assertEqual(self.agent("voice", "ack", "off", session=s["id"]).returncode, 0)
+        self.assertIn("ack: off", self.agent("voice", "show", session=s["id"]).stdout)
+        self.assertNotEqual(self.agent("voice", "ack", "maybe", session=s["id"]).returncode, 0)
+        self.assertNotEqual(self.agent("voice", "show").returncode, 0)  # (outside a session)
+
     def test_ctx(self):
         self.assertIn("not reported", self.agent("ctx").stdout)
         ctx = {"session": {"id": "abc", "name": "demo", "cwd": "/w"}, "tab": {"kind": "file", "path": "/w/a.py", "line": 7},

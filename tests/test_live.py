@@ -421,6 +421,84 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual(self.req("POST", "/api/live/hangup", {"sid": s["id"]})[1]["ended"], True)
         self.assertTrue(wait(lambda: self.live_state().get("phase") in ("ended", None), 8))
 
+    def test_voice_instructions_kept_with_the_session(self):
+        """orbit-agent voice instruct: kept with the session (or its folder's .orbit/voice.md), in the call's
+        instructions after Orbit's rules and before the user's style prompt; over the budget: refused with what is
+        left; the reminder and the ack kept too."""
+        from orbit.services.live import agentvoice as av
+        s = self.new_session("Tutor")
+        path = f"/api/sessions/{s['id']}/voice"
+        self.assertEqual(self.req("POST", path, {"op": "get"})[1]["source"], "")
+        Path(self.work, ".orbit").mkdir(exist_ok=True)
+        Path(self.work, av.VOICE_FILE).write_text("Folder rule: speak slowly.")
+        try:
+            self.assertEqual(self.req("POST", path, {"op": "get"})[1]["source"], "folder")
+            code, r = self.req("POST", path, {"op": "instruct", "text": "word " * 5000})
+            self.assertEqual(code, 400)
+            self.assertIn("at most 4000", r["error"])
+            self.assertIn("0 left", r["error"])
+            code, r = self.req("POST", path, {"op": "instruct", "text": "Never give the answer away.", "remind": "no answers"})
+            self.assertEqual(code, 200, r)
+            self.assertGreater(r["left"], 3900)
+            self.assertEqual(self.req("POST", path, {"op": "ack", "ack": False})[0], 200)
+            g = self.req("POST", path, {"op": "get"})[1]
+            self.assertEqual((g["source"], g["instructions"], g["remind"], g["ack"]),
+                             ("session", "Never give the answer away.", "no answers", False))
+            self.assertEqual(self.desk.get(s["id"]).meta()["voice"]["remind"], "no answers")  # (saved with it)
+            self.assertEqual(self.req("POST", path, {"op": "context", "text": ""})[0], 400)
+            code, r = self.req("POST", "/api/live/start", {"sid": s["id"], "sdp": "v=0 offer"})
+            self.assertEqual(code, 200, r)
+            ins = self.fake.bodies[-1]["session"]["instructions"]
+            self.assertLess(ins.index("Delegation policy:"), ins.index(av.INSTRUCT_HEAD))
+            self.assertIn(av.INSTRUCT_HEAD + "\nNever give the answer away.", ins)
+            self.assertIn("- Session instructions (given below or later in this call) say to.", ins)
+            self.assertNotIn("Folder rule", ins)
+            self.assertIs(self.desk.live.call.cfg["live_ack"], False)
+            self.desk.live.call.hang_up()
+            self.assertEqual(self.req("POST", path, {"op": "instruct", "clear": True})[0], 200)
+            self.assertEqual(self.req("POST", path, {"op": "get"})[1]["source"], "folder")
+        finally:
+            Path(self.work, av.VOICE_FILE).unlink()
+
+    def test_voice_ops_into_the_call(self):
+        """Mid-call: instructions are appended (marked as replacing the earlier), material goes silently with the
+        reminder, in chunks within the API's 500 tokens; another session's ops leave the call alone."""
+        from orbit.services.live import agentvoice as av
+        s, r = self.start_call("Quiz")
+        path = f"/api/sessions/{s['id']}/voice"
+        r = self.req("POST", path, {"op": "instruct", "text": "Ask one question at a time.", "remind": "never give answers"})[1]
+        self.assertEqual((r["applied"], r["appends"]), (True, 1))
+        ins = self.fake.wait_got("session.instructions.append")
+        self.assertEqual(ins[0]["event_id"], f"vins_1_0")
+        self.assertTrue(ins[0]["content"].startswith(av.REPLACE_HEAD + "\nAsk one question"))
+        material = "\n\n".join(f"Block {k}: " + "the newton is the SI unit of force. " * 30 for k in range(6))
+        r = self.req("POST", path, {"op": "context", "text": material})[1]
+        self.assertGreater(r["appends"], 2)
+        ctx = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"].startswith("vctx_2_")]
+                   if len([e for e in self.fake.got("session.thinking.append") if e["event_id"].startswith("vctx_2_")]) == r["appends"] else None, 5)
+        self.assertTrue(ctx)
+        for e in ctx:
+            self.assertIsNone(e["delegation_id"])
+            self.assertLessEqual(av.tokens(e["content"]), 500)
+            self.assertIn("Rules still in force: never give answers", e["content"])
+        self.assertIn("Block 5", ctx[-1]["content"])
+        self.assertEqual(self.req("POST", path, {"op": "context", "text": "x " * 30000})[0], 400)  # over CONTEXT_MAX
+        other = self.new_session("Elsewhere")
+        r = self.req("POST", f"/api/sessions/{other['id']}/voice", {"op": "context", "text": "not for this call"})[1]
+        self.assertEqual(r["applied"], False)
+        self.assertNotIn("not for this call", json.dumps(self.fake.got("session.thinking.append")))
+        self.req("POST", path, {"op": "instruct", "clear": True})
+        self.assertTrue(wait(lambda: any("no longer apply" in e["content"] for e in self.fake.got("session.instructions.append")), 5))
+        self.assertIn('"voice_op"', Path(self.state, "live", self.desk.live.call.id + ".jsonl").read_text())
+
+    def test_voice_chunks_unit(self):
+        from orbit.services.live import agentvoice as av
+        text = "\n\n".join("Paragraph %d. " % k + "Some sentence here. " * 40 for k in range(10))
+        parts = av.chunks(text, 300)
+        self.assertTrue(all(av.tokens(x) <= 300 for x in parts))
+        self.assertEqual("".join(parts).replace(" ", "").replace("\n", ""), text.replace(" ", "").replace("\n", ""))
+        self.assertTrue(all(x.endswith(".") for x in parts[:-1]))  # (cut at a paragraph or sentence)
+
     def test_one_call_at_a_time(self):
         """A second call, from any session or device, is refused while one is on (409, saying which); after the first
         hangs up, a new one starts."""

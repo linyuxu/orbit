@@ -1473,9 +1473,15 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             m = re.fullmatch(r"/api/sessions/(\w[\w-]*~[\w-]+)/(\w+)", p)
             if m:
                 return self._remote_action(m.group(1), m.group(2), b)
-            m = re.fullmatch(r"/api/sessions/([\w-]+)/(send|stop|close|rename|restart|reopen|resume|update|move|clone|fork|continue|withdraw|edit|mention|mode|steer|model|note)", p)
+            m = re.fullmatch(r"/api/sessions/([\w-]+)/(send|stop|close|rename|restart|reopen|resume|update|move|clone|fork|continue|withdraw|edit|mention|mode|steer|model|note|voice)", p)
             if m:
                 sid, action = m.groups()
+                if action == "voice":  # its agent shapes and feeds the voice of a call with it (orbit-agent voice)
+                    from orbit.services.live import agentvoice
+                    try:
+                        return self._json(agentvoice.handle(self.desk, sid, b))
+                    except ValueError as e:
+                        return self._json({"error": str(e)}, 400)
                 if action == "steer":
                     return self._json(self.desk.steer(sid, str(b.get("text", "")), origin=self._origin(b.get("origin")),
                                                       client_id=b.get("client_id")))
