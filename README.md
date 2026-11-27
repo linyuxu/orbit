@@ -1,6 +1,6 @@
 # Orbit
 
-**An ADE (agentic development environment) where sessions, not files, are the documents.** Run Claude Code, Codex, agy and OpenCode side by side, across
+**An ADE (agentic development environment) where sessions, not files, are the documents.** Run Claude Code, Codex, agy and OpenCode side by side and have them work together, talk to them by voice, put them on schedules, across
 your projects and machines, in one window: each session is a tab with its conversation, its files and its diff;
 groups keep the work apart; the agents keep running when the window closes, and your phone shows the same.
 
@@ -8,9 +8,29 @@ groups keep the work apart; the agents keep running when the window closes, and 
 
 ## What it does
 
-- **Sessions as tabs.** A session runs one agent in one folder. Send a request, see its steps as they happen (folded
-  once it is done), its answer in Markdown, and queue the next while it works. Stop, steer, edit or resend a request;
-  fork a session (also to another agent, folder or machine).
+### Highlights
+
+- **Agents that work together.** A session can send another a request and wait for its answer, steer the one it is
+  running, read what it did, or leave it a note (`orbit-agent send --wait · steer · read · mention`); `@@Name` in your
+  request brings another session in. A request from a session shows who sent it, so a planner can farm work out to
+  specialists, a reviewer can check a builder's diff, and a Claude Code session can consult a Codex one, across
+  machines too.
+- **Real-time voice.** Talk to a session (GPT Live, over WebRTC): the voice answers what it can at once, hands the rest
+  to the agent as requests (waiting until you finish your sentence), and reads the results back in short, never over
+  you. Live captions; on the Mac and the phone.
+- **Rich text in, rich text out.** The input is an editor: Markdown, `@` files and folders, `@@` sessions, `/` the
+  agent's commands, pasted screenshots and dropped files, quotes from an answer or a file. Answers render as rich
+  documents: Markdown with tables, syntax-highlighted code, KaTeX math, images, links that open files at the line,
+  and an agent can show a full HTML page (a report, a chart) beside the conversation (`orbit-agent show`).
+- **Scheduler.** Requests on a schedule (`every 2h`, `weekdays 9am`, cron), to a session, a folder or a helper; watches
+  that run a check and wake an agent only when something changed; reminders pushed to the phone; agents schedule their
+  own follow-ups (`orbit-agent schedule`). A missed run catches up after a restart; each run is journaled.
+
+### And
+
+- **Sessions as tabs.** A session runs one agent in one folder. See a request's steps as they happen (folded once it
+  is done), queue the next while it works; stop, steer, edit or resend; fork a session (also to another agent, folder
+  or machine).
 - **Every agent, one way of working.** Claude Code, Codex, agy and OpenCode out of the box, any other agent through the
   [Orbit Harness Protocol](builddoc/harness-protocol.md). Conversations started in a terminal can be resumed in Orbit.
 - **Groups.** Sessions and files are arranged by what the work is about (nested up to three deep), each group with a
@@ -24,12 +44,8 @@ groups keep the work apart; the agents keep running when the window closes, and 
   show in your groups like local ones.
 - **Phone.** The same server on your iPhone's home screen: the sessions, their answers, notifications when a request
   finishes or needs you, and voice.
-- **Voice.** Talk to a session (GPT Live): it answers what it can and hands the rest to the agent as requests, then
-  reads the answers back in short.
-- **Notes and schedules.** A Markdown vault (Obsidian-compatible: wiki links, attachments, a weekly journal), and
-  schedules that send a request on a cron, remind you on the phone, or watch for a change.
-- **For agents too.** `orbit-agent` lets an agent read, ask and hand work to other sessions, open files beside the
-  conversation, and schedule its own follow-ups.
+- **Notes.** A Markdown vault (Obsidian-compatible: wiki links, attachments, a weekly journal) that agents write to
+  as well (`orbit-agent note`).
 - **Keyboard first.** Every action has a key or sits in a menu (⌘E); Emacs motion keys in every list.
 
 | | |
