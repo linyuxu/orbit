@@ -1,6 +1,6 @@
 # Orbit
 
-**An IDE whose documents are coding-agent sessions.** Run Claude Code, Codex, agy and OpenCode side by side, across
+**An ADE (agentic development environment) where sessions, not files, are the documents.** Run Claude Code, Codex, agy and OpenCode side by side, across
 your projects and machines, in one window: each session is a tab with its conversation, its files and its diff;
 groups keep the work apart; the agents keep running when the window closes, and your phone shows the same.
 

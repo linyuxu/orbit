@@ -1,6 +1,6 @@
 # Orbit guide
 
-Everything Orbit does, in detail. The overview, pictures and quick start are in the [README](../README.md).
+Everything Orbit, an agentic development environment (ADE), does, in detail. The overview, pictures and quick start are in the [README](../README.md).
 
 ## Setup
 
