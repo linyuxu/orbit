@@ -631,7 +631,8 @@ def cmd_voice(a: argparse.Namespace) -> None:
         print(f"instructions: {src}, about {r.get('tokens', 0)} of {r.get('max', 0)} tokens"
               + (f"\nreminder: {r['remind']}" if r.get("remind") else "")
               + f"\nack: {'Settings' if r.get('ack') is None else ('on' if r['ack'] else 'off')}"
-              + f"\ncall on this server: {'yes' if r.get('call') else 'no'}")
+              + "\ncall: " + ("running here" if r.get("call") else "running on the machine holding it"
+                               if r.get("call_elsewhere") else "none running"))
         if r.get("instructions"):
             print("\n" + r["instructions"])
         return
@@ -653,16 +654,19 @@ def cmd_voice(a: argparse.Namespace) -> None:
             sys.exit("orbit-agent: voice ack on | off | default")
         body = {"op": "ack", "ack": {"on": True, "off": False, "default": None}[a.src]}
     r = call("POST", path, body)
-    where = ("into the call now" if r.get("applied") else
-             "sent to the machine holding the call, if there is one" if r.get("asked") else "")
+    if not r.get("applied") and a.op in ("say", "context"):
+        sys.exit("orbit-agent: not delivered: no voice call with this session is running (no machine took it)")
+    if r.get("call") == "ended" and a.op in ("say", "context"):
+        sys.exit("orbit-agent: not delivered: the call was ending")
+    where = ("into the call now" + (f" (held by {r['by']})" if r.get("by") else "")) if r.get("applied") else ""
     if a.op == "instruct":
         print(f"voice instructions {'cleared' if a.clear else 'set'} (about {r.get('tokens', 0)} tokens, "
-              f"{r.get('left', 0)} left); at the next call" + (f", and {where}" if where else ""))
+              f"{r.get('left', 0)} left); at the next call" + (f", and {where}" if where else " (no call running now)"))
     elif a.op == "say":
-        print(f"said through the voice: {where}" + ("; the request running now gets no spoken result" if r.get("quiet") else ""))
+        print(f"said through the voice, {where}" + ("; the request running now gets no spoken result" if r.get("quiet") else ""))
     elif a.op == "context":
-        print(f"material sent (about {r.get('tokens', 0)} tokens; the voice has it in about {r.get('lands_s', 0)} s, "
-              f"after what was sent before it): {where}")
+        print(f"material sent {where} (about {r.get('tokens', 0)} tokens; the voice has it in about "
+              f"{r.get('lands_s', 0)} s, after what was sent before it)")
     else:
         print(f"ack {a.src}" + (f"; {where}" if where else ""))
 

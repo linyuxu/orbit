@@ -15,7 +15,9 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   make the voice hand over more, never less. Across machines too; call logs record the context window's fill.
   `voice say "…"` has the voice speak the agent's words (that request then gets no spoken result), `voice transcript
   [--follow]` reads the call as it runs (mirrored to the session's machine when another holds the call), and
-  `orbit-agent send --silent` sends a request a call with that session does not hear of.
+  `orbit-agent send --silent` sends a request a call with that session does not hear of. Across machines the machine
+  holding the call confirms each op (`say` / `context` with no call exit non-zero), and `voice show` sees a call held
+  elsewhere. The voice's state updates wait while it speaks (one spoken into a question came out garbled).
 - A voice call ends when you say so ("挂断", "关掉", "关闭实时语音", "hang up"): the voice says goodbye and Orbit hangs
   up (GPT Live cannot end a call itself). The session's agent can end it too, `orbit-agent hangup`, also when another
   machine holds the call.

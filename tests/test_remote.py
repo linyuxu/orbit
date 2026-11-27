@@ -494,7 +494,7 @@ class RemoteVoiceTest(RemoteTest):
             self.assertIn("Session instructions (from this session's agent", se["instructions"])
             self.assertIn("Quiz the user; one question at a time.", se["instructions"])
             # mid-call, from over there: a live-op event this server's federation takes into the call
-            self.assertEqual(rpost(f"/api/sessions/{rid}/voice", {"op": "context", "text": "Block 2: the watt."})["asked"], True)
+            self.assertEqual(rpost(f"/api/sessions/{rid}/voice", {"op": "context", "text": "Block 2: the watt."})["applied"], True)
             ctx = lambda: [e for e in fake.got("session.thinking.append") if e["event_id"].startswith("vctx_")]
             self.assertTrue(wait_for(ctx, 10))
             self.assertIn("Block 2: the watt.", ctx()[0]["content"])
@@ -513,11 +513,12 @@ class RemoteVoiceTest(RemoteTest):
                             and 'Last finished: request #3 ("typed over there")' in e["content"]]
             self.assertTrue(wait_for(snap, 10), [e["content"] for e in fake.got("session.thinking.append")])
             self.assertIn('"far" is idle', snap()[-1])
+            self.assertTrue(wait_for(lambda: rpost(f"/api/sessions/{rid}/voice", {"op": "get"})["call_elsewhere"], 10))
             # the transcript is mirrored over there: its agent reads the call where it runs (orbit-agent voice transcript)
             tr = lambda: rpost(f"/api/sessions/{rid}/voice", {"op": "transcript"})
             self.assertTrue(wait_for(lambda: "run the build" in json.dumps(tr()), 10), tr())
             # voice say from over there: through the voice here
-            self.assertEqual(rpost(f"/api/sessions/{rid}/voice", {"op": "say", "text": "Build is green."})["asked"], True)
+            self.assertEqual(rpost(f"/api/sessions/{rid}/voice", {"op": "say", "text": "Build is green."})["applied"], True)
             self.assertTrue(wait_for(lambda: any("Build is green." in e["content"] for e in fake.got("session.commentary.append")), 10))
             # its agent over there is asked to end the call (orbit-agent hangup): the call is this server's, it ends
             hreq = urllib.request.Request(f"http://127.0.0.1:{self.rport}/api/live/hangup", method="POST",

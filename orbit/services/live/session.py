@@ -43,6 +43,9 @@ GRACE_S = 0.4  # after a delegation, late transcript fragments still join its re
 TURN_WAIT_S = 8.0
 HANG_UP_WAIT_S = 6.0  # the voice's goodbye, at most this long, before Orbit hangs up when the user asked
 SPEAKING_HOLD_S = 1.2  # "speaking" this long after the last fragment of the voice's speech
+SNAP_AFTER_SAY_S = 4.0  # a state snapshot waits this long after the voice was asked to speak
+MIRROR_BEAT_S = 5.0  # a call held for another machine's session tells it it runs at least this often (the mirror)
+OP_WAIT_S = 3.0  # how long a voice op for a call held elsewhere waits for that machine to say it took it
 # The session's state, told silently (§6): changes within COALESCE_S go out as one snapshot; one that only moves the
 # agent's step on, at most every STEP_EVERY_S (each append is a chance for the voice to speak: real calls answered a
 # 10 s progress feed with "still working, one moment" 9 times in 13).
@@ -721,6 +724,7 @@ class Call:
         self.held: list[dict] = []  # appends that make the voice speak, waiting for the user to finish
         self.cache: dict = {}  # the bound session's cards as the event stream last showed them (card id → card)
         self.quiet: set = set()  # cards whose agent spoke through `voice say`: their result is not spoken again
+        self.said_at = 0.0  # when the voice was last asked to speak (a result, `voice say`): snapshots wait a moment
         self.mirrored = (0, -1, False)  # (turns done, chars, ended) last mirrored to the session's machine
         self.mirroring = False
         self.name = ""
@@ -1305,6 +1309,7 @@ class Call:
                 did = next((self.card_del[cid] for cid in running if cid in self.card_del), None)
             evs = agentvoice.say_events(n, str(b.get("text") or ""), did)
             self._say(evs)
+            self.said_at = time.time()
             self.log("voice_op", op=op, events=[e["event_id"] for e in evs], quiet=running)
             return {"call": self.id, "appends": len(evs), "quiet": running}
         else:
@@ -1332,7 +1337,8 @@ class Call:
             ts = transcript_turns(self.frags, self.ended or final, False)
             k, chars, was_ended = self.mirrored
             size = sum(len(t["text"]) for t in ts)
-            if (len([t for t in ts if t["done"]]), size, final) == (k, chars, was_ended) or (not ts and not final):
+            fresh = time.time() - getattr(self, "mirrored_at", 0) < MIRROR_BEAT_S
+            if (len([t for t in ts if t["done"]]), size, final) == (k, chars, was_ended) and fresh:
                 return
             self.mirroring = True
         try:
@@ -1340,6 +1346,7 @@ class Call:
                                                  "turns": ts[k:], "ended": final})
             with self.lock:
                 self.mirrored = (len([t for t in ts if t["done"]]), size, final)
+                self.mirrored_at = time.time()
         except Exception as e:  # noqa: BLE001 - the next change tries again
             self.log("mirror_failed", error=f"{type(e).__name__}: {e}"[:200])
         finally:
@@ -1579,6 +1586,11 @@ class Call:
         with self.lock:
             if not self.snap_due or now < self.snap_due or self.held or self.ended:
                 return
+            # Not into speech: a snapshot landing as the voice began a result's reply came out spoken, garbled
+            # ("一个 vector to 28; keep waiting 斜着…", 2026-11-27). After the voice pauses, and SNAP_AFTER_SAY_S
+            # after a spoken result (which already says what the snapshot would).
+            if now - (getattr(self, "last_voice", 0) or 0) < SPEAKING_HOLD_S or now - self.said_at < SNAP_AFTER_SAY_S:
+                return
             self.snap_due = 0.0
             seeded = self.seeded
         if not seeded and not self._seed(baseline=False):
@@ -1651,6 +1663,8 @@ class Call:
         with self.say_lock:  # (together: nothing between a result's detail and its commentary)
             if result is not None and result.get("cid") is not None:
                 self.said.add(result["cid"])
+            if any(e["type"] == "session.commentary.append" for e in evs):
+                self.said_at = time.time()
             for ev in evs:
                 self._send(ev)
 
@@ -1772,6 +1786,7 @@ class Live:
         # The transcripts of calls another machine holds with this server's sessions (that machine mirrors them here,
         # Call._mirror): sid → {call, started, turns, ended}. Memory only; the latest call of each session.
         self.mirrors: dict = {}
+        self.pending: dict = {}  # voice ops sent out to the machine holding the call: id → (event, its answer)
 
     def mirror(self, sid: str, b: dict) -> dict:
         with self.lock:
@@ -1782,6 +1797,7 @@ class Live:
             k = max(0, min(int(b.get("from") or 0), len(m["turns"])))
             m["turns"] = m["turns"][:k] + [t for t in (b.get("turns") or []) if isinstance(t, dict)]
             m["ended"] = bool(b.get("ended"))
+            m["at"] = time.time()
             if len(self.mirrors) > 50:
                 self.mirrors.pop(next(iter(self.mirrors)))
         return {"ok": True, "turns": len(m["turns"])}
@@ -1843,12 +1859,39 @@ class Live:
 
     def voice_op_for(self, sid: str, op: str, b: dict) -> dict:
         """A voice op of a session's agent: into this server's call with that session, else out as an event for the
-        server holding a call with it (its federation takes it, as hang_up_for)."""
+        server holding a call with it (its federation takes it, as hang_up_for), which says it took it (op_applied);
+        no answer within OP_WAIT_S: no call with this session runs anywhere."""
         c = self.call
         if c is not None and not c.ended and c.sid == sid:
             return {"applied": True, **c.voice_op(op, b)}
-        self.desk.broadcast({"t": "live-op", "sid": sid, "op": op, "b": b})
-        return {"applied": False, "asked": True}
+        oid = uuid.uuid4().hex[:12]
+        ev, box = threading.Event(), {}
+        with self.lock:
+            self.pending[oid] = (ev, box)
+        try:
+            self.desk.broadcast({"t": "live-op", "sid": sid, "op": op, "b": b, "id": oid})
+            if ev.wait(OP_WAIT_S):
+                return {"applied": True, "by": box.get("by", ""), **(box.get("result") or {})}
+        finally:
+            with self.lock:
+                self.pending.pop(oid, None)
+        return {"applied": False, "call": None}
+
+    def op_applied(self, oid: str, b: dict) -> dict:
+        """The machine holding the call took a voice op this server sent out (voice_op_for)."""
+        with self.lock:
+            ev, box = self.pending.get(oid, (None, None))
+        if ev is None:
+            return {"ok": False}
+        box.update({"by": str(b.get("by") or "")[:80], "result": b.get("result") if isinstance(b.get("result"), dict) else {}})
+        ev.set()
+        return {"ok": True}
+
+    def call_elsewhere(self, sid: str) -> bool:
+        """Another machine holds a running call with this session (its mirror is fresh)."""
+        with self.lock:
+            m = self.mirrors.get(sid)
+            return bool(m and not m["ended"] and time.time() - m.get("at", 0) < 3 * MIRROR_BEAT_S)
 
     def hang_up_for(self, sid: str) -> dict:
         """`orbit-agent hangup` from a session's agent: this server's call with that session ends; with no call here

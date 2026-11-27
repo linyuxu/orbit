@@ -146,6 +146,14 @@ Orbit has no tutor or interviewer mode; a session's agent composes one from thre
 A request sent `orbit-agent send --silent` (card `silent`) and a request quieted by `say` stay out of the state
 snapshots too.
 
+An op for a call another machine holds goes out as `live-op` with an id; that machine applies it and answers
+(`op: applied`, with who took it); no answer within 3 s means no call with the session runs, and `say` / `context` exit
+non-zero ("not delivered"). The mirror beats every 5 s, so `voice show` tells a call held elsewhere from none.
+
+State snapshots wait while the voice speaks and for 4 s after it was asked to speak (a result, `say`): in a real call a
+snapshot landing as the voice began a result's reply came out spoken, garbled into the question ("一个 vector to 28;
+keep waiting 斜着…"; the words are not Orbit's text, so the model's own, set off by the append mid-speech).
+
 Priority is fixed in the text: Orbit's rules come first and the session's instructions say they "may make you hand over
 to the backend more often, never less"; the delegation list gains "Session instructions say to". No reconnect mid-call:
 everything after the start is appended. A call held by another machine (this session its backend) gets the op as a

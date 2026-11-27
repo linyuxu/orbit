@@ -229,10 +229,16 @@ class Federation:
             live = getattr(self.desk, "live", None)
             c = live.call if live is not None else None
             if sid and c is not None and not c.ended and c.sid == join(name, sid) and isinstance(ev.get("b"), dict):
-                try:
-                    c.voice_op(str(ev.get("op", "")), ev["b"])
-                except ValueError:
-                    pass
+                def take(c=c, ev=ev, name=name, sid=sid):  # (then tell that machine it arrived: its agent is waiting)
+                    try:
+                        r = c.voice_op(str(ev.get("op", "")), ev["b"])
+                    except ValueError as e:
+                        r = {"error": str(e)}
+                    if ev.get("id"):
+                        import socket
+                        self.call(name, "POST", f"/api/sessions/{sid}/voice", {"op": "applied", "id": ev["id"], "result": r,
+                                                                              "by": socket.gethostname().split(".")[0]}, timeout=5)
+                threading.Thread(target=take, daemon=True).start()
         elif t == "side":  # a side panel changed over there: on every screen here too
             sid = str(ev.get("sid", ""))
             if SEP in sid or not sid:

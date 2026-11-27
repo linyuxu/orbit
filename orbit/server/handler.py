@@ -1478,7 +1478,7 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 sid, action = m.groups()
                 if action == "voice":  # its agent shapes and feeds the voice of a call with it (orbit-agent voice)
                     from orbit.services.live import agentvoice
-                    if b.get("op") == "mirror" and not self.from_remote:
+                    if b.get("op") in ("mirror", "applied") and not self.from_remote:
                         return self._json({"error": "a transcript mirror comes from the machine holding the call"}, 403)
                     try:
                         return self._json(agentvoice.handle(self.desk, sid, b))

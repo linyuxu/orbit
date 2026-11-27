@@ -144,11 +144,14 @@ def handle(desk, sid: str, b: dict) -> dict:
     live = getattr(desk, "live", None)
     if op == "get":
         c = live.call if live is not None else None
-        return {**effective(s), "call": bool(c is not None and not c.ended and c.sid == sid)}
+        here = bool(c is not None and not c.ended and c.sid == sid)
+        return {**effective(s), "call": here, "call_elsewhere": bool(live is not None and not here and live.call_elsewhere(sid))}
     if op == "transcript":
         return live.transcript_for(sid, int(b.get("since") or 0)) if live is not None else {"call": None, "turns": []}
     if op == "mirror":  # (from the machine holding the call: handler checks it is one)
         return live.mirror(sid, b)
+    if op == "applied":  # (the same: it took an op this server sent out)
+        return live.op_applied(str(b.get("id") or ""), b)
     if op == "instruct":
         text = "" if b.get("clear") else str(b.get("text") or "")
         remind = None if b.get("remind") is None else str(b.get("remind"))

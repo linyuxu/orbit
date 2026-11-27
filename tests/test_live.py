@@ -485,7 +485,7 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual(self.req("POST", path, {"op": "context", "text": "x " * 30000})[0], 400)  # over CONTEXT_MAX
         other = self.new_session("Elsewhere")
         r = self.req("POST", f"/api/sessions/{other['id']}/voice", {"op": "context", "text": "not for this call"})[1]
-        self.assertEqual(r["applied"], False)
+        self.assertEqual((r["applied"], r["call"]), (False, None))  # (no machine took it within OP_WAIT_S)
         self.assertNotIn("not for this call", json.dumps(self.fake.got("session.thinking.append")))
         self.req("POST", path, {"op": "instruct", "clear": True})
         self.assertTrue(wait(lambda: any("no longer apply" in e["content"] for e in self.fake.got("session.instructions.append")), 5))
@@ -532,6 +532,31 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertEqual(t["call"], r["call"])
         self.assertEqual(len(self.req("POST", path, {"op": "transcript", "since": 1600})[1]["turns"]), 1)
         self.assertEqual(self.req("POST", path, {"op": "mirror", "turns": []})[0], 403)  # (only from the machine holding a call)
+
+    def test_state_snapshot_waits_while_the_voice_speaks(self):
+        """A snapshot landing as the voice spoke came out spoken (garbled): it waits until the voice pauses."""
+        s, r = self.start_call("Talky")
+        c = self.desk.live.call
+        c.seeded = True  # (the baseline read: the next change is told)
+        stop = time.time() + 2.5
+
+        def talk():
+            k = 0
+            while time.time() < stop:
+                k += 1
+                self.fake.emit({"type": "session.output_transcript.delta", "event_id": f"talk{k}", "delta": "说",
+                                "start_ms": 1000 + 200 * k, "end_ms": 1200 + 200 * k})
+                time.sleep(0.2)
+        th = threading.Thread(target=talk)
+        th.start()
+        self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "typed while it talks"})
+        th.join()
+        states = lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"].startswith("state_")]
+        self.assertEqual(states(), [])
+        self.assertTrue(wait(states, 6))
+        sent = json.loads(next(l for l in Path(self.state, "live", r["call"] + ".jsonl").read_text().splitlines()
+                               if '"state_' in l and '"sent"' in l))["t"]
+        self.assertGreaterEqual(sent, stop + live.SPEAKING_HOLD_S - 0.3)
 
     def test_voice_chunks_unit(self):
         from orbit.services.live import agentvoice as av
@@ -850,7 +875,9 @@ class LiveTest(test_skeleton.SkeletonTest):
             self.fake.emit(t_in("flood the output", 1000, 2000, "h1"), delegation("del_f", 2100, "hd1"))
             self.wait_card(s["id"], 1, ("completed",), timeout=30)
             self.assertTrue(wait(lambda: self.commentary("del_f")))
-            time.sleep(0.8)
+            # (the state after it: SNAP_AFTER_SAY_S after the spoken result, not into its speech)
+            self.assertTrue(wait(lambda: any('Last finished: request #1' in e["content"] for e in self.fake.got("session.thinking.append")
+                                             if e["delegation_id"] is None), live.SNAP_AFTER_SAY_S + 3))
         finally:
             live.COALESCE_S = old
         th = self.fake.got("session.thinking.append")
