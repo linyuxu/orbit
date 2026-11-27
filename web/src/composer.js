@@ -42,7 +42,7 @@ function saveDraft() {
 }
 input.addEventListener("input", () => { autosize(); updateSend(); saveDraft(); updateMention(); });
 /* Completions in the input (editor.md §5): @@ the other sessions (title, id, group) · @ files and folders of the
-   session's folder (git-tracked + untracked, fuzzy) · / at a line start the skills and commands an agent there can run.
+   session's folder (git-tracked + untracked, fuzzy; ../ ~/ / browse outside it) · / at a line start the skills and commands an agent there can run.
    ↑↓ (⌃N ⌃P) move, ⏎ / Tab insert, Esc closes the list only. */
 const MENTION = { open: false, rows: [], i: 0, from: 0, kind: "", q: "" };
 const COMPLETE_CACHE = new Map();  // "files:<cwd>" / "skills:<cwd>" → { at, items }
@@ -71,6 +71,31 @@ const NATIVE = {
     usage: "plan usage and limits", init: "write a CLAUDE.md for this folder", review: "review a pull request", recap: "a recap of this session",
     "security-review": "security review of the pending changes", agents: "subagents", mcp: "MCP servers", config: "settings", insights: "usage insights" },
 };
+/* @ beyond the session's folder: "../", "~/" or "/" browses folders (the session's machine's: a remote session's
+   paths and ~ are that machine's), the part after the last "/" filtering the entries; a folder picked goes on into it. */
+const OUTSIDE = /^(\.\.\/|~\/|\/)/;
+function outsideDir(s, q) {  // → [the folder to list, as its machine writes it; the typed part before the name]
+  const typed = q.slice(0, q.lastIndexOf("/") + 1), cwd = s.remote ? s.cwd.replace(/^\/@[^/]+/, "") : s.cwd;
+  if (!typed.startsWith("../")) return [typed, typed];
+  const parts = cwd.split("/");
+  for (const seg of typed.split("/")) {
+    if (seg === "..") { if (parts.length > 1) parts.pop(); } else if (seg && seg !== ".") parts.push(seg);
+  }
+  return [(parts.join("/") || "/") + "/", typed];
+}
+async function outsideItems(s, q) {
+  const [dir, typed] = outsideDir(s, q), name = q.slice(typed.length).toLowerCase();
+  const key = `dir:${s.remote || ""}:${dir}`, hit = COMPLETE_CACHE.get(key);
+  let entries = hit && Date.now() - hit.at < 15000 ? hit.items : null;
+  if (!entries) {
+    try { entries = (await api("GET", (s.remote ? `/api/remote/${s.remote}` : "") + "/api/dirlist?path=" + encodeURIComponent(dir))).entries || []; }
+    catch { entries = []; }
+    COMPLETE_CACHE.set(key, { at: Date.now(), items: entries });
+  }
+  return entries.filter(e => name.startsWith(".") || !e.name.startsWith("."))  // (hidden ones when asked for)
+    .map((e, k) => ({ x: { path: typed + e.name + (e.dir ? "/" : ""), dir: e.dir },
+                      score: !name ? 1e6 - k : e.name.toLowerCase().startsWith(name) ? 1e5 - k : fuzzy(name, e.name) }));  // (folder order; then prefix, then fuzzy)
+}
 function slashItems(s, skills) {
   const label = harnessLabel(s.harness), names = new Set(ORBIT_CMDS.map(x => x.name));
   const out = ORBIT_CMDS.map(x => ({ ...x, source: "orbit", kind: "command" }));
@@ -96,9 +121,13 @@ async function updateMention() {
   if (kind === "session") {
     rows = [...S.sessions.values()].filter(x => x.id !== S.current && !x.fleet)
       .map(x => ({ x, score: q ? Math.max(fuzzy(q, x.name), fuzzy(q, mentionTag(x.name)), fuzzy(q, x.id), fuzzy(q, groupPath(x.group))) : 0 }));
+  } else if (kind === "file" && OUTSIDE.test(q)) {
+    rows = await outsideItems(s, q);
   } else if (kind === "file") {
     const items = await completeSource("files", s);
     rows = items.map(x => ({ x, score: q ? fuzzy(q, x.path) : -x.path.split("/").length - (x.dir ? 0 : 0.5) }));
+    if (["", ".", ".."].includes(q)) rows.push({ x: { path: "../", dir: true, out: true }, score: q ? 2000 : 0.5 });  // (the way out)
+    if (q === "~") rows.push({ x: { path: "~/", dir: true, out: true }, score: 2000 });
   } else {
     const items = slashItems(s, await completeSource("skills", s));
     rows = items.map((x, k) => ({ x, score: q ? Math.max(fuzzy(q, x.name) + 1000, fuzzy(q, x.description || "")) : -k }));  // name first, then description
@@ -114,11 +143,13 @@ function renderMention() {
   const pop = $("#mentionpop");
   pop.hidden = !MENTION.open;
   if (!MENTION.open) return;
-  const head = { session: "Mention a session", file: "A file or folder of this session's folder", skill: "A skill or command" }[MENTION.kind];
+  const head = MENTION.kind === "file" && OUTSIDE.test(MENTION.q) ? `In ${esc(MENTION.q.slice(0, MENTION.q.lastIndexOf("/") + 1))}`
+    : { session: "Mention a session", file: "A file or folder of this session's folder (../ or ~/: elsewhere)", skill: "A skill or command" }[MENTION.kind];
   const row = (x, k) => {
     const cls = `row${k === MENTION.i ? " sel" : ""}`;
     if (MENTION.kind === "session") return `<div class="${cls}" data-mi="${k}" role="option">${stateMark(x)}<span>${esc(mentionTag(x.name))}</span><span class="sub">${esc(groupPath(x.group))} · ${esc(x.id.slice(0, 8))}</span></div>`;
-    if (MENTION.kind === "file") return `<div class="${cls}" data-mi="${k}" role="option"><span class="ic">${I(x.dir ? "folder" : "file", 13)}</span><span>${esc(basename(x.path))}${x.dir ? "/" : ""}</span><span class="sub">${esc(dirname("/" + x.path).slice(1))}</span></div>`;
+    if (MENTION.kind === "file" && x.out) return `<div class="${cls}" data-mi="${k}" role="option"><span class="ic">${I("folder", 13)}</span><span>${esc(x.path)}</span><span class="sub">${x.path === "~/" ? "home folder" : "parent folder"}</span></div>`;
+    if (MENTION.kind === "file") return `<div class="${cls}" data-mi="${k}" role="option"><span class="ic">${I(x.dir ? "folder" : "file", 13)}</span><span>${esc(basename(x.path))}${x.dir ? "/" : ""}</span><span class="sub">${OUTSIDE.test(MENTION.q) ? "" : esc(dirname("/" + x.path.replace(/\/$/, "")).slice(1))}</span></div>`;
     return `<div class="${cls}" data-mi="${k}" role="option"><span>/${esc(x.name)}</span><span class="desc">${esc(x.description || "")}</span><span class="sub">${esc(x.source)}</span></div>`;
   };
   pop.innerHTML = `<div class="q">${head} · ↑↓ ⏎ / Tab · Esc</div>` + (MENTION.rows.length ? MENTION.rows.map(row).join("")

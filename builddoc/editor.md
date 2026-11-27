@@ -69,7 +69,7 @@ The active line's background is translucent: an opaque one hides the selection l
 | Send | ⌘⏎ sends, ⏎ is a new line; a failed send puts the text back |
 | Paste / drop | images and files are saved (session images folder) and inserted as `![](desk-img:…)` / a file link; the agent gets the paths |
 | `/` | the session folder's skills by name, then by description; `/mode …` |
-| `@` | files and folders of the session folder (git-tracked + untracked), fuzzy |
+| `@` | files and folders of the session folder (git-tracked + untracked), fuzzy; `@../`, `@~/`, `@/` browse folders outside it (the session's machine's), the part after the last `/` filtering; a folder picked goes on into it. `../` is offered at `@`, `@.`, `@..` |
 | `@@` | the other sessions (title, key, group); see `interaction.md` §11 |
 | ↑ in the empty input | the input history (searchable) |
 | Drafts | per session, kept across tab switches, ⌘⇧R and restarts |
