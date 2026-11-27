@@ -87,6 +87,15 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         self.assertIn("ack: off", self.agent("voice", "show", session=s["id"]).stdout)
         self.assertNotEqual(self.agent("voice", "ack", "maybe", session=s["id"]).returncode, 0)
         self.assertNotEqual(self.agent("voice", "show").returncode, 0)  # (outside a session)
+        r = self.agent("voice", "transcript", session=s["id"])
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no voice call with this session yet", r.stderr)
+        r = self.agent("voice", "say", "Hello", "Betsy", session=s["id"])  # (no call here: out for a machine that may hold one)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("said through the voice: sent to the machine holding the call", r.stdout)
+        other = self.new_session("Silent target")
+        self.assertEqual(self.agent("send", other["id"], "--silent", "quiet chore", session=s["id"]).returncode, 0)
+        self.assertTrue(self.desk.get(other["id"]).cards[-1].get("silent"))
 
     def test_ctx(self):
         self.assertIn("not reported", self.agent("ctx").stdout)

@@ -513,6 +513,12 @@ class RemoteVoiceTest(RemoteTest):
                             and 'Last finished: request #3 ("typed over there")' in e["content"]]
             self.assertTrue(wait_for(snap, 10), [e["content"] for e in fake.got("session.thinking.append")])
             self.assertIn('"far" is idle', snap()[-1])
+            # the transcript is mirrored over there: its agent reads the call where it runs (orbit-agent voice transcript)
+            tr = lambda: rpost(f"/api/sessions/{rid}/voice", {"op": "transcript"})
+            self.assertTrue(wait_for(lambda: "run the build" in json.dumps(tr()), 10), tr())
+            # voice say from over there: through the voice here
+            self.assertEqual(rpost(f"/api/sessions/{rid}/voice", {"op": "say", "text": "Build is green."})["asked"], True)
+            self.assertTrue(wait_for(lambda: any("Build is green." in e["content"] for e in fake.got("session.commentary.append")), 10))
             # its agent over there is asked to end the call (orbit-agent hangup): the call is this server's, it ends
             hreq = urllib.request.Request(f"http://127.0.0.1:{self.rport}/api/live/hangup", method="POST",
                                           data=json.dumps({"sid": rid}).encode(),
@@ -522,6 +528,7 @@ class RemoteVoiceTest(RemoteTest):
             self.assertTrue(wait_for(lambda: self.req("GET", "/api/live")[1].get("phase") in ("ended", None), 10))
             ok = wait_for(lambda: any(x.get("kind") == "note" for x in self.rdesk.cards(rid)), 10)
             self.assertTrue(ok, [l for f in Path(self.state, "live").glob("*.jsonl") for l in f.read_text().splitlines() if "note" in l])
+            self.assertTrue(wait_for(lambda: tr()["ended"], 10))  # (the last mirror says the call ended)
             note = next(x for x in self.rdesk.cards(rid) if x.get("kind") == "note")
             self.assertIn("run the build", note["answer"])
             self.assertEqual(note["origin"]["label"], "Voice")

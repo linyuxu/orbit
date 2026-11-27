@@ -10,6 +10,10 @@ composes these.
              chunks; each starts with the instructions' reminder line when the session has one ("Rules still in
              force: …"), so the rules stay near the newest material over a long call.
   ack        the spoken "on it" at a delegation, for this session's calls (None: Settings → Voice).
+  say        words for the voice to speak now, close to word for word (session.commentary.append: GPT Live words it
+             itself). The request the agent is running then gets no spoken result (its card shows everything).
+  transcript the call's transcript by turn ({who, start ms, text, done}); a call held by another machine mirrors it
+             to this session's machine (Call._mirror), so the agent reads it where it runs.
 
 The call is this server's when the session's call is held here; else (the call is held by the machine the user's
 page talks to, this session its backend over there) the op goes out as a `live-op` event that machine's federation
@@ -26,6 +30,7 @@ VOICE_FILE = ".orbit/voice.md"
 VERSION_MAX = 4000  # tokens of one version of a session's voice instructions
 REMIND_MAX = 120  # tokens of the reminder line sent with each context chunk
 CONTEXT_MAX = 6000  # tokens of one `voice context` (it goes out in chunks)
+SAY_MAX = 300  # tokens of one `voice say`
 CHUNK = 450  # tokens of one append (the API takes 500)
 LANDS_PER_S = 240  # tokens a second GPT Live injects appended context (measured: 60 × 400 tokens in 98 s)
 
@@ -116,6 +121,12 @@ def instruct_events(n: int, text: str) -> list[dict]:
             for k, x in enumerate(parts)]
 
 
+def say_events(n: int, text: str, did: str | None) -> list[dict]:
+    return [{"type": "session.commentary.append", "event_id": f"vsay_{n}", "delegation_id": did,
+             "content": "From this session's agent, to say to the user now, as close to word for word as you can, "
+                        "adding nothing: " + text.strip()}]
+
+
 def context_events(n: int, text: str, remind: str) -> list[dict]:
     head = CONTEXT_HEAD + (f"\nRules still in force: {remind.strip()}" if remind.strip() else "")
     parts = chunks(text, CHUNK - tokens(head) - 10)
@@ -134,6 +145,10 @@ def handle(desk, sid: str, b: dict) -> dict:
     if op == "get":
         c = live.call if live is not None else None
         return {**effective(s), "call": bool(c is not None and not c.ended and c.sid == sid)}
+    if op == "transcript":
+        return live.transcript_for(sid, int(b.get("since") or 0)) if live is not None else {"call": None, "turns": []}
+    if op == "mirror":  # (from the machine holding the call: handler checks it is one)
+        return live.mirror(sid, b)
     if op == "instruct":
         text = "" if b.get("clear") else str(b.get("text") or "")
         remind = None if b.get("remind") is None else str(b.get("remind"))
@@ -150,6 +165,14 @@ def handle(desk, sid: str, b: dict) -> dict:
         text = str(b.get("text") or "")
         check_context(text)
         body = {"text": text}
+    elif op == "say":
+        text = str(b.get("text") or "").strip()
+        if not text:
+            raise ValueError("nothing to say")
+        if tokens(text) > SAY_MAX:
+            raise ValueError(f"that is about {tokens(text)} tokens; `voice say` takes at most {SAY_MAX} (a few "
+                             f"sentences): say less, or send material with `voice context`")
+        body = {"text": text}
     elif op == "ack":
         a = b.get("ack")
         if a not in (True, False, None):
@@ -157,8 +180,8 @@ def handle(desk, sid: str, b: dict) -> dict:
         s.voice = {k: x for k, x in {**s.voice, "ack": a}.items() if x is not None}
         body = {"ack": a}
     else:
-        raise ValueError(f"no such voice op: {op} (get, instruct, context, ack)")
-    if op != "context":
+        raise ValueError(f"no such voice op: {op} (get, instruct, context, ack, say, transcript)")
+    if op in ("instruct", "ack"):
         desk.save()
     r = live.voice_op_for(sid, op, body) if live is not None else {"applied": False}
     return {"ok": True, "op": op, "tokens": tokens(body.get("text", "")), **r,

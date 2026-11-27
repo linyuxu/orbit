@@ -491,6 +491,48 @@ class LiveTest(test_skeleton.SkeletonTest):
         self.assertTrue(wait(lambda: any("no longer apply" in e["content"] for e in self.fake.got("session.instructions.append")), 5))
         self.assertIn('"voice_op"', Path(self.state, "live", self.desk.live.call.id + ".jsonl").read_text())
 
+    def test_voice_say_and_its_request_stays_quiet(self):
+        """voice say: commentary for the delegation the running request came from; that request's end is then told
+        silently, not spoken again. A request sent --silent never reaches the voice's state."""
+        s, r = self.start_call("Say")
+        path = f"/api/sessions/{s['id']}/voice"
+        self.fake.emit(t_in("slow lesson please", 500, 1500, "s1"), delegation("del_s", 1600, "ds"))
+        self.wait_card(s["id"], 1, ("running",))
+        self.assertTrue(wait(lambda: any(c.get("state") == "running" for c in self.desk.live.call.cache.values()), 5))
+        r = self.req("POST", path, {"op": "say", "text": "Hello Betsy, let's start with vectors."})[1]
+        self.assertEqual((r["applied"], r["quiet"]), (True, [1]))
+        say = self.fake.wait_got("session.commentary.append")
+        say = [e for e in self.fake.got("session.commentary.append") if e["event_id"].startswith("vsay_")]
+        self.assertEqual(say[0]["delegation_id"], "del_s")
+        self.assertIn("as close to word for word as you can", say[0]["content"])
+        self.assertIn("Hello Betsy, let's start with vectors.", say[0]["content"])
+        self.assertEqual(self.req("POST", path, {"op": "say", "text": "word " * 400})[0], 400)
+        self.req("POST", f"/api/sessions/{s['id']}/stop")
+        done = wait(lambda: [e for e in self.fake.got("session.thinking.append") if e["event_id"] == "result_del_s"], 8)
+        self.assertIn("its agent already told the user", done[0]["content"])
+        self.assertEqual([e for e in self.fake.got("session.commentary.append") if e["event_id"] == "result_del_s"], [])
+        c = self.req("POST", f"/api/sessions/{s['id']}/send", {"text": "background chore", "silent": True})[1]
+        self.assertIs(c["silent"], True)
+        self.wait_card(s["id"], c["id"], ("completed",))
+        time.sleep(live.COALESCE_S + 0.5)
+        self.assertNotIn("background chore", json.dumps(self.fake.got("session.thinking.append")))
+
+    def test_voice_transcript(self):
+        """voice transcript: the call's turns ({who, start, text, done}), from --since; none before a call."""
+        s0 = self.new_session("No call")
+        self.assertIsNone(self.req("POST", f"/api/sessions/{s0['id']}/voice", {"op": "transcript"})[1]["call"])
+        s, r = self.start_call("Words")
+        path = f"/api/sessions/{s['id']}/voice"
+        self.fake.emit(t_in("what is a vector", 500, 1500, "w1"))
+        self.fake.emit({"type": "session.output_transcript.delta", "event_id": "o1", "delta": "A quantity with direction.",
+                        "start_ms": 1700, "end_ms": 2600})
+        t = wait(lambda: (lambda x: x if len(x["turns"]) == 2 else None)(self.req("POST", path, {"op": "transcript"})[1]), 5)
+        self.assertEqual([(x["who"], x["text"], x["done"]) for x in t["turns"]],
+                         [("user", "what is a vector", True), ("voice", "A quantity with direction.", False)])
+        self.assertEqual(t["call"], r["call"])
+        self.assertEqual(len(self.req("POST", path, {"op": "transcript", "since": 1600})[1]["turns"]), 1)
+        self.assertEqual(self.req("POST", path, {"op": "mirror", "turns": []})[0], 403)  # (only from the machine holding a call)
+
     def test_voice_chunks_unit(self):
         from orbit.services.live import agentvoice as av
         text = "\n\n".join("Paragraph %d. " % k + "Some sentence here. " * 40 for k in range(10))

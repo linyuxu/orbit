@@ -140,6 +140,11 @@ Orbit has no tutor or interviewer mode; a session's agent composes one from thre
 | `instruct` (≤4000 tokens, kept with the session, else the folder's `.orbit/voice.md`) | in `instructions`, after Orbit's delegation and grounding, before Settings' style prompt | `session.instructions.append` in ≤450-token chunks, the first marked as replacing every earlier version |
 | `context` (≤6000 tokens a time) | (no call: refused only by size; nothing kept) | `session.thinking.append`, `delegation_id` null, each chunk headed by the instructions' one-line `--remind` ("Rules still in force: …") |
 | `ack` (on, off, default) | `live_ack` for this session's calls | `live_ack` of the running call |
+| `say` (≤300 tokens) | (no call: nothing) | `session.commentary.append` "to say … as close to word for word as you can", for the delegation the running request came from; that request's end is then a silent `thinking` line, not a spoken result |
+| `transcript` (`--since`, `--follow`) | the latest call's turns `{who, start, text, done}` | the holding machine mirrors the turns to the session's machine each second (`op: mirror`, only from another machine), the last push marked ended |
+
+A request sent `orbit-agent send --silent` (card `silent`) and a request quieted by `say` stay out of the state
+snapshots too.
 
 Priority is fixed in the text: Orbit's rules come first and the session's instructions say they "may make you hand over
 to the backend more often, never less"; the delegation list gains "Session instructions say to". No reconnect mid-call:

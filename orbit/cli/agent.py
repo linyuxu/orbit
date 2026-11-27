@@ -295,7 +295,8 @@ def cmd_send(a: argparse.Namespace) -> None:
     text = read_text(a.text)
     if not text.strip():
         sys.exit("orbit-agent: nothing to send (give TEXT or pipe it in)")
-    card = t.call("POST", f"/api/sessions/{t.s['id']}/send", {"text": _sender_prefix(text, t)})
+    card = t.call("POST", f"/api/sessions/{t.s['id']}/send", {"text": _sender_prefix(text, t),
+                                                              **({"silent": True} if a.silent else {})})
     if not a.wait:
         print(f"sent to {t.label} as #{card['id']}")
         return
@@ -621,6 +622,9 @@ def cmd_voice(a: argparse.Namespace) -> None:
         except OSError as e:
             sys.exit(f"orbit-agent: cannot read {src}: {e.strerror}")
 
+    if a.op == "transcript":
+        cmd_voice_transcript(a, path)
+        return
     if a.op == "show":
         r = call("POST", path, {"op": "get"})
         src = {"session": "this session's", "folder": "the folder's .orbit/voice.md", "": "none"}[r.get("source", "")]
@@ -641,6 +645,9 @@ def cmd_voice(a: argparse.Namespace) -> None:
         if not a.src:
             sys.exit("orbit-agent: voice context FILE (- : stdin)")
         body = {"op": "context", "text": text_of(a.src)}
+    elif a.op == "say":
+        text = read_text(a.words) if a.src == "-" or not a.src else " ".join([a.src, *a.words])
+        body = {"op": "say", "text": text}
     else:  # ack
         if a.src not in ("on", "off", "default"):
             sys.exit("orbit-agent: voice ack on | off | default")
@@ -651,11 +658,43 @@ def cmd_voice(a: argparse.Namespace) -> None:
     if a.op == "instruct":
         print(f"voice instructions {'cleared' if a.clear else 'set'} (about {r.get('tokens', 0)} tokens, "
               f"{r.get('left', 0)} left); at the next call" + (f", and {where}" if where else ""))
+    elif a.op == "say":
+        print(f"said through the voice: {where}" + ("; the request running now gets no spoken result" if r.get("quiet") else ""))
     elif a.op == "context":
         print(f"material sent (about {r.get('tokens', 0)} tokens; the voice has it in about {r.get('lands_s', 0)} s, "
               f"after what was sent before it): {where}")
     else:
         print(f"ack {a.src}" + (f"; {where}" if where else ""))
+
+
+def cmd_voice_transcript(a: argparse.Namespace, path: str) -> None:
+    """The call's transcript by turn; --follow: each turn as it completes, until the call ends."""
+    def line(t: dict) -> str:
+        s = int(t.get("start") or 0) // 1000
+        return f"[{s // 60}:{s % 60:02d}] {'User' if t.get('who') == 'user' else 'Voice'}: {t.get('text', '')}"
+
+    since = int(a.since or 0)
+    r = call("POST", path, {"op": "transcript", "since": since})
+    if not r.get("call") and not a.follow:
+        sys.exit("orbit-agent: no voice call with this session yet")
+    if not a.follow:
+        for t in r.get("turns") or []:
+            print(line(t) + ("" if t.get("done") else " …"))
+        if r.get("call"):
+            print(f"(call {'ended' if r.get('ended') else 'running'})")
+        return
+    printed: set = set()
+    while True:  # (no call yet: waits for one)
+        for t in r.get("turns") or []:
+            k = (t.get("who"), t.get("start"))
+            if t.get("done") and k not in printed:
+                printed.add(k)
+                print(line(t), flush=True)
+        if r.get("call") and r.get("ended"):
+            print("(call ended)", flush=True)
+            return
+        time.sleep(1)
+        r = call("POST", path, {"op": "transcript", "since": since})
 
 
 def cmd_remind(a: argparse.Namespace) -> None:
@@ -779,6 +818,7 @@ def main(argv: list[str] | None = None) -> None:
     se.add_argument("text", nargs="*", help="the request (- or none: stdin)")
     se.add_argument("--wait", action="store_true", help="wait for the answer and print it")
     se.add_argument("--timeout", type=int, default=600)
+    se.add_argument("--silent", action="store_true", help="a voice call with that session does not hear of it")
     se.set_defaults(func=cmd_send)
 
     st = sub.add_parser("steer", help="add a message to the request another session is running now")
@@ -855,8 +895,12 @@ def main(argv: list[str] | None = None) -> None:
     hu.set_defaults(func=cmd_hangup)
 
     vo = sub.add_parser("voice", help="shape the voice of a call with this session: instructions, silent material, ack")
-    vo.add_argument("op", choices=["instruct", "context", "ack", "show"])
-    vo.add_argument("src", nargs="?", default="", help="instruct/context: FILE (- : stdin); ack: on | off | default")
+    vo.add_argument("op", choices=["instruct", "context", "ack", "say", "transcript", "show"])
+    vo.add_argument("src", nargs="?", default="", help="instruct/context: FILE (- : stdin); ack: on | off | default; "
+                                                      "say: the words (- or none: stdin)")
+    vo.add_argument("words", nargs="*", help=argparse.SUPPRESS)
+    vo.add_argument("--since", type=int, default=0, help="transcript: turns from this many ms into the call")
+    vo.add_argument("--follow", action="store_true", help="transcript: each turn as it completes, until the call ends")
     vo.add_argument("--remind", default=None, help="instruct: a one-line reminder sent with each context batch")
     vo.add_argument("--clear", action="store_true", help="instruct: drop this session's instructions")
     vo.set_defaults(func=cmd_voice)

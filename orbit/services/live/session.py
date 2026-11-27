@@ -626,6 +626,14 @@ def turns(frags: list[dict]) -> list[tuple[str, int, str]]:
     return [(w, t, x.strip()) for w, t, x in out if x.strip()]
 
 
+def transcript_turns(frags: list[dict], ended: bool, quiet: bool, since: int = 0) -> list[dict]:
+    """turns() for `orbit-agent voice transcript`: [{who, start, text, done}] from since (ms); the last turn is done
+    once the call ended or nobody has spoken for a moment (quiet), the others always."""
+    ts = turns(frags)
+    return [{"who": w, "start": st, "text": x, "done": i < len(ts) - 1 or ended or quiet}
+            for i, (w, st, x) in enumerate(ts) if st >= since]
+
+
 def takeaway(answer: str, limit: int = SPEAK_TOKENS["brief"], more: int = DETAIL_TOKENS) -> tuple[str, str, bool]:
     """An answer for speaking (§6): plain paragraphs (plain()); whole ones while they fit in limit tokens (the first
     cut at a sentence when it alone is longer); the next ~more tokens as silent context for follow-up questions.
@@ -712,6 +720,9 @@ class Call:
         self.last_user = 0.0  # when a fragment of the user's speech last came (results wait while they talk)
         self.held: list[dict] = []  # appends that make the voice speak, waiting for the user to finish
         self.cache: dict = {}  # the bound session's cards as the event stream last showed them (card id → card)
+        self.quiet: set = set()  # cards whose agent spoke through `voice say`: their result is not spoken again
+        self.mirrored = (0, -1, False)  # (turns done, chars, ended) last mirrored to the session's machine
+        self.mirroring = False
         self.name = ""
         self.seeded = False
         self.snap_due = 0.0  # when the next session-state snapshot is due (0: no change since the last)
@@ -1287,6 +1298,15 @@ class Call:
         elif op == "ack":
             self.cfg["live_ack"] = config.current(self.desk.settings)["live_ack"] if b.get("ack") is None else bool(b["ack"])
             evs = []
+        elif op == "say":  # the agent speaks through the voice; the request it is running then gets no spoken result
+            with self.lock:
+                running = [cid for cid, c in self.cache.items() if c.get("state") in ACTIVE]
+                self.quiet.update(running)
+                did = next((self.card_del[cid] for cid in running if cid in self.card_del), None)
+            evs = agentvoice.say_events(n, str(b.get("text") or ""), did)
+            self._say(evs)
+            self.log("voice_op", op=op, events=[e["event_id"] for e in evs], quiet=running)
+            return {"call": self.id, "appends": len(evs), "quiet": running}
         else:
             raise ValueError(f"no such voice op: {op}")
         for ev in evs:
@@ -1294,6 +1314,37 @@ class Call:
         self.log("voice_op", op=op, events=[e["event_id"] for e in evs],
                  tokens=sum(agentvoice.tokens(e["content"]) for e in evs))
         return {"call": self.id, "appends": len(evs)}
+
+    def transcript(self, since: int = 0) -> dict:
+        with self.lock:
+            quiet = time.time() - max(getattr(self, "last_user", 0) or 0, getattr(self, "last_voice", 0) or 0) > 2
+            ts = transcript_turns(self.frags, self.ended, quiet, since)
+        return {"call": self.id, "ended": self.ended, "started": self.t0, "turns": ts}
+
+    def _mirror(self, final: bool = False) -> None:
+        """The transcript to the session's machine when it is another's (its agent reads it there: `voice transcript`),
+        from the first turn not yet sent as done; at most one push in flight, nothing when nothing changed."""
+        if self.target.remote is None:
+            return
+        with self.lock:
+            if self.mirroring and not final:
+                return
+            ts = transcript_turns(self.frags, self.ended or final, False)
+            k, chars, was_ended = self.mirrored
+            size = sum(len(t["text"]) for t in ts)
+            if (len([t for t in ts if t["done"]]), size, final) == (k, chars, was_ended) or (not ts and not final):
+                return
+            self.mirroring = True
+        try:
+            self.target._call("POST", "/voice", {"op": "mirror", "call": self.id, "started": self.t0, "from": k,
+                                                 "turns": ts[k:], "ended": final})
+            with self.lock:
+                self.mirrored = (len([t for t in ts if t["done"]]), size, final)
+        except Exception as e:  # noqa: BLE001 - the next change tries again
+            self.log("mirror_failed", error=f"{type(e).__name__}: {e}"[:200])
+        finally:
+            with self.lock:
+                self.mirroring = False
 
     def _hang_up_asked(self, did: str, d: dict, words: str) -> None:
         """"挂断" / "hang up": the voice says a short goodbye, then the call ends (as the page's hang-up does)."""
@@ -1535,7 +1586,8 @@ class Call:
                 self.snap_due = self.snap_due or now + 5
             return
         with self.lock:
-            text, big, step = state_snapshot(self.name, sorted(self.cache.values(), key=lambda c: c["id"]), now)
+            shown = [c for c in self.cache.values() if not c.get("silent") and c["id"] not in self.quiet]
+            text, big, step = state_snapshot(self.name, sorted(shown, key=lambda c: c["id"]), now)
             if (big, step) == (self.snap_big, self.snap_step):
                 return
             if big == self.snap_big and now - self.snap_at < STEP_EVERY_S:
@@ -1560,6 +1612,12 @@ class Call:
                 return
             d["done"] = True
         length = self.cfg["live_detail"]
+        if c["id"] in self.quiet:  # (its agent said what matters through `voice say`: done, silently)
+            self._say([{"type": "session.thinking.append", "event_id": f"result_{did}", "delegation_id": did,
+                        "content": f"Request #{c['id']} is {'done' if st == 'completed' else st}; its agent already told "
+                                   "the user what matters. Do not announce it."}],
+                      {"delegation": did, "cid": c["id"], "state": st, "finished": c.get("finished"), "quiet": True})
+            return
         evs = []
         more = result_detail(c, length)
         if more:  # first, silently: the voice has it when the commentary asks it to speak
@@ -1616,6 +1674,8 @@ class Call:
                 return
             if self.transport == "watch" and not self.closing and time.time() - self.audio_at > GAP_FILL_S:
                 self._append_audio(b"\0" * int(RATE * 0.25) * 2)  # (the watch's audio paused: the session's timeline goes on)
+            if n % 4 == 0 and self.target.remote is not None and not self.mirroring:
+                threading.Thread(target=self._mirror, daemon=True).start()
             try:
                 self._release()
                 self._snapshot()
@@ -1652,6 +1712,7 @@ class Call:
             self.reason = self.reason or reason
             self.error = self.error or error
         self.stop_ev.set()
+        threading.Thread(target=self._mirror, args=(True,), daemon=True).start()
         ws = self.ws
         if ws is not None:
             ws.close()
@@ -1708,6 +1769,34 @@ class Live:
         # What the user said for each request of a call (its words, from the transcript GPT Live sent here): the
         # proof that words an agent relays are the user's own (orbit/desk/relay.py). Memory only; the latest 300.
         self.heard: collections.deque = collections.deque(maxlen=300)
+        # The transcripts of calls another machine holds with this server's sessions (that machine mirrors them here,
+        # Call._mirror): sid → {call, started, turns, ended}. Memory only; the latest call of each session.
+        self.mirrors: dict = {}
+
+    def mirror(self, sid: str, b: dict) -> dict:
+        with self.lock:
+            m = self.mirrors.get(sid)
+            if m is None or m["call"] != b.get("call"):
+                m = self.mirrors[sid] = {"call": str(b.get("call") or ""), "started": b.get("started"), "turns": [],
+                                         "ended": False}
+            k = max(0, min(int(b.get("from") or 0), len(m["turns"])))
+            m["turns"] = m["turns"][:k] + [t for t in (b.get("turns") or []) if isinstance(t, dict)]
+            m["ended"] = bool(b.get("ended"))
+            if len(self.mirrors) > 50:
+                self.mirrors.pop(next(iter(self.mirrors)))
+        return {"ok": True, "turns": len(m["turns"])}
+
+    def transcript_for(self, sid: str, since: int = 0) -> dict:
+        """The transcript of the latest call with this session: this server's call, else the mirror of another
+        machine's."""
+        c = self.call
+        if c is not None and c.sid == sid:
+            return c.transcript(since)
+        with self.lock:
+            m = self.mirrors.get(sid)
+            if m is None:
+                return {"call": None, "ended": True, "turns": []}
+            return {**m, "turns": [t for t in m["turns"] if t.get("start", 0) >= since]}
 
     def hear(self, sid: str, words: str, call: str, delegation: str) -> None:
         if words.strip():

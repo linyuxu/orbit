@@ -1478,6 +1478,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                 sid, action = m.groups()
                 if action == "voice":  # its agent shapes and feeds the voice of a call with it (orbit-agent voice)
                     from orbit.services.live import agentvoice
+                    if b.get("op") == "mirror" and not self.from_remote:
+                        return self._json({"error": "a transcript mirror comes from the machine holding the call"}, 403)
                     try:
                         return self._json(agentvoice.handle(self.desk, sid, b))
                     except ValueError as e:
@@ -1514,7 +1516,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
                     return self._json({"ok": True})
                 if action == "send":
                     return self._json(self.desk.send(sid, b.get("text", ""), origin=self._origin(b.get("origin")),
-                                                     client_id=b.get("client_id"), first=bool(b.get("first"))))
+                                                     client_id=b.get("client_id"), first=bool(b.get("first")),
+                                                     silent=bool(b.get("silent"))))
                 if action == "withdraw":
                     self.desk.withdraw(sid, int(b.get("cid", 0)))
                     return self._json({"ok": True})
