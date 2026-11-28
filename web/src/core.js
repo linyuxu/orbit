@@ -22,18 +22,29 @@ if (EMBED) document.body.classList.add("embed");
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 /* An embedded page reads the main page's state but never writes it (its own keys live under orbit.embed.). */
+/* Several windows (the app's New Window, ⌘⇧N; a browser tab opened with ?win=…): the tab lists are the server's and
+   shared; what a window looks at is its own (?win= keys it; the first window has none and keeps the plain keys). A
+   window's own key, never written yet, starts from the first window's. */
+const WIN = EMBED ? "" : (PARAMS.get("win") || "").replace(/[^\w-]/g, "").slice(0, 24);
+const LS_WIN = new Set(["current", "file", "group", "lastTab", "left", "tabFocus", "sideW", "sides", "follow", "expanded",
+                        "convScroll", "threadScroll", "focus", "shellShown", "shellH"]);
 const LS = {
-  key: k => (EMBED ? "orbit.embed." : "orbit.") + k,
+  key: k => (EMBED ? "orbit.embed." : WIN && LS_WIN.has(k) ? `orbit.w.${WIN}.` : "orbit.") + k,
   get(k, d) {
     try {
       let v = localStorage.getItem(LS.key(k));
-      if (v == null && EMBED) v = localStorage.getItem("orbit." + k);
+      if (v == null && (EMBED || (WIN && LS_WIN.has(k)))) v = localStorage.getItem("orbit." + k);
       return v == null ? d : JSON.parse(v);
     } catch { return d; }
   },
   set(k, v) { try { localStorage.setItem(LS.key(k), JSON.stringify(v)); } catch {} },
 };
 
+/* A new window asked for a group (?group=): it opens there, on that group's last tab; the address forgets it. */
+if (WIN && PARAMS.get("group")) {
+  LS.set("group", PARAMS.get("group")); LS.set("current", null); LS.set("file", null);
+  const u = new URL(location.href); u.searchParams.delete("group"); history.replaceState(null, "", u);
+}
 /* Page errors and slow operations go to the server's page.log (state folder), at most 30 a minute. */
 const PLOG = { n: 0, since: 0, last: "" };
 function logPage(kind, data = {}) {

@@ -374,7 +374,7 @@ addEventListener("focus", () => setTimeout(() => { renderSide(); followSoon(); }
 /* Orbit's keys from an agent's page beside (its own origin: the server put a small script in it, handler.py
    SHOW_KEYS): only from a web side tab's frame, only these keys. */
 const WEB_KEYS = new Set(["MS:KeyO", "M:KeyW", "AS:BracketLeft", "AS:BracketRight", "M:Backslash", "MS:BracketLeft", "MS:BracketRight",
-  "M:KeyO", "MC:KeyO", "M:KeyK", "M:KeyJ", "M:KeyN", "M:KeyB", ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => "M:Digit" + i)]);
+  "M:KeyO", "MC:KeyO", "M:KeyK", "M:KeyJ", "M:KeyN", "M:KeyB", "M:Digit1"]);
 addEventListener("message", e => {
   if (!EMBED && e.data && e.data.orbit === "web-key") {
     const fr = [...FRAMES.values()].find(f => f.contentWindow === e.source && f.hasAttribute("sandbox"));

@@ -92,10 +92,12 @@ function switchGroup(gid, { focus = true, quiet = false } = {}) {
   record(tabKey());  // (the tab it lands on: ⌘- comes back to it)
   showCurrent(focus);
 }
-function groupByIndex(n) {
-  const g = topGroups()[n - 1];  // (the top groups: a subgroup is reached in its parent)
-  if (g && g.id === S.group && S.file !== HOME) { openHome(g.id); return; }  // (its key again: its home)
-  if (g) switchGroup(g.id); else toast(`No group ${n}: ⌘\` → Sessions to make one`);
+/* Another window (⌘⇧N, the app's New Window): the app opens one beside this, on this group; a browser, a tab keyed
+   ?win= (core.js: what a window looks at is its own, the tabs are the server's). */
+function newWindow() {
+  if (EMBED) return;
+  if (inApp()) shellAsk("new-window", S.group || "");
+  else window.open(`${location.origin}/?win=w${Math.random().toString(36).slice(2, 8)}&group=${encodeURIComponent(S.group || "")}`, "_blank");
 }
 /* The tab row: sessions and files are tabs alike, in one order per group (S.tabOrder; ⌘⌃H ⌘⌃L move any tab past
    any other). A tab never arranged yet goes after those that were: sessions in the server's order, then files. */

@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 use std::io::Write;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 /// The repository the app was built from: holds `orbit/`, `web/` and `.venv/`. `$ORBIT_ROOT` overrides it.
 const BUILD_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
@@ -165,6 +165,28 @@ fn orbit_url(first: bool) -> Url {
     let t = target();
     let q = if !t.local && first { format!("?token={}", t.token) } else { String::new() };
     format!("{}/{q}", t.base()).parse().expect("valid url")
+}
+
+/// A window's page: the first window ("main") keeps the plain address (its state keys as before); another carries its
+/// label (?win=: what it looks at is its own, core.js) and, when it opens, the group it starts on.
+fn window_url(label: &str, first: bool, group: &str) -> Url {
+    let mut u = orbit_url(first);
+    if label != "main" || !group.is_empty() {
+        let mut q = u.query_pairs_mut();
+        if label != "main" {
+            q.append_pair("win", label);
+        }
+        if !group.is_empty() {
+            q.append_pair("group", group);
+        }
+    }
+    u
+}
+
+/// The window the user works in: the focused one, else the first.
+fn front(app: &AppHandle) -> Option<WebviewWindow> {
+    let ws = app.webview_windows();
+    ws.values().find(|w| w.is_focused().unwrap_or(false)).cloned().or_else(|| ws.get("main").cloned())
 }
 
 /// This Mac's port (the server the app may start and stop).
@@ -380,10 +402,20 @@ fn js_string(s: &str) -> String {
 }
 
 fn show_failure(app: &AppHandle, msg: &str) {
-    if let Some(w) = app.get_webview_window("main") {
+    let ws: Vec<WebviewWindow> = app.webview_windows().into_values().collect();
+    for w in &ws {
         let _ = w.navigate("tauri://localhost/index.html".parse().expect("url"));
-        thread::sleep(Duration::from_millis(400));
+    }
+    thread::sleep(Duration::from_millis(400));
+    for w in &ws {
         let _ = w.eval(&format!("window.orbitFailed && orbitFailed({})", js_string(msg)));
+    }
+}
+
+/// Every window to its page (the server is up).
+fn open_pages(app: &AppHandle) {
+    for (label, w) in app.webview_windows() {
+        let _ = w.navigate(window_url(&label, true, ""));
     }
 }
 
@@ -397,10 +429,7 @@ fn boot(app: AppHandle) {
                 let msg = format!("Cannot reach the orbit server at {}.\nOn that machine: orbit serve --remote (in tmux), then orbit url.", t.label());
                 return show_failure(&app, &msg);
             }
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.navigate(orbit_url(true));
-            }
-            return;
+            return open_pages(&app);
         }
         if !port_open() {
             match spawn_server() {
@@ -428,9 +457,7 @@ fn boot(app: AppHandle) {
             }
             thread::sleep(Duration::from_millis(100));
         }
-        if let Some(w) = app.get_webview_window("main") {
-            let _ = w.navigate(orbit_url(true));
-        }
+        open_pages(&app);
     });
 }
 
@@ -457,6 +484,10 @@ fn shell_request(app: &AppHandle, url: &Url) -> bool {
             let app = app.clone();
             thread::spawn(move || connect(&app, &arg));
         }
+        "/new-window" => {
+            let app = app.clone();
+            thread::spawn(move || new_window(&app, &arg));
+        }
         "/open" if arg.starts_with("http://") || arg.starts_with("https://") || arg.starts_with("mailto:") => {
             let _ = Command::new("open").arg(&arg).spawn();
         }
@@ -467,7 +498,8 @@ fn shell_request(app: &AppHandle, url: &Url) -> bool {
 
 /// ⌘⇧R: reload the page, keeping drafts (the page's own reloadUi saves them first).
 fn reload(app: &AppHandle) {
-    let Some(w) = app.get_webview_window("main") else { return };
+    let Some(w) = front(app) else { return };
+    let label = w.label().to_string();
     if !target_open() {
         return boot(app.clone());
     }
@@ -477,13 +509,13 @@ fn reload(app: &AppHandle) {
         // A dialog owns the keys (its drafts would be lost); a broken page has no deskModal and reloads.
         let _ = w.eval("if (!(window.deskModal && deskModal())) (window.reloadUi || (() => location.reload()))()");
     } else {
-        let _ = w.navigate(orbit_url(true));
+        let _ = w.navigate(window_url(&label, true, ""));
     }
 }
 
 /// Run one of the page's shortcuts (a combo from its SHORTCUTS table, e.g. "M:KeyN"): menu items and native keys.
 fn route(app: &AppHandle, combo: &str) {
-    if let Some(w) = app.get_webview_window("main") {
+    if let Some(w) = front(app) {
         let _ = w.show();
         let _ = w.set_focus();
         let _ = w.eval(&format!("window.deskKey && deskKey({})", js_string(combo)));
@@ -493,7 +525,7 @@ fn route(app: &AppHandle, combo: &str) {
 /// Menu item id → the page's combo.
 const ROUTES: [(&str, &str); 10] = [
     ("settings", "M:Comma"),
-    ("left", "M:Backquote"),
+    ("left", "M:Digit1"),
     ("new-session", "M:KeyN"),
     ("open", "M:KeyO"),
     ("search", "MS:KeyF"),
@@ -509,10 +541,13 @@ fn frame_path() -> PathBuf {
     state_dir().join("window.txt")
 }
 
-/// The saved frame (logical x y w h), if it still lies on a connected display.
-fn saved_frame(app: &AppHandle) -> Option<(f64, f64, f64, f64)> {
-    let text = fs::read_to_string(frame_path()).ok()?;
-    let v: Vec<f64> = text.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+/// The other windows' frames: a line "label x y w h" each (the first window's is window.txt, as before).
+fn windows_path() -> PathBuf {
+    state_dir().join("windows.txt")
+}
+
+/// A frame (logical x y w h) that still lies on a connected display.
+fn visible_frame(app: &AppHandle, v: &[f64]) -> Option<(f64, f64, f64, f64)> {
     if v.len() != 4 || v[2] < 480.0 || v[3] < 360.0 {
         return None;
     }
@@ -526,15 +561,90 @@ fn saved_frame(app: &AppHandle) -> Option<(f64, f64, f64, f64)> {
     visible.then(|| (v[0], v[1], v[2], v[3]))
 }
 
-fn save_frame(app: &AppHandle) {
-    let Some(w) = app.get_webview_window("main") else { return };
+fn saved_frame(app: &AppHandle) -> Option<(f64, f64, f64, f64)> {
+    let text = fs::read_to_string(frame_path()).ok()?;
+    let v: Vec<f64> = text.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+    visible_frame(app, &v)
+}
+
+/// The other windows open when the app last quit: (label, frame).
+fn saved_windows(app: &AppHandle) -> Vec<(String, Option<(f64, f64, f64, f64)>)> {
+    let text = fs::read_to_string(windows_path()).unwrap_or_default();
+    text.lines()
+        .filter_map(|l| {
+            let mut it = l.split_whitespace();
+            let label = it.next()?.to_string();
+            let ok = label.starts_with('w') && label.len() <= 8 && label[1..].chars().all(|c| c.is_ascii_digit());
+            let v: Vec<f64> = it.filter_map(|x| x.parse().ok()).collect();
+            ok.then(|| (label, visible_frame(app, &v)))
+        })
+        .collect()
+}
+
+fn frame_of(w: &WebviewWindow) -> Option<(f64, f64, f64, f64)> {
     if w.is_fullscreen().unwrap_or(false) || w.is_minimized().unwrap_or(false) {
-        return;
+        return None;
     }
-    let (Ok(pos), Ok(size), Ok(sf)) = (w.outer_position(), w.inner_size(), w.scale_factor()) else { return };
-    let line = format!("{} {} {} {}\n", pos.x as f64 / sf, pos.y as f64 / sf, size.width as f64 / sf, size.height as f64 / sf);
+    let (Ok(pos), Ok(size), Ok(sf)) = (w.outer_position(), w.inner_size(), w.scale_factor()) else { return None };
+    Some((pos.x as f64 / sf, pos.y as f64 / sf, size.width as f64 / sf, size.height as f64 / sf))
+}
+
+/// Every window's frame; the other windows' list is what reopens next time (`gone`: one closing now, left out).
+fn save_frame(app: &AppHandle, gone: Option<&str>) {
     let _ = fs::create_dir_all(state_dir());
-    let _ = fs::write(frame_path(), line);
+    let mut others = String::new();
+    let mut ws: Vec<(String, WebviewWindow)> = app.webview_windows().into_iter().collect();
+    ws.sort_by(|a, b| a.0.cmp(&b.0));
+    for (label, w) in ws {
+        if Some(label.as_str()) == gone {
+            continue;
+        }
+        let f = frame_of(&w);
+        if label == "main" {
+            if let Some((x, y, wd, h)) = f {
+                let _ = fs::write(frame_path(), format!("{x} {y} {wd} {h}\n"));
+            }
+        } else if w.is_visible().unwrap_or(true) {
+            let (x, y, wd, h) = f.unwrap_or((0.0, 0.0, 0.0, 0.0));
+            others.push_str(&format!("{label} {x} {y} {wd} {h}\n"));
+        }
+    }
+    let _ = fs::write(windows_path(), others);
+}
+
+/// A window: the page's tab row is its title bar, the window buttons over its left end.
+fn make_window(app: &AppHandle, label: &str, url: WebviewUrl, frame: Option<(f64, f64, f64, f64)>) -> tauri::Result<WebviewWindow> {
+    let mut win = WebviewWindowBuilder::new(app, label, url).title(app_name()).min_inner_size(480.0, 360.0);
+    // No native title bar: the page's tab row is the title bar (ui.md: "the title bar holds only the tabs"),
+    // with the window buttons over its left end (the page leaves room: body.app #titlebar).
+    #[cfg(target_os = "macos")]
+    {
+        win = win
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true)
+            .traffic_light_position(tauri::LogicalPosition::new(TRAFFIC_X, TRAFFIC_Y));
+    }
+    win = match frame {
+        Some((x, y, w, h)) => win.position(x, y).inner_size(w, h),
+        None => win.inner_size(1280.0, 860.0).center(),
+    };
+    let nav = app.clone();
+    win = win.on_navigation(move |url| shell_request(&nav, url));
+    // Tells the page it runs in the app (links go to the system browser via the server).
+    win.initialization_script("window.__ORBIT_APP__ = true;").build()
+}
+
+/// ⌘⇧N (the page asks with its group): another window beside the one in front, on that group. Each window looks at a
+/// group of its own; the tabs are the server's, shared. ⌘` (macOS) goes from one to the next.
+fn new_window(app: &AppHandle, group: &str) {
+    let ws = app.webview_windows();
+    let Some(label) = (2..100).map(|n| format!("w{n}")).find(|l| !ws.contains_key(l)) else { return };
+    let frame = front(app).and_then(|w| frame_of(&w)).map(|(x, y, w, h)| (x + 28.0, y + 28.0, w, h));
+    let url = if target_open() { WebviewUrl::External(window_url(&label, false, group)) } else { WebviewUrl::App("index.html".into()) };
+    if let Ok(w) = make_window(app, &label, url, frame) {
+        let _ = w.set_focus();
+    }
+    save_frame(app, None);
 }
 
 /// GET a small JSON answer from the server the window shows (std only: one request every few seconds).
@@ -560,7 +670,7 @@ fn badge_loop(app: AppHandle) {
                 .and_then(|x| x.parse::<i64>().ok())
                 .unwrap_or(0);
             if last != Some(n) {
-                if let Some(w) = app.get_webview_window("main") {
+                if let Some(w) = app.webview_windows().into_values().next() {  // (the Dock's: one for the app)
                     let _ = w.set_badge_count(if n > 0 { Some(n) } else { None });
                 }
                 last = Some(n);
@@ -580,7 +690,7 @@ fn restart_server(app: &AppHandle) {
         if !ours && server_pid().is_none() {
             return reload(&app);  // a server started elsewhere (no pid file): not ours to restart
         }
-        if let Some(w) = app.get_webview_window("main") {
+        for w in app.webview_windows().into_values() {
             let _ = w.eval("window.saveDraft && saveDraft()");
         }
         stop_any_server(&app);  // ours, or one an earlier launch left running
@@ -594,8 +704,9 @@ fn restart_server(app: &AppHandle) {
 
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let reload = MenuItem::with_id(app, "reload", "Reload UI", true, Some("CmdOrCtrl+Shift+R"))?;
-    // ⌘` is a native key (macOS uses it to cycle windows): the shell owns it and routes it to the page.
-    let left = MenuItem::with_id(app, "left", "Toggle Left Panel", true, Some("CmdOrCtrl+`"))?;
+    // ⌘` stays macOS's: the next window (new_window). The left panel is ⌘1.
+    let left = MenuItem::with_id(app, "left", "Toggle Left Panel", true, Some("CmdOrCtrl+1"))?;
+    let new_win = MenuItem::with_id(app, "new-window", "New Window", true, Some("CmdOrCtrl+Shift+N"))?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
     // ⌘Z / ⌘⇧Z go to the page (deskUndo): an editor uses its own history; native undo would corrupt it.
     let undo = MenuItem::with_id(app, "undo", "Undo", true, Some("CmdOrCtrl+Z"))?;
@@ -667,14 +778,14 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         app,
         "Window",
         true,
-        &[&PredefinedMenuItem::minimize(app, None)?, &PredefinedMenuItem::maximize(app, None)?],
+        &[&new_win, &sep()?, &PredefinedMenuItem::minimize(app, None)?, &PredefinedMenuItem::maximize(app, None)?],
     )?;
     let help = Submenu::with_items(app, "Help", true, &[&item("shortcuts", "Keyboard Shortcuts (⌘/)")?])?;
     Menu::with_items(app, &[&app_menu, &file, &edit, &view, &window, &help])
 }
 
 fn drag_drop(window: &tauri::Window, e: &tauri::DragDropEvent) {
-    let Some(w) = window.app_handle().get_webview_window("main") else { return };
+    let Some(w) = window.app_handle().get_webview_window(window.label()) else { return };  // (the window dropped on)
     let k = window.scale_factor().unwrap_or(1.0);
     let paths = |ps: &Vec<std::path::PathBuf>| {
         ps.iter().map(|p| js_string(&p.to_string_lossy())).collect::<Vec<_>>().join(",")
@@ -697,38 +808,25 @@ fn main() {
         .setup(|app| {
             let handle = app.handle().clone();
             app.set_menu(build_menu(&handle)?)?;
-            let mut win = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .title(app_name())
-                .min_inner_size(480.0, 360.0);
-            // No native title bar: the page's tab row is the title bar (ui.md: "the title bar holds only the tabs"),
-            // with the window buttons over its left end (the page leaves room: body.app #titlebar).
-            #[cfg(target_os = "macos")]
-            {
-                win = win
-                    .title_bar_style(tauri::TitleBarStyle::Overlay)
-                    .hidden_title(true)
-                    .traffic_light_position(tauri::LogicalPosition::new(TRAFFIC_X, TRAFFIC_Y));
+            make_window(&handle, "main", WebviewUrl::App("index.html".into()), saved_frame(&handle))?;
+            for (label, frame) in saved_windows(&handle) {  // (the other windows open at the last quit)
+                let _ = make_window(&handle, &label, WebviewUrl::App("index.html".into()), frame);
             }
-            win = match saved_frame(&handle) {
-                Some((x, y, w, h)) => win.position(x, y).inner_size(w, h),
-                None => win.inner_size(1280.0, 860.0).center(),
-            };
-            let nav = handle.clone();
-            win = win.on_navigation(move |url| shell_request(&nav, url));
-            win
-                // Tells the page it runs in the app (links go to the system browser via the server).
-                .initialization_script("window.__ORBIT_APP__ = true;")
-                .build()?;
             boot(handle.clone());
             badge_loop(handle);
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            // Closing hides: the server keeps running agents and schedules. ⌘Q quits.
+            // Closing the first window hides it: the server keeps running agents and schedules. ⌘Q quits. Another
+            // window closes for good (it is not reopened next time).
             WindowEvent::CloseRequested { api, .. } => {
-                save_frame(window.app_handle());
-                api.prevent_close();
-                let _ = window.hide();
+                if window.label() == "main" {
+                    save_frame(window.app_handle(), None);
+                    api.prevent_close();
+                    let _ = window.hide();
+                } else {
+                    save_frame(window.app_handle(), Some(window.label()));
+                }
             }
             // Files dragged in from Finder: WKWebView never hands the page a drop (and a browser File has no path),
             // so the shell passes the real paths and where the pointer is (CSS px before the page's zoom).
@@ -738,14 +836,26 @@ fn main() {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "reload" => reload(app),
             "restart" => restart_server(app),
+            "new-window" => {
+                // The page asks with its group (newWindow, tabs.js); a window without its page: on no group.
+                match front(app) {
+                    Some(w) if w.url().map(|u| u.scheme() != "tauri").unwrap_or(false) => {
+                        let _ = w.eval("window.newWindow ? newWindow() : (location.href = 'http://orbit-shell.invalid/new-window?url=')");
+                    }
+                    _ => {
+                        let app = app.clone();
+                        thread::spawn(move || new_window(&app, ""));
+                    }
+                }
+            }
             "restart-hs" => {
-                if let Some(w) = app.get_webview_window("main") {
+                if let Some(w) = front(app) {
                     let _ = w.eval("window.restartHarnessServer && restartHarnessServer()");
                 }
             }
             "connect" => {
                 // The page's dialog when a page is up; the failure page has its own form.
-                if let Some(w) = app.get_webview_window("main") {
+                if let Some(w) = front(app) {
                     let _ = w.show();
                     let _ = w.eval("window.connectServer ? connectServer() : (window.orbitConnectForm && orbitConnectForm())");
                 }
@@ -755,7 +865,7 @@ fn main() {
                 app.exit(0);
             }
             "undo" | "redo" => {
-                if let Some(w) = app.get_webview_window("main") {
+                if let Some(w) = front(app) {
                     let redo = event.id().as_ref() == "redo";
                     let _ = w.eval(&format!(
                         "window.deskUndo ? deskUndo({redo}) : document.execCommand('{}')",
@@ -776,7 +886,7 @@ fn main() {
         .expect("failed to build the Orbit app");
 
     app.run(|app, event| match event {
-        RunEvent::ExitRequested { .. } => save_frame(app),
+        RunEvent::ExitRequested { .. } => save_frame(app, None),
         RunEvent::Exit => {
             // The backend keeps running (agents, schedules); the next launch reattaches to it on its port.
             if STOP_ON_EXIT.load(std::sync::atomic::Ordering::SeqCst) && target().local {
@@ -784,11 +894,13 @@ fn main() {
                 stop_any_server(app);  // (one that already exited: nothing left to do; else SIGTERM, then SIGKILL)
             }
         }
-        // The Dock icon (or opening the app again) brings the hidden window back.
-        RunEvent::Reopen { .. } => {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
+        // The Dock icon (or opening the app again) brings the hidden first window back when none is shown.
+        RunEvent::Reopen { has_visible_windows, .. } => {
+            if !has_visible_windows {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
             }
         }
         _ => {}

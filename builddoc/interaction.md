@@ -16,7 +16,7 @@ only list of shortcuts: the ⌘/ sheet is generated from the same data, and ever
 | 5 | Never steal focus | Background events (an answer arrives, an agent opens a file, a side tab loads) never move the keyboard; they toast or mark the tab |
 | 6 | Never lose input | Unsent drafts survive tab switches, ⌘⇧R and restarts; a failed send puts the text back |
 | 7 | Confirm only what is destructive | Closing a working session or deleting a file asks; ⏎ = OK, Esc = Cancel. Everything else acts at once |
-| 8 | Focus belongs to the tab | Each tab remembers whether the keyboard was in its main pane or its side pane and gets it back on return, whatever switched the tab (⌘⇧[ ⌘⇧], a click, ⌘1…9, ⌘O, ⌘- ⌘=). A tab not visited yet: where the keyboard is now (the side pane only if the tab has a side tab). Switching never moves the keyboard between panes on its own; ⌘⇧[ ⌘⇧] typed in the side pane switch tabs directly. Lists and dialogs that have the keyboard keep it |
+| 8 | Focus belongs to the tab | Each tab remembers whether the keyboard was in its main pane or its side pane and gets it back on return, whatever switched the tab (⌘⇧[ ⌘⇧], a click, ⌘O, ⌘- ⌘=). A tab not visited yet: where the keyboard is now (the side pane only if the tab has a side tab). Switching never moves the keyboard between panes on its own; ⌘⇧[ ⌘⇧] typed in the side pane switch tabs directly. Lists and dialogs that have the keyboard keep it |
 | 9 | Keep the user's focus | A look does not move the work: a click in a list shows its row where the current work stays in front (a file clicked in the Files panel opens beside, as a preview the next click replaces; the keyboard stays in the list). Going into something is explicit: ⏎ or a double-click (the main pane, the keyboard in it) |
 
 ## 2. The key handler
@@ -137,7 +137,7 @@ Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it
 | ⌘R | Recent: every kind of tab seen lately (sessions with a preview of their last answer, files, notes, threads), open or closed since; a closed file reopens as a preview. In the Groups panel on a group: rename the group |
 | ⌘W | Close what has the keyboard: the shown side tab (its neighbour shows), else the file tab, else the session tab: always asked (⏎ closes, Esc keeps it; it says so when the session is working), from ⌘W, its × or the menu alike; ⌘⇧T reopens. |
 | ⌘⇧T | Reopen the last closed tab (again: the one before) |
-| ⌘1…⌘9 | The groups in left-panel order (its key again: its home) |
+| ⌘⇧N | New window, on this group: each window looks at a group of its own, the tabs are shared (the server's); ⌘` (macOS) goes to the next window |
 | ⌘⇧[ ⌘⇧] | Previous / next tab (in the left panel or a finder: its tabs) |
 | ⌘⌃H ⌘⌃L | Move the tab left / right: session and file tabs are alike, in one order per group (the server's: every screen); in the Groups panel: move the group up / down. The mouse does the same: drag a tab along the row; in the Groups panel drag a session (onto another group to move it there) or a group's head (with its sessions): it follows the pointer and the others slide aside, as in a browser's tab strip; Esc puts it back |
 | ⌘- ⌘= | Back / forward through visited tabs |
@@ -166,7 +166,7 @@ Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it
 
 | Keys | Action |
 |---|---|
-| ⌘\` | Left panel (three-state toggle) |
+| ⌘1 | Left panel (three-state toggle) |
 | ⌘J | Shell in the session's folder (three-state toggle); Esc Esc back to the input |
 | ⌃X 1 | Close every panel beside the main one (and every side tab of this tab) |
 | ⌘⇧O | Keyboard: main panel ⇄ side tab |

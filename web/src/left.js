@@ -249,7 +249,7 @@ function sessionRows() {
     return { rows: out, hit, working, total };
   };
   const tops = topGroups();
-  const views = tops.map((g, i) => ({ gid: g.id, name: g.name, path: g.name, ix: i < 9 ? String(i + 1) : "", key: i < 9 ? `⌘${i + 1}` : "" }));
+  const views = tops.map(g => ({ gid: g.id, name: g.name, path: g.name, ix: "", key: "" }));  // (no ⌘ digit: a window per group, ⌘⇧N)
   for (const v of views) { const b = block(v, 0); if (b.hit) rows.push(...b.rows); }
   // The Fleet: helpers (⌘K quick asks, Prep, `--fleet` schedules, orbit-agent ask). No tab: one opens in the side pane.
   const fleet = [...S.sessions.values()].filter(s => s.fleet && machineOk(s))
@@ -335,7 +335,7 @@ function renderLeft() {
     if (r.kind === "fleetgrp") return `<div class="prow grp fleetgrp${kc}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" title="Fleet helpers: quick asks (⌘K), meeting Prep, --fleet schedules. One opens beside, in the side pane"><span class="ix">${I("zap", 11)}</span><span class="nm">Fleet</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     if (r.kind === "group") {
       const gc = (groupOf(r.gid) || {}).color;
-      return `<div class="prow grp${r.depth ? " sub" : ""}${gc ? " hued" : ""}${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}${gc ? `;--gc:${gc}` : ""}" title="${esc(r.depth ? groupPath(r.gid) : r.key)}"><span class="ix${r.ix ? " num" : ""}">${r.depth ? "" : esc(r.ix)}</span>${groupMark(r.gid, 14)}<span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
+      return `<div class="prow grp${r.depth ? " sub" : ""}${gc ? " hued" : ""}${kc}${r.gid === S.group ? " curgrp" : ""}${r.shut ? " shut" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}${gc ? `;--gc:${gc}` : ""}" title="${esc(r.depth ? groupPath(r.gid) : r.name)}">${groupMark(r.gid, 14)}<span class="nm">${esc(r.name)}</span>${fold(r)}<span class="cnt">${esc(r.count)}</span></div>`;
     }
     if (r.kind === "ftab") {
       const isCur = S.file === r.path && r.gid === S.group, m = /^\/@([\w-]+)(\/.*)$/.exec(r.path);

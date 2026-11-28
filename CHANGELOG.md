@@ -8,6 +8,11 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- Several windows: ⌘⇧N (Window → New Window) opens another on the group in front; ⌘` (macOS's own key) goes
+  from one to the next. Each window looks at a group of its own (and keeps it across a reload and a relaunch: the app
+  reopens the windows open at quit); the tab lists are the server's, shared, as on two machines. A browser gets the
+  same with a tab opened by ⌘⇧N (`?win=`). **Changed keys:** the left panel is ⌘1 (was ⌘`); ⌘2…⌘9 no longer
+  switch groups (the group chip, ⌘O, the left panel do). The Mac app needs rebuilding (`app/build-app.sh`).
 - A group's home starts with its statistics: This week (requests and agent time against the week before, how many
   finished, the median request, sessions working now, who asked: you, voice, other agents, schedules, plugins), Activity
   (12 weeks of days, coloured by requests) and Agent time (14 days, by session). From the requests of the group's

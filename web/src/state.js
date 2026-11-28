@@ -2,7 +2,7 @@
 /* ===================================================================== state */
 const S = {
   sessions: new Map(),            // open sessions, in tab order (the server's order)
-  groups: [],                     // [{id, name}] in left-panel order: ⌘1…⌘9
+  groups: [],                     // [{id, name}] in left-panel order
   cards: new Map(),               // sid → [card], loaded on first view
   cardState: new Map(),           // "sid:cid" → last seen state (notifications)
   current: LS.get("current", null),   // the session tab of this group (the folder files belong to)
@@ -49,7 +49,7 @@ const harnessLabel = id => (S.harnesses.find(h => h.id === id) || { label: id })
 const ACTIVE = new Set(["thinking", "running"]);
 const groupName = gid => (S.groups.find(g => g.id === gid) || { name: "?" }).name;
 /* Groups are a tree (orbit/desk/groups.py): {id, name, parent?}; a group's children are those whose parent it is, in
-   list order. GROUP_DEPTH levels at most. ⌘1…⌘9 are the top groups'. */
+   list order. GROUP_DEPTH levels at most. */
 const GROUP_DEPTH = 3;
 const groupOf = gid => S.groups.find(g => g.id === gid);
 const groupKids = parent => S.groups.filter(g => (g.parent || "") === (parent || ""));

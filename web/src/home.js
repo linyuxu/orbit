@@ -1,7 +1,7 @@
 "use strict";
 /* ===================================================================== a group's home page (its first tab) */
 /* Every group has a home: its first tab (the group pill, left of the tab row), shown by a click on the pill, on the
-   group in the left panel, or by the group's ⌘ digit pressed again. On it, widgets on a grid (orbit/desk/groups.py):
+   group in the left panel. On it, widgets on a grid (orbit/desk/groups.py):
    its sessions as cards, its subgroups (a click goes into one), its other tabs, the schedules that wake its
    sessions, what happened lately, what was pinned (by you, or an agent: `orbit-agent pin`), and Markdown notes of your
    own (files in the vault: Groups/<its path>/…; ⏎ or Edit writes in place, Esc is done; their checkboxes tick here).

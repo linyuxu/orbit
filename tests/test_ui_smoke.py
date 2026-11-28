@@ -140,6 +140,42 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.wait_for_timeout(200)
             self.assertIn("2 requests", page.evaluate("document.querySelector('#ctip').textContent"), name)
 
+    def test_windows_each_look_at_their_own_group(self):
+        """Several windows (?win=, the app's New Window): the tabs are shared, what a window looks at is its own and
+        stays its own after a reload; ?group= starts it there. ⌘1 is the left panel; ⌘2 no longer switches groups."""
+        a, b = self.group("Win A"), self.group("Win B")
+        self.session_in(a, "in A"), self.session_in(b, "in B")
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"switchGroup({json.dumps(a)})")
+            page.wait_for_timeout(300)
+            other = page.context.new_page()
+            other.goto(f"http://127.0.0.1:{self.port}/?win=w7&group={b}")
+            other.wait_for_function(READY, timeout=15000)
+            other.wait_for_timeout(500)
+            self.assertEqual(other.evaluate("[S.group, WIN, location.search]"), [b, "w7", "?win=w7"], name)  # (the address forgets the group)
+            self.assertEqual(page.evaluate("S.group"), a, name)
+            for p in (page, other):
+                p.reload()
+                p.wait_for_function(READY, timeout=15000)
+                p.wait_for_timeout(500)
+            self.assertEqual((page.evaluate("S.group"), other.evaluate("S.group")), (a, b), name)
+            with page.context.expect_page() as opened:  # (a browser's new window: a tab of its own)
+                page.evaluate("newWindow()")
+            nw = opened.value
+            nw.wait_for_function(READY, timeout=15000)
+            nw.wait_for_timeout(400)
+            self.assertEqual(nw.evaluate("S.group"), a, name)
+            self.assertTrue(nw.evaluate("WIN.startsWith('w')"), name)
+            nw.close(); other.close()
+            shown = page.evaluate("S.left.shown")
+            page.evaluate("deskKey('M:Digit1')")
+            page.wait_for_timeout(200)
+            self.assertNotEqual(page.evaluate("S.left.shown"), shown, name)
+            page.evaluate("deskKey('M:Digit2')")
+            page.wait_for_timeout(200)
+            self.assertEqual(page.evaluate("S.group"), a, name)
+
     def test_back_goes_across_groups(self):
         a, b = self.group("Hist A"), self.group("Hist B")
         sa, sb = self.session_in(a, "in A"), self.session_in(b, "in B")
@@ -1260,18 +1296,16 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.evaluate(f"openWiki('missing-{name}.png', {json.dumps(n)})"); page.wait_for_timeout(300)
             self.assertFalse(any(vault.rglob(f"missing-{name}.png.md")), name)
 
-    def test_no_favorites_and_cmd_1_is_the_first_group(self):
-        """No ★ Favorites view: the Groups panel and the group menu list the groups only, ⌘1 is the first group."""
+    def test_no_favorites_and_no_group_digits(self):
+        """No ★ Favorites view: the Groups panel and the group menu list the groups only; no ⌘ digit on a group (⌘1 is
+        the left panel, a window per group: ⌘⇧N), its mark starts the row."""
         for name, page in self.each():
             self.open(page)
             first = page.evaluate("topGroups()[0].id")
             page.evaluate("S.left.shown = true; applyLeft(); setPanelTab('sessions'); 0")
             page.wait_for_selector("#plist .prow.grp")
             self.assertNotIn("Favorites", page.inner_text("#plist"), name)
-            self.assertEqual(page.inner_text(f"#plist .prow.grp[data-k='g:{first}'] .ix").strip(), "1", name)
-            page.evaluate(f"switchGroup(topGroups()[1] ? topGroups()[1].id : {json.dumps(first)}); focusMain(); 0")
-            page.keyboard.press("Meta+1")
-            page.wait_for_function(f"() => S.group === {json.dumps(first)}", timeout=3000)
+            self.assertIsNone(page.query_selector(f"#plist .prow.grp[data-k='g:{first}'] .ix"), name)
             page.click("#grouppill .gcaret")
             page.wait_for_selector(".menu .row")
             self.assertNotIn("Favorites", page.inner_text(".menu"), name)

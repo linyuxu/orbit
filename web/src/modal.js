@@ -32,7 +32,7 @@ function openModal(m) {
   if (modal) closeModal();
   modal = m;
 }
-/* The app shell asks before it runs a native shortcut (⌘⇧R, ⌘`, menu items): a dialog here or in the side tab owns
+/* The app shell asks before it runs a native shortcut (⌘⇧R, ⌘1, menu items): a dialog here or in the side tab owns
    every key, so native shortcuts wait too. */
 /* ⌘Z / ⌘⇧Z from the app shell: an editor (CodeMirror) undoes in its own history; a text field natively; the side tab
    and the shell get theirs. */

@@ -64,7 +64,7 @@
 .prow.newgrp .ix { width:18px; height:18px; flex:none; display:inline-grid; place-items:center; }
 .prow.newgrp:hover { color:var(--ink); }
 /* the group's key (⌘2 …) as a small key cap; ★ ⚡ + take the same cell without one, so every name starts alike */
-.prow.grp .ix { width:18px; height:18px; flex:none; display:inline-grid; place-items:center; color:var(--ink-3); font-weight:calc(400 + var(--wd)); }
+.prow.grp .ix { width:14px; height:18px; flex:none; display:inline-grid; place-items:center; color:var(--ink-3); font-weight:calc(400 + var(--wd)); }
 .prow.grp .ix.num { border:1px solid var(--line); border-radius:5px; background:var(--surface); box-shadow:0 1px 0 var(--line);
   font:600 calc(10.5px * var(--ui-k))/16px var(--font); font-variant-numeric:tabular-nums; color:var(--ink-2); }
 .prow.grp.curgrp .ix.num { border-color:var(--ink-3); color:var(--ink); }
@@ -78,10 +78,10 @@
 .prow.grp:hover .fold, .prow.grp.kc .fold, .prow.grp.shut .fold { opacity:1; }
 .prow.grp .fold:hover { background:var(--btn-hover); color:var(--ink); }
 /* subgroups (groups are a tree, left.js): each level indents a step (--d: its depth), its sessions and tabs with it;
-   a subgroup's name a little lighter, a folder icon in the key cap's cell */
+   a subgroup's name a little lighter. A group's mark starts its row; its sessions start under it */
 .prow.grp { padding-left:calc(8px + var(--d, 0) * 18px); }
-.prow.ss { padding-left:calc(34px + var(--d, 0) * 18px); }
-.prow.ftab { padding-left:calc(53px + var(--d, 0) * 18px); }
+.prow.ss { padding-left:calc(8px + var(--d, 0) * 18px); }
+.prow.ftab { padding-left:calc(27px + var(--d, 0) * 18px); }
 .prow.grp.sub { margin-top:1px; font-weight:calc(550 + var(--wd)); color:var(--ink); }
 .prow.grp.sub .ix { color:var(--ink-3); opacity:.8; }
 .prow:hover { background:var(--hover); }
