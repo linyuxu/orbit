@@ -4,14 +4,14 @@
    (network first: an update shows at the next start, not the one after; the server is the user's own machine), and
    from the cache when it does not (offline, or the tailnet away). /api/* is never cached (live data, the event
    stream, uploads), nor the manifest (it carries the token). */
-const CACHE = "orbit-m-39";
+const CACHE = "orbit-m-40";
 const PUSH_BOX = "orbit-push";  // (a tapped notification's session, for the page to open: kept across versions)
 const WAIT = 2000;
 const SHELL = [
   "/m/", "/m/m.css", "/m/m-core.js", "/m/m-cards.js", "/m/m-list.js", "/m/m-conv.js", "/m/m-voice.js", "/m/m-sheets.js",
   "/m/m-tabs.js", "/m/m-files.js", "/m/m-side.js", "/m/m-notes.js", "/m/m-misc.js", "/m/m-push.js", "/m/m-pviews.js", "/m/m.js",
   "/m/icon-192.png", "/m/apple-touch-icon.png",
-  "/styles/base.css", "/src/scriptguard.js", "/src/markdown-base.js", "/src/markdown.js", "/src/brands.js", "/src/fileicons.js", "/src/voice-core.js", "/src/cardpatch.js",
+  "/styles/base.css", "/src/scriptguard.js", "/src/markdown-base.js", "/src/markdown.js", "/src/brands.js", "/src/fileicons.js", "/src/voice-core.js", "/src/cardpatch.js", "/src/homestats.js", "/styles/stats.css",
   "/vendor/markdown-it.min.js", "/vendor/highlight.min.js", "/vendor/katex.min.js", "/vendor/katex.min.css",
   "/vendor/hljs-light.min.css", "/vendor/hljs-dark.min.css", "/vendor/cm.js",
 ];

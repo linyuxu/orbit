@@ -4,17 +4,21 @@
    hsMedian request, working now) and where the last 30 days' requests came from; Activity, the last 12 weeks' requests
    by day; Agent time, the last 14 days' agent time by session. All from the requests of the group's sessions
    (subgroups', closed ones and other machines' too), bucketed by this page's local day. Colours: the dataviz
-   reference palette, validated for colour-vision deficiency, light and dark (home.css --cat-*, --seq-*). */
+   reference palette, validated for colour-vision deficiency, light and dark (stats.css --cat-*, --seq-*). The phone's
+   group page shows This week and Activity too (m-list.js): what differs is passed in or looked up (hsOn). */
 const HS = { data: new Map(), tip: null };  // gid → {at, d, err, loading}
 const HS_SRC = { you: "You", voice: "Voice", agents: "Other agents", schedule: "Schedules", plugin: "Plugins", auto: "Agent's own" };
 const HS_DAYS = 84, HS_FRESH_MS = 60000, HS_BARS = 14, HS_TOP = 5;
-function statsOf(gid) {
+const hsOnPhone = () => typeof openHome !== "function";
+const hsOpenAttr = () => hsOnPhone() ? "data-open" : "data-hopen";  // (how a session opens on a click, on each)
+/* The numbers, fetched once a minute at most; when they come, `redraw` (else the Mac's home, if it shows the group). */
+function statsOf(gid, redraw) {
   const c = HS.data.get(gid);
   if ((!c || Date.now() - c.at > HS_FRESH_MS) && !(c && c.loading)) {
     HS.data.set(gid, { ...(c || {}), loading: true, at: (c && c.at) || 0 });
     api("GET", `/api/groups/${encodeURIComponent(gid)}/stats?days=${HS_DAYS}`)
       .then(d => HS.data.set(gid, { at: Date.now(), d }), e => HS.data.set(gid, { at: Date.now(), err: e.message }))
-      .then(() => { if (homeOn() && S.group === gid) renderHome(); });
+      .then(() => redraw ? redraw() : (homeOn() && S.group === gid && renderHome()));
   }
   return HS.data.get(gid);
 }
@@ -25,8 +29,8 @@ const hsDur = (r, now) => Math.max(0, (r[3] || (["thinking", "running"].includes
 const hsAsk = r => r[5] !== "auto";  // (requests: the agent's own turns count as its time, not as requests)
 function hsMedian(xs) { if (!xs.length) return 0; const a = [...xs].sort((x, y) => x - y), m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; }
 
-function statsBody(gid, w) {
-  const c = statsOf(gid);
+function statsBody(gid, w, redraw) {
+  const c = statsOf(gid, redraw);
   if (!c.d) return c.err ? `<div class="hempty">${esc(c.err)}</div>` : `<div class="hempty">Counting…</div>`;
   const d = c.d, now = d.now;
   const part = d.partial && d.partial.length ? `<div class="hsnote">Without ${esc(d.partial.join(", "))} (not reached).</div>` : "";
@@ -44,7 +48,9 @@ function hsKpis(gid, d, now) {
   const t = cur.reduce((a, r) => a + hsDur(r, now), 0), t0 = was.reduce((a, r) => a + hsDur(r, now), 0);
   const ended = cur.filter(r => ["completed", "error", "cancelled"].includes(r[4])), ok = ended.filter(r => r[4] === "completed");
   const med = hsMedian(ok.filter(hsAsk).map(r => hsDur(r, now)));
-  const working = subtreeSessions(gid).filter(s => s.state === "working" || s.agents > 0).length;
+  const inIt = hsOnPhone() ? new Set(groupSubtree(gid)) : null;
+  const working = (hsOnPhone() ? [...S.sessions.values()].filter(s => !s.fleet && inIt.has(s.group)) : subtreeSessions(gid))
+    .filter(s => s.state === "working" || s.agents > 0).length;
   // against the week before: a percentage once there is a base to compare with (else 1025 vs 2 reads ↑ 51150%)
   const delta = (a, b, small, fmt) => b >= small ? `${a >= b ? "↑" : "↓"} ${Math.abs(Math.round((a - b) / b * 100))}% vs the week before`
     : `vs ${b ? fmt(b) : "none"} the week before`;
@@ -73,7 +79,7 @@ function hsKpis(gid, d, now) {
 function hsCollab(d) {
   const es = (d.edges || []).slice(0, 4);
   if (!es.length) return "";
-  const end = x => S.sessions.has(x.sid) ? `<button class="clink" data-hopen="${esc(x.sid)}">${esc(sessionTitle(S.sessions.get(x.sid)) || x.name)}</button>`
+  const end = x => S.sessions.has(x.sid) ? `<button class="clink" ${hsOpenAttr()}="${esc(x.sid)}">${esc(sessionTitle(S.sessions.get(x.sid)) || x.name)}</button>`
     : `<span class="cname">${esc(x.name || "?")}</span>`;
   return `<div class="collab"><div class="srch">Agents working together, last 30 days</div>` +
     es.map(e => `<div class="crow" data-ct="${esc(`${e.from.name || "?"} sent ${e.to.name || "?"} ${e.n} request${e.n === 1 ? "" : "s"} (last 30 days)`)}">` +
@@ -164,5 +170,7 @@ function hsChartTip(e) {
   if (y < 6) y = e.clientY / k + 16;
   HS.tip.style.left = x + "px"; HS.tip.style.top = y + "px"; HS.tip.classList.add("show");
 }
-$("#xview").addEventListener("mousemove", hsChartTip);
-$("#xview").addEventListener("mouseleave", () => { if (HS.tip) HS.tip.classList.remove("show"); });
+if ($("#xview")) {  // (the Mac's page; the phone has no pointer to hover with)
+  $("#xview").addEventListener("mousemove", hsChartTip);
+  $("#xview").addEventListener("mouseleave", () => { if (HS.tip) HS.tip.classList.remove("show"); });
+}

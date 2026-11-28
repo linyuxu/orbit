@@ -59,7 +59,7 @@ const groupRowsHtml = (ss, gid) => ss.map(rowHtml).join("") + groupTabs(gid).map
    head (cover, colour, icon, path, what it holds), then its widgets in their order, one column: its sessions, its
    subgroups, its tabs, what was pinned, its notes (their checkboxes tick here), its schedules, what happened lately. */
 const GROUP_PAGES = new Set();
-const M_HOME = [{ id: "sessions", kind: "sessions" }, { id: "groups", kind: "groups" }, { id: "pins", kind: "pins" },
+const M_HOME = [{ id: "stats", kind: "stats" }, { id: "heatmap", kind: "heatmap" }, { id: "sessions", kind: "sessions" }, { id: "groups", kind: "groups" }, { id: "pins", kind: "pins" },
                 { id: "tabs", kind: "tabs" }, { id: "schedules", kind: "schedules" }, { id: "activity", kind: "activity" }];
 const M_TITLE = { sessions: "Sessions", groups: "Subgroups", tabs: "Files and views", schedules: "Schedules", activity: "Lately", pins: "Pinned" };
 const MD_FILES = new Map();  // path → {text, hash} | {error}
@@ -102,6 +102,10 @@ function mWidgetHtml(gid, w, page) {
     if (!c) { loadMdFile(path, page); return ""; }
     const ps = c.error ? [] : mParsePins(c.text);
     return ps.length ? `<section class="hsec${look}">${head("Pinned")}${ps.map(p => `<div class="hpin"><div class="ph">${esc(p.head)}${p.src ? ` · <a data-src="${esc(p.src)}">source</a>` : ""}</div><div class="pb md">${renderMd(p.body)}</div></div>`).join("")}</section>` : "";
+  }
+  if (w.kind === "stats" || w.kind === "heatmap") {  // (homestats.js, as on the Mac; Agent time's 14 bars: the Mac's only)
+    return `<section class="hsec hstats${look}" data-w="${esc(w.id)}">${head(w.kind === "stats" ? "This week" : "Activity")}` +
+      `<div class="hsbody">${statsBody(gid, w, () => { if (page.gid === gid) page.refresh(); })}</div></section>`;
   }
   if (w.kind === "md") {
     const c = MD_FILES.get(w.path);
@@ -149,9 +153,8 @@ function openGroupPage(gid) { MD_FILES.clear(); pushPage(groupPage(gid), "sessio
 function rowHtml(s) {
   const pv = sessionPreview(s), unread = isUnread(s), stopped = s.state === "stopped";
   return `<button class="srow${unread ? " unread" : ""}${stopped ? " stopped" : ""}" data-open="${esc(s.id)}">` +
-    `<span class="c-mark">${stateMark(s)}</span><span class="c-icon">${harnessIcon(s.harness, 16)}</span>` +
-    `<span class="l1"><span class="nm">${esc(sessionTitle(s))}</span>${machineTag(s)}` +
-    `${unread ? '<span class="udot" aria-label="New answer"></span>' : ""}<span class="tm">${esc(lastMoved(s))}</span></span>` +
+    `<span class="c-icon">${sessionMark(s, 16)}</span>` +
+    `<span class="l1"><span class="nm">${esc(sessionTitle(s))}</span>${machineTag(s)}<span class="tm">${esc(lastMoved(s))}</span></span>` +
     `<span class="l2${pv.dim ? " dim" : ""}">${esc(pv.text)}</span></button>`;
 }
 /* ---- the tab layout every screen shares (orbit/desk/layout.py): a group's file tabs (files, notes, a plugin's views,
@@ -198,7 +201,7 @@ function workingStripHtml() {
   return `<section class="wstrip"><div class="shead"><span class="gn">Working now</span><span class="cnt">${ws.length}</span></div>` +
     `<div class="wrow">${ws.map(s => {
       const t0 = s.state === "working" ? elapsedOf(s.id) : 0;  // (only subagents at work: how many, no request's time)
-      return `<button class="wchip" data-open="${esc(s.id)}">${stateMark(s)}${harnessIcon(s.harness, 16)}<span class="nm">${esc(sessionTitle(s))}</span>` +
+      return `<button class="wchip" data-open="${esc(s.id)}">${sessionMark(s, 16)}<span class="nm">${esc(sessionTitle(s))}</span>` +
         `${t0 ? `<span class="el" data-t0="${t0}">${dur(Date.now() / 1000 - t0)}</span>` : s.state !== "working" && s.agents > 0 ? `<span class="el">${agentsWord(s.agents)}</span>` : ""}</button>`;
     }).join("")}</div></section>`;
 }

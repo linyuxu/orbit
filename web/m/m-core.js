@@ -179,6 +179,14 @@ function sessionStatus(s) {  // {cls, word}: what the session is doing, or how i
             paused: { cls: "warn", word: "Paused" }, cancelled: { cls: "quiet", word: "Cancelled" } })[l.state] || { cls: "idle", word: "Ready" };
 }
 const markSvg = (cls, size = 14) => `<svg class="mk-${cls}" width="${size}" height="${size}" viewBox="0 0 16 16" aria-hidden="true">${MARK_SVG[cls]}</svg>`;
+/* A session's mark, as on the Mac (left.js sessionMark): its agent's icon, its state a dot at the top-left corner
+   when it calls for a look (working, needs you, failed, paused, a new answer); a stopped agent greyed. */
+function sessionMark(s, size = 16) {
+  const st = sessionStatus(s), fresh = typeof isUnread === "function" && isUnread(s);
+  const dot = { run: "run", attn: "attn", err: "err", warn: "warn" }[st.cls] || (st.cls === "ok" && fresh ? "ok" : "");
+  return `<span class="smark${st.cls === "stopped" ? " off" : ""}" title="${esc(st.word)}">${harnessIcon(s.harness, size)}` +
+    (dot ? `<i class="sdot ${dot}"></i>` : "") + `</span>`;
+}
 const stateMark = (s, size = 14) => { const st = sessionStatus(s); return `<span class="si ${st.cls}" title="${esc(st.word)}">${markSvg(st.cls, size)}</span>`; };
 const machineTag = s => s && s.remote ? `<span class="mtag${machineUp(s.remote) ? "" : " off"}">${esc(s.remote)}</span>` : "";
 /* A session's title in lists: its name, and · a short key when another open session has the same name. */
