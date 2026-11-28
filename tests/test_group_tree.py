@@ -179,6 +179,13 @@ class GroupTreeTest(test_skeleton.SkeletonTest):
         self.assertTrue(self.wait_card(out["id"], 1, ("completed",)))
         es = self.req("GET", f"/api/groups/{work}/stats?days=7")[1]["edges"]
         self.assertIn({"from": {"sid": a["id"], "name": "a"}, "to": {"sid": out["id"], "name": "outside"}, "n": 1}, es)
+        twin = self.new_session("a")  # (a bare name two sessions share: not taken for the group's one)
+        self.req("POST", f"/api/sessions/{out['id']}/send", {"text": '(from session "a") from the other a'})
+        self.assertTrue(self.wait_card(out["id"], 2, ("completed",)))
+        es = self.req("GET", f"/api/groups/{work}/stats?days=7")[1]["edges"]
+        self.assertIn({"from": {"sid": a["id"], "name": "a"}, "to": {"sid": out["id"], "name": "outside"}, "n": 1}, es)
+        self.assertFalse(any(e["from"]["sid"] == "" and e["to"]["sid"] == out["id"] for e in es), es)
+        self.req("POST", f"/api/sessions/{twin['id']}/close")
         self.assertEqual(self.req("GET", f"/api/groups/{sub}/stats")[1]["sessions"][0]["name"], "b")
         self.assertEqual(self.req("GET", f"/api/sessions/{a['id']}/stats?since=0")[0], 200)
         for card, want in [({"kind": "auto"}, "auto"), ({"origin": {"kind": "agent", "from": {"sid": "x"}}}, "agents"), ({"origin": {"label": "Voice"}}, "voice"), ({"origin": {"kind": "user-relay"}}, "you"),

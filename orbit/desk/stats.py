@@ -165,7 +165,6 @@ def collab(desk, ids: set[str], sessions: list[dict], recs: list[list], cut: flo
             to = sessions[r[0]]
             n[(who(r[6]), (to["id"], to["name"]))] += 1
     mine = {s["id"] for s in sessions}
-    names = {s["name"] for s in sessions}
     with desk.lock:
         elsewhere = [s for s in desk.sessions.values() if s.group not in ids and not s.fleet and not s.closed]
     for s in elsewhere:
@@ -180,7 +179,7 @@ def collab(desk, ids: set[str], sessions: list[dict], recs: list[list], cut: flo
             if not snd:
                 continue
             frm = who(snd)
-            if frm[0] in mine or (not frm[0] and frm[1] in names):
+            if frm[0] in mine:  # (only a sender known to be the group's: a bare name can be another session's)
                 n[(frm, (s.id, s.name))] += 1
     return [{"from": {"sid": f[0], "name": f[1]}, "to": {"sid": t[0], "name": t[1]}, "n": k}
             for (f, t), k in n.most_common(EDGES_MAX)]
