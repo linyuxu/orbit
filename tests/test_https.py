@@ -84,6 +84,7 @@ esac
         self.assertEqual(code, 200, b)
         self.assertEqual((on["on"], on["url"], on["port"]), (True, f"https://{TS_HOST}:8443", 8443))
         self.assertEqual(on["phone_url"], f"https://{TS_HOST}:8443/m/?token={self.token}")
+        self.assertEqual(on["ipad_url"], f"https://{TS_HOST}:8443/?token={self.token}")  # (Settings → Machines → iPad…)
         self.assertEqual(https.saved_url(self.state), f"https://{TS_HOST}:8443")  # what the guard reads
         off = json.loads(self.raw("/api/https", "POST", body={"on": False})[2])
         self.assertFalse(off["on"])
@@ -126,9 +127,6 @@ esac
         self.assertIn(b'apple-mobile-web-app-capable', b)
         code, h, _ = self.raw(f"/?token={self.token}", headers=tls)  # (a browser's link: to the address without it)
         self.assertEqual((code, h.get("Location")), (302, "/"))
-        st = json.loads(self.raw("/api/https")[2])
-        if st.get("on"):
-            self.assertTrue(st["ipad_url"].endswith(f"/?token={self.token}"))
 
     def test_the_phone_app(self):
         tls = {"Host": f"{TS_HOST}:8443", "X-Forwarded-Proto": "https"}
