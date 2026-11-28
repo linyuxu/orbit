@@ -84,7 +84,7 @@ function homeSummary(gid) {
 function sessionCard(s) {
   const pv = sessionPreview(s), st = sessionStatus(s);
   return `<button class="hcard ss ${st.cls}" data-hopen="${esc(s.id)}" title="${esc(st.title)}">` +
-    `<span class="h1">${stateMark(s)}${harnessIcon(s.harness)}<span class="nm">${esc(sessionTitle(s))}</span><span class="tm">${esc(lastMoved(s))}</span></span>` +
+    `<span class="h1">${sessionMark(s)}<span class="nm">${esc(sessionTitle(s))}</span><span class="tm">${esc(lastMoved(s))}</span></span>` +
     `<span class="h2${pv.dim ? " dim" : ""}">${esc(pv.text)}</span></button>`;
 }
 function groupCard(g) {
@@ -150,7 +150,7 @@ function widgetBody(gid, w) {
   }
   if (w.kind === "activity") {
     const ss = subtreeSessions(gid).filter(s => s.attention || (s.last && s.last.time)).sort((a, b) => !!b.attention - !!a.attention || ((b.last || {}).time || 0) - ((a.last || {}).time || 0)).slice(0, 8);
-    return ss.length ? `<div class="hlist">${ss.map(s => `<button class="hrow act" data-hopen="${esc(s.id)}">${stateMark(s)}<span class="nm">${esc(sessionTitle(s))}</span>` +
+    return ss.length ? `<div class="hlist">${ss.map(s => `<button class="hrow act" data-hopen="${esc(s.id)}">${sessionMark(s, 13)}<span class="nm">${esc(sessionTitle(s))}</span>` +
         `<span class="pv">${esc(s.attention ? "needs you: " + s.attention : sessionPreview(s).text)}</span><span class="tm">${esc(lastMoved(s))}</span></button>`).join("")}</div>`
       : `<div class="hempty">Nothing done here yet.</div>`;
   }

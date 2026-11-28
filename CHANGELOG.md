@@ -8,6 +8,10 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A session's state sits on its agent's icon: a dot at its top-left corner only when it calls for a look (working,
+  needs you, failed, paused, a new answer not seen yet), a stopped agent's icon greyed; no separate ✓ column. The
+  same in the left panel, tabs, side tabs, a group's home, ⌘O and @@. In the left panel what a group holds
+  (sessions, file tabs, subgroups) sits one step in from it.
 - Several windows: ⌘⇧N (Window → New Window) opens another on the group in front; ⌘` (macOS's own key) goes
   from one to the next. Each window looks at a group of its own (and keeps it across a reload and a relaunch: the app
   reopens the windows open at quit); the tab lists are the server's, shared, as on two machines. A browser gets the

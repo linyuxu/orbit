@@ -350,7 +350,7 @@ function renderLeft() {
     const st = sessionStatus(s), unread = S.unread.has(s.id) && !isCur, model = s.model_seen || s.model;
     const stopped = s.state === "stopped";
     return `<div class="prow ss${kc}${isCur ? " cur" : ""}${stopped ? " stopped" : ""}${unread ? " unread" : ""}" data-k="${esc(r.k)}" style="--d:${r.depth || 0}" data-tip="${esc(s.name)}">` +
-      `<span class="si ${st.cls}">${st.icon}</span>${harnessIcon(s.harness)}<span class="nm">${esc(sessionTitle(s))}</span>` +
+      `${sessionMark(s)}<span class="nm">${esc(sessionTitle(s))}</span>` +
       `${machineTag(s)}<span class="tm">${esc(lastMoved(s))}</span>${stopped ? `<button class="rsm" data-resume="${esc(s.id)}" title="Start its agent again">Resume</button>` : ""}</div>`;
   }).join("");
   revealCursor();
@@ -385,6 +385,15 @@ function sessionStatus(s) {  // {cls, icon, title}: what the session is doing, o
             paused: { cls: "warn", icon: I("pause", 11), title: "Its last request is paused (Continue goes on)" },
             cancelled: { cls: "quiet", icon: I("ban", 11), title: "Its last request was stopped" } })[l.state]
     || { cls: "idle", icon: "", title: "Ready: nothing asked yet" };
+}
+/* A session's mark wherever it is listed (the left panel, tabs, side tabs, its group's home, ⌘O, @@): its agent's
+   icon with its state on it, a dot at the top-left corner (only what calls for a look: working, needs you, failed,
+   paused, a new answer not seen yet); a stopped agent's icon greyed. Its title says the state in words. */
+function sessionMark(s, size = 14) {
+  const st = sessionStatus(s), seen = !(S.unread && S.unread.has(s.id)) || s.id === S.current;
+  const dot = { run: "run", attn: "attn", err: "err", warn: "warn" }[st.cls] || (st.cls === "ok" && !seen ? "ok" : "");
+  return `<span class="smark${st.cls === "stopped" ? " off" : ""}" title="${esc(st.title)}">${harnessIcon(s.harness, size)}` +
+    (dot ? `<i class="sdot ${dot}"></i>` : "") + `</span>`;
 }
 function lastMoved(s) {  // when it last did something: now while working, else its last request's end
   return s.state === "working" || s.agents > 0 ? "now" : ago((s.last && s.last.time) || s.created);
@@ -1092,7 +1101,7 @@ function renderPeek() {
   el.hidden = !s || S.left.tab !== "sessions";
   if (!s || el.hidden) return;
   const st = sessionStatus(s), pv = sessionPreview(s), model = s.model_seen || s.model;
-  el.innerHTML = `<div class="p1">${stateMark(s)}<span class="t">${esc(st.title)}${pv.dim ? "" : ": " + esc(pv.full)}</span></div>` +
+  el.innerHTML = `<div class="p1">${sessionMark(s, 13)}<span class="t">${esc(st.title)}${pv.dim ? "" : ": " + esc(pv.full)}</span></div>` +
     `<div class="p2">${esc(tilde(s.cwd))} · ${esc(harnessLabel(s.harness))}${model ? " · " + esc(model) : ""}</div>`;
 }
 plist.addEventListener("mouseover", e => { const row = e.target.closest(".prow.ss"); const k = row ? row.dataset.k : null; if (k !== PEEK_HOVER) { PEEK_HOVER = k; renderPeek(); } });

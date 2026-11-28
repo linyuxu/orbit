@@ -137,7 +137,7 @@ function calOpenHtml(ev, k) {
   const people = guests.length ? `<div class="mpeople">${guests.map(g => `<span class="mchip ${esc(g.status || "")}" title="${esc(g.name)}${g.status ? " · " + esc(g.status) : ""}">${calAvatar(g.name, " sm")}${esc(g.name)}</span>`).join("")}</div>` : "";
   const desc = (ev.notes || "").trim();
   const rel = calRelated(ev), prel = calPluginRelated(ev);
-  const relHtml = rel.map(s => `<span class="mses" data-ses="${esc(s.id)}" title="Open beside (the side pane)">${stateMark(s)}${esc(s.name)}</span>`).join("")
+  const relHtml = rel.map(s => `<span class="mses" data-ses="${esc(s.id)}" title="Open beside (the side pane)">${sessionMark(s, 12)}${esc(s.name)}</span>`).join("")
     + prel.map((x, i) => `<span class="mses mprel" data-prel="${esc(k)}:${i}" title="${esc([x.detail, x.url || (x.path && tilde(x.path)), "from " + x.plugin].filter(Boolean).join(" · "))}">${I(x.url ? "external" : x.path ? "file" : "link", 12)}${esc(x.title)}</span>`).join("");
   return `<div class="mopen" data-for="${esc(k)}">` +
     `<div class="mline">${esc([dayLabel(ev.start), calRange(ev), ev.calendar, ev.location, ev.recurring ? "repeats" : ""].filter(Boolean).join(" · "))}</div>` +

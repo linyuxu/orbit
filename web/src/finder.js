@@ -30,7 +30,7 @@ function finder({ title, tabs, start = 0, opener, lead }) {  // lead(q): items a
     const ft = box.querySelector(".ftabs");
     if (ft) ft.innerHTML = tabs.map((x, k) => `<button class="ptab${k === t ? " cur" : ""}" data-t="${k}">${esc(x.name)}</button>`).join("");
   };
-  const row = (it, k) => `<div class="frow${k === i ? " sel" : ""}" data-i="${k}">${it.mark ? stateMark(it.mark) : it.dot ? `<span class="dot ${it.dot}"></span>` : ""}${it.ficon ? `<span class="gi">${fileIcon(it.ficon)}</span>` : it.icon ? `<span style="color:var(--ink-3)">${I(it.icon, 13)}</span>` : it.iconHtml ? `<span class="gi">${it.iconHtml}</span>` : ""}<span class="fl">${esc(it.label)}</span>${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ""}<span class="fd">${boldTerms(it.detail || "", it.hl)}</span><span class="fk">${esc(it.key || "")}</span></div>`;
+  const row = (it, k) => `<div class="frow${k === i ? " sel" : ""}" data-i="${k}">${it.mark ? sessionMark(it.mark, 13) : it.dot ? `<span class="dot ${it.dot}"></span>` : ""}${it.mark ? "" : it.ficon ? `<span class="gi">${fileIcon(it.ficon)}</span>` : it.icon ? `<span style="color:var(--ink-3)">${I(it.icon, 13)}</span>` : it.iconHtml ? `<span class="gi">${it.iconHtml}</span>` : ""}<span class="fl">${esc(it.label)}</span>${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ""}<span class="fd">${boldTerms(it.detail || "", it.hl)}</span><span class="fk">${esc(it.key || "")}</span></div>`;
   const draw = () => {
     const s = q.value.trim();
     const server = !!tabs[t].search;  // the server already matched these

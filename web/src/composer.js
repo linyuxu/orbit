@@ -147,7 +147,7 @@ function renderMention() {
     : { session: "Mention a session", file: "A file or folder of this session's folder (../ or ~/: elsewhere)", skill: "A skill or command" }[MENTION.kind];
   const row = (x, k) => {
     const cls = `row${k === MENTION.i ? " sel" : ""}`;
-    if (MENTION.kind === "session") return `<div class="${cls}" data-mi="${k}" role="option">${stateMark(x)}<span>${esc(mentionTag(x.name))}</span><span class="sub">${esc(groupPath(x.group))} · ${esc(x.id.slice(0, 8))}</span></div>`;
+    if (MENTION.kind === "session") return `<div class="${cls}" data-mi="${k}" role="option">${sessionMark(x, 13)}<span>${esc(mentionTag(x.name))}</span><span class="sub">${esc(groupPath(x.group))} · ${esc(x.id.slice(0, 8))}</span></div>`;
     if (MENTION.kind === "file" && x.out) return `<div class="${cls}" data-mi="${k}" role="option"><span class="ic">${I("folder", 13)}</span><span>${esc(x.path)}</span><span class="sub">${x.path === "~/" ? "home folder" : "parent folder"}</span></div>`;
     if (MENTION.kind === "file") return `<div class="${cls}" data-mi="${k}" role="option"><span class="ic">${I(x.dir ? "folder" : "file", 13)}</span><span>${esc(basename(x.path))}${x.dir ? "/" : ""}</span><span class="sub">${OUTSIDE.test(MENTION.q) ? "" : esc(dirname("/" + x.path.replace(/\/$/, "")).slice(1))}</span></div>`;
     return `<div class="${cls}" data-mi="${k}" role="option"><span>/${esc(x.name)}</span><span class="desc">${esc(x.description || "")}</span><span class="sub">${esc(x.source)}</span></div>`;

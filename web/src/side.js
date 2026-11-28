@@ -89,7 +89,7 @@ function sideTitle(spec) {
 }
 /* A side tab's mark, as its main tab wears it: a session's status and agent, a file's type, a view's icon. */
 function sideIcon(spec) {
-  if (spec.kind === "session") { const s = S.sessions.get(spec.sid); return s ? stateMark(s) + harnessIcon(s.harness, 13) : `<span class="fi">${I("terminal", 13)}</span>`; }
+  if (spec.kind === "session") { const s = S.sessions.get(spec.sid); return s ? sessionMark(s, 13) : `<span class="fi">${I("terminal", 13)}</span>`; }
   if (spec.kind === "file") return `<span class="fi">${isView(spec.path) ? I(viewInfo(spec.path).icon, 13) : fileIcon(spec.path)}</span>`;
   if (spec.kind === "pview") return `<span class="fi">${I(pluginTabInfo(spec.path).icon, 13)}</span>`;
   const ic = { review: "swap", web: "external", schedules: "clock", calendar: "calendar" }[spec.kind] || "file";
