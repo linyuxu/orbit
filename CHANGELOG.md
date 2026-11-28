@@ -15,6 +15,7 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   header drag at once; 40 px rows and bigger buttons, what a hover would reveal always shown, 16 px text fields (no
   zoom on focus); the input stays above the on-screen keyboard; upright the left panel floats over the work. A
   tablet is no longer sent to the phone's app (only a screen 600 px wide or less is).
+  Two fingers pinching set Orbit's own zoom (as ⌘+ ⌘-), not the system's magnifying, which made the page jump.
 - A session's state sits on its agent's icon: a dot at its top-left corner only when it calls for a look (working,
   needs you, failed, paused, a new answer not seen yet), a stopped agent's icon greyed; no separate ✓ column. The
   same in the left panel, tabs, side tabs, a group's home, ⌘O and @@. In the left panel what a group holds

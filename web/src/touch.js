@@ -9,6 +9,7 @@
    - a second tap soon after the first, near it, is a double-click: the events a mouse sends (a click with detail 2,
      then a dblclick), so a file opens, a preview is kept, a widget's note is edited;
    - the page follows the visual viewport: the on-screen keyboard never covers the input (as the phone's, m.js);
+   - two fingers pinching set Orbit's own zoom (as ⌘+ ⌘-), not the system's magnifying;
    - narrower than OVER px (an upright iPad): the left panel floats over the work, with a scrim; a tap on the scrim, or a
      session or file opened from it, puts it away.
    touch.css has the rest: bigger targets, what a hover reveals always shown, 16 px text fields (no zoom on focus). */
@@ -125,6 +126,7 @@ if ("ontouchstart" in window && !EMBED) {
   /* The on-screen keyboard: iOS moves the visual viewport, not the layout; the app follows it (touch.css #app). */
   const fitViewport = () => {
     const vv = window.visualViewport; if (!vv) return;
+    if (Math.abs(vv.scale - 1) > 0.01) return;  // (the page zoomed by the system, not the keyboard: followed, it jumped)
     const r = document.documentElement.style;
     r.setProperty("--vvh", vv.height + "px");
     r.setProperty("--vvtop", vv.offsetTop + "px");
@@ -132,6 +134,19 @@ if ("ontouchstart" in window && !EMBED) {
     if (window.scrollY) window.scrollTo(0, 0);
   };
   if (window.visualViewport) { visualViewport.addEventListener("resize", fitViewport); visualViewport.addEventListener("scroll", fitViewport); }
+
+  /* Two fingers pinching: Orbit's own zoom (⌘+ ⌘-: the page laid out again, crisp), not the system's (it magnified the
+     page and the keyboard-following above made it jump). Safari's gesture events: its pinch is stopped, its scale kept;
+     the new size comes once the fingers lift (a layout per frame would flicker). */
+  let pinch0 = 0;
+  addEventListener("gesturestart", e => { e.preventDefault(); pinch0 = S.zoom; }, { passive: false });
+  addEventListener("gesturechange", e => e.preventDefault(), { passive: false });
+  addEventListener("gestureend", e => {
+    e.preventDefault();
+    if (!pinch0 || Math.abs(e.scale - 1) < 0.08) { pinch0 = 0; return; }
+    setZoom(pinch0 * e.scale); pinch0 = 0;
+    toast(`Zoom ${Math.round(S.zoom * 100)}%`);
+  }, { passive: false });
 
   /* Upright: the left panel floats over the work (touch.css body.tnarrow); the scrim, or what it opened, puts it away. */
   const narrow = () => matchMedia(`(max-width: ${TOUCH.OVER}px)`).matches;
