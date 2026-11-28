@@ -119,6 +119,10 @@ class Handler(Forward, Streams, Watch, BaseHTTPRequestHandler):
         """A request's origin as sent ({"label", "url"?, "data"?}), checked; the calling plugin's name added."""
         if not isinstance(o, dict):
             return None
+        if o.get("kind") == "agent":  # another session's request (orbit-agent send / steer): who, for Orbit; no label
+            f = o.get("from") if isinstance(o.get("from"), dict) else {}  # (a label would read as a plugin's on the card)
+            who = {k: str(f.get(k) or "")[:n] for k, n in (("sid", 80), ("name", 120), ("machine", 64))}
+            return {"kind": "agent", "from": who} if who["sid"] or who["name"] else None
         out: dict[str, Any] = {"label": str(o.get("label") or "")[:80]}
         url = str(o.get("url") or "")
         if url.startswith(("https://", "http://", "slack://")) and len(url) <= 1000:

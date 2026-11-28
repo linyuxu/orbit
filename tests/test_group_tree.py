@@ -165,9 +165,23 @@ class GroupTreeTest(test_skeleton.SkeletonTest):
         recs = {names[r[0]]: r for r in d["records"]}
         self.assertEqual((recs["a"][4], recs["a"][5], recs["b"][5]), ("completed", "you", "agents"))
         self.assertGreaterEqual(recs["a"][3], recs["a"][2])  # (finished after it started)
+        self.assertTrue(all(len(r) == 6 for r in d["records"]))  # (the sender stays on the server: it went into the edges)
+        self.assertEqual(d["edges"], [{"from": {"sid": a["id"], "name": "a"}, "to": {"sid": b["id"], "name": "b"}, "n": 1}])
+        # a request with its sender kept (orbit-agent send's origin): the card keeps it as is, no label
+        c = self.req("POST", f"/api/sessions/{a['id']}/send", {"text": '(from session "b") thanks',
+                                                              "origin": {"kind": "agent", "from": {"sid": b["id"], "name": "b", "machine": "m"}}})[1]
+        self.assertEqual(c["origin"], {"kind": "agent", "from": {"sid": b["id"], "name": "b", "machine": "m"}})
+        self.assertTrue(self.wait_card(a["id"], c["id"], ("completed",)))
+        es = self.req("GET", f"/api/groups/{work}/stats?days=7")[1]["edges"]
+        self.assertIn({"from": {"sid": b["id"], "name": "b"}, "to": {"sid": a["id"], "name": "a"}, "n": 1}, es)
+        out = self.new_session("outside")  # (to a session outside the group: from one of its own, it counts too)
+        self.req("POST", f"/api/sessions/{out['id']}/send", {"text": "hi", "origin": {"kind": "agent", "from": {"sid": a["id"], "name": "a"}}})
+        self.assertTrue(self.wait_card(out["id"], 1, ("completed",)))
+        es = self.req("GET", f"/api/groups/{work}/stats?days=7")[1]["edges"]
+        self.assertIn({"from": {"sid": a["id"], "name": "a"}, "to": {"sid": out["id"], "name": "outside"}, "n": 1}, es)
         self.assertEqual(self.req("GET", f"/api/groups/{sub}/stats")[1]["sessions"][0]["name"], "b")
         self.assertEqual(self.req("GET", f"/api/sessions/{a['id']}/stats?since=0")[0], 200)
-        for card, want in [({"kind": "auto"}, "auto"), ({"origin": {"label": "Voice"}}, "voice"), ({"origin": {"kind": "user-relay"}}, "you"),
+        for card, want in [({"kind": "auto"}, "auto"), ({"origin": {"kind": "agent", "from": {"sid": "x"}}}, "agents"), ({"origin": {"label": "Voice"}}, "voice"), ({"origin": {"kind": "user-relay"}}, "you"),
                            ({"origin": {"plugin": "slack", "label": "Slack"}}, "plugin"), ({"text": '(schedule "daily") go'}, "schedule"),
                            ({"text": "(from a terminal session in ~/x; …) hi"}, "agents"), ({"text": "Note from @@x (session 1) …"}, "agents"),
                            ({"text": "The user mentioned you from @@x …"}, "you"), ({"text": "plain"}, "you")]:

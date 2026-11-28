@@ -66,7 +66,18 @@ function hsKpis(gid, d, now) {
     bar = `<div class="srcs"><div class="srch">Who asked, last 30 days · ${total} requests</div><div class="sbar">${segs}</div>` +
       `<div class="slegend">${srcs.map(s => `<span><i style="background:var(--cat-${d.sources.indexOf(s) + 1})"></i>${esc(HS_SRC[s])} <b>${Math.round(by[s] / total * 100)}%</b></span>`).join("")}</div></div>`;
   }
-  return `<div class="kpis">${tiles}</div>${bar}`;
+  return `<div class="kpis">${tiles}</div>${bar}${hsCollab(d)}`;
+}
+/* Agents working together: the most frequent sender → receiver pairs of the last 30 days (either end in this group);
+   a session known here opens on a click. */
+function hsCollab(d) {
+  const es = (d.edges || []).slice(0, 4);
+  if (!es.length) return "";
+  const end = x => S.sessions.has(x.sid) ? `<button class="clink" data-hopen="${esc(x.sid)}">${esc(sessionTitle(S.sessions.get(x.sid)) || x.name)}</button>`
+    : `<span class="cname">${esc(x.name || "?")}</span>`;
+  return `<div class="collab"><div class="srch">Agents working together, last 30 days</div>` +
+    es.map(e => `<div class="crow" data-ct="${esc(`${e.from.name || "?"} sent ${e.to.name || "?"} ${e.n} request${e.n === 1 ? "" : "s"} (last 30 days)`)}">` +
+      `${end(e.from)}<span class="carrow">→</span>${end(e.to)}<span class="cn">×${e.n}</span></div>`).join("") + `</div>`;
 }
 
 /* ---------- Activity: 12 weeks of days, Monday on top; the colour is the day's requests */

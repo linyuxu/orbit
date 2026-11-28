@@ -295,12 +295,25 @@ def cmd_send(a: argparse.Namespace) -> None:
     text = read_text(a.text)
     if not text.strip():
         sys.exit("orbit-agent: nothing to send (give TEXT or pipe it in)")
-    card = t.call("POST", f"/api/sessions/{t.s['id']}/send", {"text": _sender_prefix(text, t),
+    card = t.call("POST", f"/api/sessions/{t.s['id']}/send", {"text": _sender_prefix(text, t), **_agent_origin(),
                                                               **({"silent": True} if a.silent else {})})
     if not a.wait:
         print(f"sent to {t.label} as #{card['id']}")
         return
     wait_answer(t, t.label, card["id"], a.timeout)
+
+
+def _agent_origin() -> dict:
+    """Who sent it, kept with the card ({"origin": {"kind": "agent", "from": {sid, name, machine}}}): the text's prefix
+    says it to the agent, this says it to Orbit (the group home's collaboration line, desk/stats.py). From a terminal
+    ($ORBIT_SESSION unset): nothing (the prefix names its folder)."""
+    if not me():
+        return {}
+    try:
+        who = next((x["name"] for x in call("GET", "/api/sessions")["sessions"] if x["id"] == me()), "")
+    except SystemExit:
+        who = ""
+    return {"origin": {"kind": "agent", "from": {"sid": me(), "name": who, "machine": socket.gethostname().split(".")[0]}}}
 
 
 def _sender_prefix(text: str, t: "Target | None" = None) -> str:
@@ -342,7 +355,7 @@ def cmd_steer(a: argparse.Namespace) -> None:
     text = read_text(a.text)
     if not text.strip():
         sys.exit("orbit-agent: nothing to steer with (give TEXT or pipe it in)")
-    card = t.call("POST", f"/api/sessions/{t.s['id']}/steer", {"text": _sender_prefix(text, t)})
+    card = t.call("POST", f"/api/sessions/{t.s['id']}/steer", {"text": _sender_prefix(text, t), **_agent_origin()})
     how = f"joined {t.label} #{card['id']} (running)" if card.get("steered") else \
         f"sent to {t.label} as #{card['id']} (nothing to steer: {'not running' if t.s['state'] != 'working' else 'its harness cannot'})"
     if not a.wait:

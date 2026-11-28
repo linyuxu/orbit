@@ -199,3 +199,10 @@ svg.heat .hc:hover, svg.atime .bar:hover { stroke:var(--ink); stroke-width:1.5; 
 #ctip { position:fixed; z-index:58; pointer-events:none; max-width:320px; padding:4px 8px; background:var(--surface); color:var(--ink);
   border-radius:var(--r-s); box-shadow:var(--menu-shadow); font-size:calc(12px * var(--ui-k)); opacity:0; transition:opacity .08s; white-space:nowrap; }
 #ctip.show { opacity:1; }
+.collab { margin-top:12px; }
+.collab .crow { display:flex; align-items:center; gap:6px; font-size:calc(12.5px * var(--ui-k)); color:var(--ink); padding:2px 0; min-width:0; }
+.collab .clink { all:unset; cursor:pointer; color:var(--ink); border-bottom:1px solid var(--line); max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.collab .clink:hover { border-bottom-color:var(--ink-3); }
+.collab .cname { color:var(--ink-2); max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.collab .carrow { color:var(--ink-3); }
+.collab .cn { color:var(--ink-3); font-variant-numeric:tabular-nums; }

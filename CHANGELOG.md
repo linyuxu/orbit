@@ -13,6 +13,9 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   (12 weeks of days, coloured by requests) and Agent time (14 days, by session). From the requests of the group's
   sessions, subgroups', closed and other machines' too (`GET /api/groups/<id>/stats`); a hover says the numbers. A
   home arranged before gets them once, on top.
+  It also lists who works with whom: the group's busiest agent-to-agent pairs of the last 30 days ("assistant → IDE Dev
+  ×8"), each a link to the session. `orbit-agent send` and `steer` now record the sending session with the request
+  (origin `{kind: agent, from}`), beside the text's `(from session …)` prefix the agent reads.
 - `@` in the input reaches files outside the session's folder: `@../`, `@~/` and `@/` browse folders (a remote
   session's are that machine's), typing filters, a folder picked goes on into it; `../` is offered at a bare `@`.
 - New session in a folder that does not exist yet makes it (also on another machine); a file there is refused.

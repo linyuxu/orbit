@@ -98,6 +98,22 @@ class AgentApiTest(test_skeleton.SkeletonTest):
         self.assertEqual(self.agent("send", other["id"], "--silent", "quiet chore", session=s["id"]).returncode, 0)
         self.assertTrue(self.desk.get(other["id"]).cards[-1].get("silent"))
 
+    def test_send_keeps_who_sent_it(self):
+        """orbit-agent send / steer from a session: the card keeps its sender (origin kind agent), the text its prefix."""
+        a, b = self.new_session("sender a"), self.new_session("receiver b")
+        r = self.agent("send", b["id"], "look at this", session=a["id"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(self.wait_card(b["id"], 1, ("completed",)))
+        c = self.req("GET", f"/api/sessions/{b['id']}/cards")[1]["cards"][0]
+        self.assertEqual((c["origin"]["kind"], c["origin"]["from"]["sid"], c["origin"]["from"]["name"]), ("agent", a["id"], "sender a"))
+        self.assertTrue(c["text"].startswith('(from session "sender a")'))
+        self.assertNotIn("label", c["origin"])
+        r = self.agent("steer", b["id"], "and this", session=a["id"])  # (idle: a request, with its sender too)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.req("GET", f"/api/sessions/{b['id']}/cards")[1]["cards"][-1]["origin"]["from"]["sid"], a["id"])
+        r = self.agent("send", b["id"], "from a terminal")  # ($ORBIT_SESSION unset: no sender kept)
+        self.assertNotIn("origin", self.req("GET", f"/api/sessions/{b['id']}/cards")[1]["cards"][-1])
+
     def test_ctx(self):
         self.assertIn("not reported", self.agent("ctx").stdout)
         ctx = {"session": {"id": "abc", "name": "demo", "cwd": "/w"}, "tab": {"kind": "file", "path": "/w/a.py", "line": 7},

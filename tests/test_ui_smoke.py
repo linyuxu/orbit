@@ -114,8 +114,12 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
         time by session; a hover on a day says its count."""
         gid = self.group("Counted home")
         sid = self.session_in(gid, "busy one")
+        helper = self.session_in(gid, "helper")
         self.req("POST", f"/api/sessions/{sid}/send", {"text": "count the files"})
         self.assertTrue(self.wait_card(sid, 1, ("completed",)))
+        self.req("POST", f"/api/sessions/{sid}/send", {"text": '(from session "helper") and the folders',
+                                                       "origin": {"kind": "agent", "from": {"sid": helper, "name": "helper"}}})
+        self.assertTrue(self.wait_card(sid, 2, ("completed",)))
         for name, page in self.each():
             self.open(page)
             page.evaluate(f"HS.data.clear(); openHome({json.dumps(gid)})")
@@ -125,14 +129,16 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
                 days: document.querySelectorAll('svg.heat rect.hc').length, lit: document.querySelectorAll('svg.heat rect.hc:not(.s0)').length,
                 titles: [...document.querySelectorAll('.hw header .t')].slice(0, 3).map(e => e.textContent)})""")
             self.assertEqual(got["titles"], ["This week", "Activity", "Agent time"], name)
-            self.assertEqual((got["tiles"], got["first"], got["who"]), (5, "1", True), name)
+            self.assertEqual((got["tiles"], got["first"], got["who"]), (5, "2", True), name)
+            row = page.evaluate("[document.querySelector('.collab .crow').innerText.replace(/\\s+/g, ' '), document.querySelector('.collab .clink').dataset.hopen]")
+            self.assertEqual(row, ["helper → busy one ×1", helper], name)  # (agents working together; a click opens the sender)
             self.assertGreater(got["days"], 70, name)
             self.assertEqual(got["lit"], 1, name)  # (today)
             cell = page.query_selector("svg.heat rect.hc:not(.s0)")
             bb = cell.bounding_box()
             page.mouse.move(bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2)
             page.wait_for_timeout(200)
-            self.assertIn("1 request", page.evaluate("document.querySelector('#ctip').textContent"), name)
+            self.assertIn("2 requests", page.evaluate("document.querySelector('#ctip').textContent"), name)
 
     def test_back_goes_across_groups(self):
         a, b = self.group("Hist A"), self.group("Hist B")
