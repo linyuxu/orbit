@@ -21,9 +21,14 @@ KEPT = ("id", "name", "parent", "icon", "color", "cover", "home", "pins")
 # A group's home page (its first tab): widgets on a grid, in order. A widget is {"id", "kind", "span", "hidden"?, "path"?}:
 # kind one of WIDGETS; span its width in sixths (2, 3, 4, 6: a third, a half, two thirds, the row); "path" a Markdown
 # note's (kind "md"). Without a layout of its own a group's home shows DEFAULT_HOME.
-WIDGETS = ("sessions", "groups", "tabs", "schedules", "activity", "pins", "md")
+WIDGETS = ("sessions", "groups", "tabs", "schedules", "activity", "pins", "md", "stats", "heatmap", "agenttime")
+# The statistics (desk/stats.py): this week in numbers and where the requests came from, the days with work, agent
+# time by session. A home arranged before they existed gets them once, on top (HOME_V).
+STATS_WIDGETS = [{"id": "stats", "kind": "stats", "span": 6}, {"id": "heatmap", "kind": "heatmap", "span": 3},
+                 {"id": "agenttime", "kind": "agenttime", "span": 3}]
+HOME_V = 2
 SPANS = (2, 3, 4, 6)
-DEFAULT_HOME = [{"id": "sessions", "kind": "sessions", "span": 6}, {"id": "groups", "kind": "groups", "span": 6},
+DEFAULT_HOME = [*STATS_WIDGETS, {"id": "sessions", "kind": "sessions", "span": 6}, {"id": "groups", "kind": "groups", "span": 6},
                 {"id": "tabs", "kind": "tabs", "span": 3}, {"id": "schedules", "kind": "schedules", "span": 3},
                 {"id": "activity", "kind": "activity", "span": 6}]
 HOME_MAX = 40  # widgets
@@ -112,6 +117,11 @@ def tidy(groups: list[dict]) -> list[dict]:
                 g.pop("parent", None)
                 break
             seen.add(x["id"])
+    for g in out:  # (a home arranged before the stats widgets: they come once, on top)
+        h = g.get("home")
+        if isinstance(h, dict) and isinstance(h.get("widgets"), list) and (h.get("v") or 1) < HOME_V:
+            have = {w.get("kind") for w in h["widgets"] if isinstance(w, dict)}
+            g["home"] = {"widgets": [dict(w) for w in STATS_WIDGETS if w["kind"] not in have] + h["widgets"], "v": HOME_V}
     return out
 
 
@@ -293,7 +303,7 @@ class Groups:
             if widgets is None:
                 g.pop("home", None)
             else:
-                g["home"] = {"widgets": check_home(widgets)}
+                g["home"] = {"widgets": check_home(widgets), "v": HOME_V}
         self._groups_changed()
         return g
 

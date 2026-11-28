@@ -133,6 +133,46 @@ class GroupTreeTest(test_skeleton.SkeletonTest):
         reloaded = tidy(self.groups())  # (kept as it is on load)
         self.assertEqual(next(x for x in reloaded if x["id"] == work)["icon"], "🚀")
 
+    def test_stats_widgets_come_once_to_an_arranged_home(self):
+        """A home arranged before the statistics gets them once, on top (HOME_V); removed later, they stay removed."""
+        old = [{"id": "g", "name": "G", "home": {"widgets": [{"id": "pins", "kind": "pins", "span": 6}]}}]
+        g = tidy(old)[0]
+        self.assertEqual([w["kind"] for w in g["home"]["widgets"]], ["stats", "heatmap", "agenttime", "pins"])
+        self.assertEqual(g["home"]["v"], 2)
+        g["home"]["widgets"] = g["home"]["widgets"][3:]  # (the user took them away: saved with v 2)
+        self.assertEqual([w["kind"] for w in tidy([g])[0]["home"]["widgets"]], ["pins"])
+        work = self.make("Stats")
+        code, saved = self.req("POST", f"/api/groups/{work}/home", {"widgets": [{"id": "s", "kind": "stats"}, {"id": "h", "kind": "heatmap", "span": 3}]})
+        self.assertEqual((code, saved["home"]["v"]), (200, 2))
+
+    def test_group_stats(self):
+        """GET /api/groups/<id>/stats: every request of the group's sessions (its subgroups' and closed ones too) as
+        [session, asked, started, finished, state, source]; who asked, from the card."""
+        from orbit.desk.stats import source
+        work, sub = self.make("Counted"), None
+        sub = self.make("Inner", work)
+        a = self.req("POST", "/api/sessions", {"cwd": self.work, "name": "a", "group": work})[1]
+        b = self.req("POST", "/api/sessions", {"cwd": self.work, "name": "b", "group": sub})[1]
+        self.req("POST", f"/api/sessions/{a['id']}/send", {"text": "count the files"})
+        self.req("POST", f"/api/sessions/{b['id']}/send", {"text": '(from session "a") look too'})
+        for s in (a, b):
+            self.assertTrue(self.wait_card(s["id"], 1, ("completed",)))
+        self.req("POST", f"/api/sessions/{b['id']}/close")
+        code, d = self.req("GET", f"/api/groups/{work}/stats?days=7")
+        self.assertEqual(code, 200, d)
+        names = [x["name"] for x in d["sessions"]]
+        self.assertEqual(sorted(names), ["a", "b"])
+        recs = {names[r[0]]: r for r in d["records"]}
+        self.assertEqual((recs["a"][4], recs["a"][5], recs["b"][5]), ("completed", "you", "agents"))
+        self.assertGreaterEqual(recs["a"][3], recs["a"][2])  # (finished after it started)
+        self.assertEqual(self.req("GET", f"/api/groups/{sub}/stats")[1]["sessions"][0]["name"], "b")
+        self.assertEqual(self.req("GET", f"/api/sessions/{a['id']}/stats?since=0")[0], 200)
+        for card, want in [({"kind": "auto"}, "auto"), ({"origin": {"label": "Voice"}}, "voice"), ({"origin": {"kind": "user-relay"}}, "you"),
+                           ({"origin": {"plugin": "slack", "label": "Slack"}}, "plugin"), ({"text": '(schedule "daily") go'}, "schedule"),
+                           ({"text": "(from a terminal session in ~/x; …) hi"}, "agents"), ({"text": "Note from @@x (session 1) …"}, "agents"),
+                           ({"text": "The user mentioned you from @@x …"}, "you"), ({"text": "plain"}, "you")]:
+            self.assertEqual(source(card), want, card)
+
     def test_pins_newest_first_and_unpin(self):
         work = self.make("Work")
         orbit = self.make("Orbit", work)

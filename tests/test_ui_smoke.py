@@ -109,6 +109,31 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.wait_for_timeout(800)  # (the tabs' layout comes from the server after the page: it must not drop it)
             self.assertEqual(page.evaluate(state), want)
 
+    def test_home_statistics(self):
+        """A group's home starts with its statistics: this week's numbers and who asked, the days with requests, agent
+        time by session; a hover on a day says its count."""
+        gid = self.group("Counted home")
+        sid = self.session_in(gid, "busy one")
+        self.req("POST", f"/api/sessions/{sid}/send", {"text": "count the files"})
+        self.assertTrue(self.wait_card(sid, 1, ("completed",)))
+        for name, page in self.each():
+            self.open(page)
+            page.evaluate(f"HS.data.clear(); openHome({json.dumps(gid)})")
+            page.wait_for_selector(".kpis .kpi", timeout=10000)
+            got = page.evaluate("""() => ({tiles: document.querySelectorAll('.kpis .kpi').length,
+                first: document.querySelector('.kpis .kv').textContent, who: !!document.querySelector('.sbar .sseg'),
+                days: document.querySelectorAll('svg.heat rect.hc').length, lit: document.querySelectorAll('svg.heat rect.hc:not(.s0)').length,
+                titles: [...document.querySelectorAll('.hw header .t')].slice(0, 3).map(e => e.textContent)})""")
+            self.assertEqual(got["titles"], ["This week", "Activity", "Agent time"], name)
+            self.assertEqual((got["tiles"], got["first"], got["who"]), (5, "1", True), name)
+            self.assertGreater(got["days"], 70, name)
+            self.assertEqual(got["lit"], 1, name)  # (today)
+            cell = page.query_selector("svg.heat rect.hc:not(.s0)")
+            bb = cell.bounding_box()
+            page.mouse.move(bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2)
+            page.wait_for_timeout(200)
+            self.assertIn("1 request", page.evaluate("document.querySelector('#ctip').textContent"), name)
+
     def test_back_goes_across_groups(self):
         a, b = self.group("Hist A"), self.group("Hist B")
         sa, sb = self.session_in(a, "in A"), self.session_in(b, "in B")

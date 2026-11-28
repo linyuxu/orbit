@@ -38,7 +38,8 @@ groups keep the work apart; the agents keep running when the window closes, and 
 - **Every agent, one way of working.** Claude Code, Codex, agy and OpenCode out of the box, any other agent through the
   [Orbit Harness Protocol](builddoc/harness-protocol.md).
 - **Groups.** Sessions and files are arranged by what the work is about (nested up to three deep), each group with a
-  home page of widgets: its sessions, what happened lately, pinned decisions, its schedules. ⌘1…⌘9 switch groups.
+  home page of widgets: this week in numbers (requests, agent time, who asked), the days with work, agent time by
+  session, its sessions, what happened lately, pinned decisions, its schedules. ⌘1…⌘9 switch groups.
 - **The code next to the conversation.** ± Review shows the uncommitted diff (revert a hunk, comment on lines and send
   the comments to the agent). A file tree that is a file manager (drag and drop, copy and paste with Finder, across
   machines); a click shows a file in the side panel without leaving your work; a code and Markdown editor.

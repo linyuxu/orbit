@@ -13,8 +13,10 @@ VIEWS[HOME] = { kind: "home", title: "Home", icon: "panel" };
 const H = { md: new Map(), editing: null, soon: 0, pins: new Map() };  // md: path → {text, hash, at}
 const HOME_EVENTS = new Set(["session", "closed", "groups", "schedules", "pin", "card", "layout", "note_append"]);
 const SPAN_LABEL = { 2: "A third", 3: "A half", 4: "Two thirds", 6: "The whole row" };
-const WIDGET_TITLE = { sessions: "Sessions", groups: "Subgroups", tabs: "Files and views", schedules: "Schedules", activity: "Lately", pins: "Pinned" };
-const DEFAULT_HOME = [{ id: "sessions", kind: "sessions", span: 6 }, { id: "groups", kind: "groups", span: 6 },
+const WIDGET_TITLE = { sessions: "Sessions", groups: "Subgroups", tabs: "Files and views", schedules: "Schedules", activity: "Lately", pins: "Pinned",
+                       stats: "This week", heatmap: "Activity", agenttime: "Agent time" };  // (the last three: homestats.js)
+const DEFAULT_HOME = [{ id: "stats", kind: "stats", span: 6 }, { id: "heatmap", kind: "heatmap", span: 3 }, { id: "agenttime", kind: "agenttime", span: 3 },
+                      { id: "sessions", kind: "sessions", span: 6 }, { id: "groups", kind: "groups", span: 6 },
                       { id: "pins", kind: "pins", span: 6 },
                       { id: "tabs", kind: "tabs", span: 3 }, { id: "schedules", kind: "schedules", span: 3 },
                       { id: "activity", kind: "activity", span: 6 }];
@@ -121,6 +123,7 @@ function pinHead(h) {  // "2026-11-24 22:10 · Name · [source](orbit://session/
 }
 
 function widgetBody(gid, w) {
+  if (w.kind === "stats" || w.kind === "heatmap" || w.kind === "agenttime") return statsBody(gid, w);
   if (w.kind === "sessions") {
     const ss = groupSessions(gid);
     return ss.length ? `<div class="hcards">${ss.map(sessionCard).join("")}</div>`

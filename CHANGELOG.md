@@ -8,6 +8,11 @@ offers is `API_VERSION` there, which a plugin's `requires_api` is checked agains
 
 Plugins: Orbit can be extended without changing it, and updated with `git pull` without touching the extensions.
 
+- A group's home starts with its statistics: This week (requests and agent time against the week before, how many
+  finished, the median request, sessions working now, who asked: you, voice, other agents, schedules, plugins), Activity
+  (12 weeks of days, coloured by requests) and Agent time (14 days, by session). From the requests of the group's
+  sessions, subgroups', closed and other machines' too (`GET /api/groups/<id>/stats`); a hover says the numbers. A
+  home arranged before gets them once, on top.
 - `@` in the input reaches files outside the session's folder: `@../`, `@~/` and `@/` browse folders (a remote
   session's are that machine's), typing filters, a folder picked goes on into it; `../` is offered at a bare `@`.
 - New session in a folder that does not exist yet makes it (also on another machine); a file there is refused.

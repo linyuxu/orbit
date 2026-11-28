@@ -903,6 +903,17 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             except KeyError:
                 return self._json({"error": "no such session"}, 404)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
+        m = re.fullmatch(r"/api/sessions/([\w-]+)/stats", p)
+        if m:  # its requests as compact records (desk/stats.py): the group's stats on another machine's home page
+            from orbit.desk import stats
+            try:
+                return self._json({"records": stats.records(self.desk, m.group(1), float(q.get("since") or 0))})
+            except KeyError:
+                return self._json({"error": "no such session"}, 404)
+        m = re.fullmatch(r"/api/groups/([\w-]+)/stats", p)
+        if m:  # a group's home page: its sessions' requests (the Stats, Activity and Agent time widgets)
+            from orbit.desk import stats
+            return self._json(stats.group(self.desk, m.group(1), int(q.get("days") or 84)))
         try:
             if p == "/api/tree":
                 return self._json(files.tree(q.get("root", "")))
