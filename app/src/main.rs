@@ -707,6 +707,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     // ⌘` stays macOS's: the next window (new_window). The left panel is ⌘1.
     let left = MenuItem::with_id(app, "left", "Toggle Left Panel", true, Some("CmdOrCtrl+1"))?;
     let new_win = MenuItem::with_id(app, "new-window", "New Window", true, Some("CmdOrCtrl+Shift+N"))?;
+    let close_win = MenuItem::with_id(app, "close-window", "Close Window", true, Some("CmdOrCtrl+Shift+W"))?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
     // ⌘Z / ⌘⇧Z go to the page (deskUndo): an editor uses its own history; native undo would corrupt it.
     let undo = MenuItem::with_id(app, "undo", "Undo", true, Some("CmdOrCtrl+Z"))?;
@@ -778,7 +779,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         app,
         "Window",
         true,
-        &[&new_win, &sep()?, &PredefinedMenuItem::minimize(app, None)?, &PredefinedMenuItem::maximize(app, None)?],
+        &[&new_win, &close_win, &sep()?, &PredefinedMenuItem::minimize(app, None)?, &PredefinedMenuItem::maximize(app, None)?],
     )?;
     let help = Submenu::with_items(app, "Help", true, &[&item("shortcuts", "Keyboard Shortcuts (⌘/)")?])?;
     Menu::with_items(app, &[&app_menu, &file, &edit, &view, &window, &help])
@@ -846,6 +847,12 @@ fn main() {
                         let app = app.clone();
                         thread::spawn(move || new_window(&app, ""));
                     }
+                }
+            }
+            // ⌘⇧W: the window in front, as its close button (the first hides; another closes, not reopened)
+            "close-window" => {
+                if let Some(w) = front(app) {
+                    let _ = w.close();
                 }
             }
             "restart-hs" => {

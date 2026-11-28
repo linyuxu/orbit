@@ -138,6 +138,7 @@ Tree lists (Files, Notes): ← / → fold and unfold, ⏎ on a folder toggles it
 | ⌘W | Close what has the keyboard: the shown side tab (its neighbour shows), else the file tab, else the session tab: always asked (⏎ closes, Esc keeps it; it says so when the session is working), from ⌘W, its × or the menu alike; ⌘⇧T reopens. |
 | ⌘⇧T | Reopen the last closed tab (again: the one before) |
 | ⌘⇧N | New window, on this group: each window looks at a group of its own, the tabs are shared (the server's); ⌘` (macOS) goes to the next window |
+| ⌘⇧W | Close this window (the app's first window hides; another closes and is not reopened) |
 | ⌘⇧[ ⌘⇧] | Previous / next tab (in the left panel or a finder: its tabs) |
 | ⌘⌃H ⌘⌃L | Move the tab left / right: session and file tabs are alike, in one order per group (the server's: every screen); in the Groups panel: move the group up / down. The mouse does the same: drag a tab along the row; in the Groups panel drag a session (onto another group to move it there) or a group's head (with its sessions): it follows the pointer and the others slide aside, as in a browser's tab strip; Esc puts it back |
 | ⌘- ⌘= | Back / forward through visited tabs |

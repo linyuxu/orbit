@@ -253,6 +253,7 @@ const SHORTCUTS = [
     ["Space · ← →", "In the Groups panel: fold / unfold the group (on a row in it: its group folds)"],
     ["Tab · ⇧Tab", "In the Groups panel on a group: into the group above it (a subgroup) · out a level. Groups nest 3 deep"],
     ["⌘⇧N", "New window, on this group (each window looks at a group of its own; the tabs are shared); ⌘` goes to the next window", "MS:KeyN", () => newWindow()],
+    ["⌘⇧W", "Close this window (the app's first window hides: the server and its agents go on)"],
     ["⌘⇧[ ⌘⇧]", "Previous / next tab, the group's home first (in the left panel or a finder: its tabs)", ["MS:BracketLeft", "MS:BracketRight"], [() => cycleTab(-1), () => cycleTab(1)]],
     ["⌘⌃H ⌘⌃L", "Move the tab left / right, past any tab, session or file (in the Groups panel: move the group up / down)", ["MC:KeyH", "MC:KeyL"], [() => moveCurrentTab(-1), () => moveCurrentTab(1)]],
     ["⌘- ⌘=", "Back / forward through visited tabs", ["M:Minus", "M:Equal"], [() => histGo(-1), () => histGo(1)]],

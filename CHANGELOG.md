@@ -13,7 +13,7 @@ Plugins: Orbit can be extended without changing it, and updated with `git pull` 
   same in the left panel, tabs, side tabs, a group's home, ⌘O and @@. In the left panel what a group holds
   (sessions, file tabs, subgroups) sits one step in from it.
 - Several windows: ⌘⇧N (Window → New Window) opens another on the group in front; ⌘` (macOS's own key) goes
-  from one to the next. Each window looks at a group of its own (and keeps it across a reload and a relaunch: the app
+  from one to the next, ⌘⇧W closes the one in front. Each window looks at a group of its own (and keeps it across a reload and a relaunch: the app
   reopens the windows open at quit); the tab lists are the server's, shared, as on two machines. A browser gets the
   same with a tab opened by ⌘⇧N (`?win=`). **Changed keys:** the left panel is ⌘1 (was ⌘`); ⌘2…⌘9 no longer
   switch groups (the group chip, ⌘O, the left panel do). The Mac app needs rebuilding (`app/build-app.sh`).
