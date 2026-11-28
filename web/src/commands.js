@@ -185,8 +185,11 @@ window.restartHarnessServer = restartHarnessServer;
 function moreItems() {
   const direct = HOSTING && HOSTING.mode === "direct"
     ? [{ label: `Agents run in the server: a restart ends them${HOSTING.why ? ` (${HOSTING.why})` : ""}`, disabled: true }, { sep: true }] : [];
+  const reload = { label: "Reload UI", key: "⌘⇧R", run: reloadUi };
+  const touch = document.body.classList.contains("touch");  // (an iPad: no ⌘⇧R to hand, the reload comes first)
   return [
     ...(EMBED ? [] : direct),
+    touch ? reload : null,
     { label: "Keyboard shortcuts", key: "⌘/", run: shortcutSheet },
     { label: "Settings…", key: "⌘,", run: settingsDialog },
     { label: "Schedules", key: "⌘⌃S", run: () => toggleView("orbit:schedules") },
@@ -194,7 +197,7 @@ function moreItems() {
     { label: "Calendar", key: "⌘⌃C", run: () => toggleView("orbit:calendar") },
     { label: "Calendar in the side pane", run: () => toggleSideKind("calendar") },
     EMBED ? null : { label: S.side || !sideEntry() ? "Hide the side panel" : "Show the side panel", key: "⌘\\", disabled: !sideEntry(), run: toggleSidePanel },
-    { label: "Reload UI", key: "⌘⇧R", run: reloadUi },
+    touch ? null : reload,
     HOSTING && HOSTING.mode === "hosted" ? { label: "Restart Harness Server…", run: restartHarnessServer } : null,
     { label: "Reset panel sizes", run: resetPanels },
     { label: "Reset zoom", key: "⌘0", run: () => setZoom(ZOOM_DEFAULT) },
