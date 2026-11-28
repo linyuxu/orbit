@@ -534,6 +534,7 @@ class Handler(Forward, Streams, Watch, BaseHTTPRequestHandler):
             tok = remote.token(self.desk.state_dir)
             st["open_url"] = f"{st['url']}/?token={tok}"
             st["phone_url"] = f"{st['url']}/m/?token={tok}"
+            st["ipad_url"] = f"{st['url']}/?token={tok}"
         return st
 
     UNPAIRED = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -589,12 +590,15 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
         self.end_headers()
         self.wfile.write(data)
 
-    def _mobile_manifest(self) -> None:
+    def _mobile_manifest(self, desk: bool = False) -> None:
+        """The home-screen app's manifest: the phone's (/m/), or the full page's for an iPad (desk: /, ?app=1)."""
         tok = self._mobile_token()
         host = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "").split(":")[0]
         machine = host.split(".")[0] if host and not host[0].isdigit() and host != "localhost" else "this Mac"
-        doc = {"name": f"Orbit · {machine}", "short_name": "Orbit", "id": "/m/",
-               "start_url": "/m/" + (f"?token={tok}" if tok else ""), "scope": "/m/", "display": "standalone",
+        base = "/" if desk else "/m/"
+        start = base + ("?app=1" if desk else "") + (("&" if desk else "?") + f"token={tok}" if tok else "")
+        doc = {"name": f"Orbit · {machine}", "short_name": "Orbit", "id": base,
+               "start_url": start, "scope": base, "display": "standalone",
                "background_color": "#f9f9f8", "theme_color": "#f9f9f8",
                "icons": [{"src": "/m/icon-192.png", "sizes": "192x192", "type": "image/png"},
                          {"src": "/m/icon-512.png", "sizes": "512x512", "type": "image/png"},
@@ -662,6 +666,10 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             # The phone's link (also its home-screen app's start_url): the page keeps the token itself (the home-screen
             # app has its own storage, where the cookie may not be yet) and takes it out of the address bar.
             return self._mobile_page(cookie=True)
+        if p == "/" and self.from_remote and "token=" in u.query and "app=1" in u.query:
+            # The iPad's home-screen app (its manifest's start_url): its own storage, so the page comes at once with the
+            # cookie (no redirect: as the phone's), and the page takes the token out of the address.
+            return self._file(WEB / "index.html", cache=False, headers={"Set-Cookie": self._token_cookie()})
         if p in ("/", "/index.html", "/m/"):
             if self.from_remote and "token=" in u.query:
                 # A browser opened the URL with ?token=: a cookie carries it from now on (also for the page's
@@ -678,6 +686,8 @@ code { font:14px ui-monospace,Menlo,Consolas,monospace; background:#eeeeec; padd
             return self._file(WEB / "index.html", cache=False)
         if p == "/m/manifest.webmanifest":
             return self._mobile_manifest()
+        if p == "/manifest.webmanifest":
+            return self._mobile_manifest(desk=True)
         m = re.fullmatch(r"/m/([\w.-]+)", p)
         if m:  # the phone's app (web/m/): its scripts, styles, icons, service worker
             target = WEB / "m" / m.group(1)

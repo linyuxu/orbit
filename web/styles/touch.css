@@ -1,0 +1,52 @@
+/* ===================================================================== touch: the full page on an iPad (touch.js)
+   Only where a pointer is coarse (a finger): the Mac never. Bigger targets, what a hover would reveal shown, text
+   fields at 16 px (Safari zooms the page into a smaller one on focus), no text selection or callout on the page's
+   chrome (a long press opens its menu), the page above the on-screen keyboard and inside the screen's safe area. */
+@media (any-pointer: coarse) {
+  html { touch-action:manipulation; -webkit-text-size-adjust:100%; }
+  :root { --row:40px; }
+  body.touch #app { position:fixed; left:0; right:0; top:0; height:calc(var(--vvh, 100dvh) / var(--zoom, 1));
+    transform:translateY(var(--vvtop, 0px)); box-sizing:border-box;
+    padding:env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+  body.touch.kb #app { padding-bottom:0; }  /* (the keyboard covers the home indicator's strip) */
+
+  /* What a hover reveals: there all the time */
+  .req .meta, .ans .foot, .ans:not(.s-queued):not(.s-thinking):not(.s-running) .foot, .pre .copy, .hw .grip, .hw .ibtn,
+  .hpin .ph .ibtn, .prow.grp .fold { opacity:1; }
+  .tab:not(.active):not(:hover) .x { opacity:1; }
+  .stab .x { visibility:visible; }
+  .xrow .racts { display:flex; }
+  .xrow.mrow .racts { visibility:visible; }
+  .prow.ss.stopped .rsm { display:block; }
+  .prow.ss.stopped .tm { display:none; }
+  .hw .hrz.xy::after { opacity:.45; }
+
+  /* Targets for a finger */
+  #titlebar { --bar:46px; --tab-close:28px; }
+  .tab .x { width:var(--tab-close); height:var(--tab-close); }
+  .ibtn { min-width:36px; min-height:36px; }
+  .btn { min-height:36px; }
+  .btn.sm { min-height:32px; }
+  .menu .row { height:40px; }
+  .frow { min-height:44px; }
+  .ptab, .mchip { min-height:34px; }
+  .prow.grp .fold { width:30px; height:30px; }
+  .vsplit::before { left:-11px; right:-11px; }
+  .hsplit::before, #hsplit::before { top:-11px; bottom:-11px; }
+  .hrz.x { width:18px; } .hrz.y { height:18px; } .hrz.xy { width:26px; height:26px; }
+
+  /* Text fields at 16 px: below it Safari zooms the page on focus */
+  input, textarea, select, .cm-editor .cm-content { font-size:max(16px, 1em); }
+
+  /* The page's chrome: a long press is its menu, not a text selection or the system's callout */
+  #titlebar, #left, #tabs, #sidetabs, #status, .prow, .tab, .stab, .frow, .menu, .hw > header, .hrz, .vsplit {
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+
+  /* Upright (touch.js: narrower than its OVER): the left panel floats over the work, a scrim behind it */
+  body.tnarrow #body { position:relative; }
+  body.tnarrow #left { position:absolute; left:0; top:0; bottom:0; z-index:40; width:min(var(--leftw, 300px), 86vw);
+    box-shadow:0 0 0 1px var(--line), 0 12px 40px rgba(0,0,0,.18); }
+  body.tnarrow #lsplit { display:none; }
+  #lscrim { display:none; }
+  body.tnarrow #left:not([hidden]) + #lscrim { display:block; position:absolute; inset:0; z-index:39; background:rgba(0,0,0,.18); }
+}

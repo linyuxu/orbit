@@ -176,6 +176,50 @@ class UiSmokeTest(test_skeleton.SkeletonTest):
             page.wait_for_timeout(200)
             self.assertEqual(page.evaluate("S.group"), a, name)
 
+    def test_ipad_touch(self):
+        """On a touch screen (an iPad: Chromium emulating one, its touches sent as a finger's): a long press is the menu,
+        held then moved a mouse's press-and-move (a drag), a double tap a double-click; upright, the left panel floats
+        over the work and a tap on the scrim puts it away. A Mac (no touch) runs none of it."""
+        gid = self.group("Touch")
+        self.session_in(gid, "touched one")
+        ua = "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+        ctx = self.browsers["chromium"].new_context(viewport={"width": 834, "height": 1194}, is_mobile=True, has_touch=True, user_agent=ua)
+        try:
+            page = ctx.new_page()
+            cdp = ctx.new_cdp_session(page)
+            touch = lambda kind, x, y: cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": [] if kind == "touchEnd" else [{"x": x, "y": y}]})
+            self.open(page)
+            self.assertEqual(page.evaluate("[location.pathname, document.body.classList.contains('touch'), document.body.classList.contains('tnarrow')]"), ["/", True, True])
+            page.evaluate(f"switchGroup({json.dumps(gid)}); S.left.shown = true; S.left.tab = 'sessions'; applyLeft(); renderLeft(); 0")
+            page.wait_for_timeout(300)
+            self.assertEqual(page.evaluate("getComputedStyle(document.querySelector('#left')).position"), "absolute")
+            bb = page.query_selector("#plist .prow.ss").bounding_box()
+            x, y = bb["x"] + 60, bb["y"] + bb["height"] / 2
+            touch("touchStart", x, y); page.wait_for_timeout(650); touch("touchEnd", x, y); page.wait_for_timeout(300)
+            self.assertTrue(page.evaluate("!!document.querySelector('.menu .row')"))  # (a long press: the row's menu)
+            page.keyboard.press("Escape")
+            page.evaluate("window.__ev = []; for (const t of ['mousedown', 'mousemove', 'mouseup']) addEventListener(t, e => { if (!e.isTrusted) __ev.push(t) }, true)")
+            touch("touchStart", x, y); page.wait_for_timeout(650)
+            for k in range(1, 5):
+                touch("touchMove", x, y + k * 12); page.wait_for_timeout(30)
+            touch("touchEnd", x, y + 48); page.wait_for_timeout(400)
+            ev = page.evaluate("__ev")
+            self.assertEqual((ev.count("mousedown"), ev.count("mouseup")), (1, 1), ev)
+            self.assertGreaterEqual(ev.count("mousemove"), 3, ev)
+            page.evaluate("S.left.shown = true; applyLeft(); 0"); page.wait_for_timeout(200)
+            page.touchscreen.tap(800, 600); page.wait_for_timeout(300)  # (the scrim)
+            self.assertFalse(page.evaluate("S.left.shown"))
+            page.evaluate("window.__dd = 0; document.querySelector('#tabs').addEventListener('dblclick', () => __dd++)")
+            tb = page.query_selector("#tabs .tab").bounding_box()
+            tx, ty = tb["x"] + 30, tb["y"] + tb["height"] / 2
+            page.touchscreen.tap(tx, ty); page.wait_for_timeout(120); page.touchscreen.tap(tx, ty); page.wait_for_timeout(400)
+            self.assertEqual(page.evaluate("__dd"), 1)  # (a double tap: one double-click)
+        finally:
+            ctx.close()
+        for name, page in self.each():  # (a Mac: nothing of it)
+            self.open(page)
+            self.assertEqual(page.evaluate("[document.body.classList.contains('touch'), !!document.querySelector('#lscrim')]"), [False, False], name)
+
     def test_back_goes_across_groups(self):
         a, b = self.group("Hist A"), self.group("Hist B")
         sa, sb = self.session_in(a, "in A"), self.session_in(b, "in B")

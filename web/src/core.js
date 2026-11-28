@@ -40,6 +40,11 @@ const LS = {
   set(k, v) { try { localStorage.setItem(LS.key(k), JSON.stringify(v)); } catch {} },
 };
 
+/* The iPad's home-screen app starts with its token (?app=1&token=…, its manifest): the cookie has it now (handler.py),
+   the address need not. */
+if (!EMBED && (PARAMS.get("token") || PARAMS.get("app"))) {
+  const u = new URL(location.href); u.searchParams.delete("token"); u.searchParams.delete("app"); history.replaceState(null, "", u);
+}
 /* A new window asked for a group (?group=): it opens there, on that group's last tab; the address forgets it. */
 if (WIN && PARAMS.get("group")) {
   LS.set("group", PARAMS.get("group")); LS.set("current", null); LS.set("file", null);

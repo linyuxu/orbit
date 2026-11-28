@@ -110,6 +110,26 @@ esac
         code, _, _ = self.raw("/api/version", headers={"Host": f"100.64.0.9:{self.port}", "Authorization": f"Bearer {self.token}"})
         self.assertEqual(code, 200)
 
+    def test_the_ipad_app(self):
+        """The full page as an iPad's home-screen app: its manifest starts it at /?app=1 with the token (its own storage),
+        and that start is the page itself with the cookie, no redirect (the browser's link still redirects)."""
+        tls = {"Host": f"{TS_HOST}:8443", "X-Forwarded-Proto": "https"}
+        code, _, b = self.raw("/manifest.webmanifest", headers={**tls, "Cookie": f"orbit_token={self.token}"})
+        self.assertEqual(code, 200, b)
+        m = json.loads(b)
+        self.assertEqual((m["start_url"], m["scope"], m["id"], m["display"]), (f"/?app=1&token={self.token}", "/", "/", "standalone"))
+        self.assertEqual(self.raw("/manifest.webmanifest", headers=tls)[0], 401)
+        code, h, b = self.raw(f"/?app=1&token={self.token}", headers=tls)
+        self.assertEqual(code, 200)
+        self.assertIn(self.token, h.get("Set-Cookie", ""))
+        self.assertIn(b'rel="manifest" href="/manifest.webmanifest"', b)
+        self.assertIn(b'apple-mobile-web-app-capable', b)
+        code, h, _ = self.raw(f"/?token={self.token}", headers=tls)  # (a browser's link: to the address without it)
+        self.assertEqual((code, h.get("Location")), (302, "/"))
+        st = json.loads(self.raw("/api/https")[2])
+        if st.get("on"):
+            self.assertTrue(st["ipad_url"].endswith(f"/?token={self.token}"))
+
     def test_the_phone_app(self):
         tls = {"Host": f"{TS_HOST}:8443", "X-Forwarded-Proto": "https"}
         # the link: the page itself (it keeps the token and takes it out of the address), and the cookie

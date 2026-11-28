@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<script>/* A phone gets the phone's app (web/m/), with the same query, unless it chose the desktop layout there. */
-try { if (window.top === window && matchMedia("(pointer: coarse) and (max-width: 820px)").matches && localStorage.getItem("orbit.forceDesktop") !== "1") location.replace("/m/" + location.search); } catch (e) {}</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>/* A phone gets the phone's app (web/m/), with the same query, unless it chose the desktop layout there. A tablet (an
+   iPad, upright 744-1024 px wide) gets this page, made for touch where the pointer is a finger (touch.js). */
+try { if (window.top === window && matchMedia("(pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px)").matches && localStorage.getItem("orbit.forceDesktop") !== "1") location.replace("/m/" + location.search); } catch (e) {}</script>
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Orbit">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/m/apple-touch-icon.png">
 <title>Orbit</title>
 <script src="/src/scriptguard.js"></script>
 <link rel="stylesheet" href="/vendor/hljs-light.min.css" media="(prefers-color-scheme: light)">
@@ -26,6 +33,7 @@ try { if (window.top === window && matchMedia("(pointer: coarse) and (max-width:
 <link rel="stylesheet" href="/styles/dialogs.css">
 <link rel="stylesheet" href="/styles/settings.css">
 <link rel="stylesheet" href="/styles/embed.css">
+<link rel="stylesheet" href="/styles/touch.css">
 </head>
 <body>
 <div id="app">
@@ -184,6 +192,7 @@ try { if (window.top === window && matchMedia("(pointer: coarse) and (max-width:
 <script src="/src/keys.js"></script>
 <script src="/src/layout.js"></script>
 <script src="/src/live.js"></script>
+<script src="/src/touch.js"></script>
 <script src="/src/main.js"></script>
 </body>
 </html>

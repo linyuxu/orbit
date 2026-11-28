@@ -96,6 +96,8 @@ cli/orbit tools install
 - Another machine: run `cli/orbit serve --remote` there, then `orbit remote add NAME URL` here
   ([guide](docs/guide.md#the-orbit-server-and-other-machines)).
 - The phone: Settings → Machines → HTTPS, then iPhone… shows a QR code (Safari → Share → Add to Home Screen).
+- The iPad: the same, with iPad…: the whole of Orbit, made for touch (a long press is the menu, held and moved a
+  drag, a double tap a double-click; upright, the left panel floats), with a keyboard's shortcuts if one is attached.
 - Voice: an OpenAI API key in Settings → Voice.
 
 ## Learn more

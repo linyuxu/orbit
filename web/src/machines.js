@@ -53,7 +53,7 @@ function machinesPane(pane, keys) {
   // microphone, notifications). This Mac's own window stays on http://127.0.0.1, so it works with Tailscale down.
   const httpsCtl = setRow(pane, "HTTPS for other machines and your phone", "By Tailscale, at this Mac's Tailscale name, with a real certificate. This window stays on 127.0.0.1.");
   const httpsBox = document.createElement("div"); httpsBox.className = "set-block"; pane.appendChild(httpsBox);
-  let hsw = null, qrOpen = false, lastHttps = null;
+  let hsw = null, qrOpen = "", lastHttps = null;  // (qrOpen: "phone" | "ipad", the code shown)
   const drawHttps = st => {
     lastHttps = st;
     if (!hsw) hsw = toggleSwitch(httpsCtl, { on: st.on, label: "HTTPS for other machines and your phone",
@@ -64,24 +64,25 @@ function machinesPane(pane, keys) {
       } });
     hsw.set(st.on); hsw.el.disabled = !st.available;
     if (!st.on) {
-      qrOpen = false;
+      qrOpen = "";
       httpsBox.innerHTML = `<div class="set-line"><span class="set-desc">${st.error ? esc(st.error)
         : `Off. Turning it on serves https://${esc(st.host || "this-mac.tailnet.ts.net")}:${st.port || 8443}.`}</span></div>`;
       return;
     }
     httpsBox.innerHTML = `<div class="set-line"><code class="murl">${esc(st.open_url.replace(/token=.*/, "token=…"))}</code>
         <button type="button" class="btn sm" data-copyurl="${esc(st.open_url)}">Copy URL</button>
-        <button type="button" class="btn sm${qrOpen ? " on" : ""}" data-qr aria-expanded="${qrOpen}">iPhone…</button></div>
+        <button type="button" class="btn sm${qrOpen === "phone" ? " on" : ""}" data-qr="phone" aria-expanded="${qrOpen === "phone"}">iPhone…</button>
+        <button type="button" class="btn sm${qrOpen === "ipad" ? " on" : ""}" data-qr="ipad" aria-expanded="${qrOpen === "ipad"}">iPad…</button></div>
       <div class="set-line"><span class="set-desc">On the other machine: Settings → Machines → Add, with this URL.</span></div>
-      ${qrOpen ? `<div class="mqr"><div class="qr">${qrSvg(st.phone_url)}</div><ol class="set-desc">
-        <li>Scan this with the iPhone's camera; open it in Safari.</li>
+      ${qrOpen ? `<div class="mqr"><div class="qr">${qrSvg(qrOpen === "ipad" ? st.ipad_url : st.phone_url)}</div><ol class="set-desc">
+        <li>Scan this with the ${qrOpen === "ipad" ? "iPad" : "iPhone"}'s camera; open it in Safari.</li>
         <li>Share → Add to Home Screen.</li>
-        <li>Orbit opens from its icon, logged in, full screen.</li></ol></div>` : ""}`;
+        <li>Orbit opens from its icon, logged in, full screen${qrOpen === "ipad" ? ": the whole of Orbit, made for touch (and a keyboard, if one is attached)" : ""}.</li></ol></div>` : ""}`;
   };
   httpsBox.addEventListener("click", e => {
     const t = e.target.closest("button"); if (!t) return;
     if (t.dataset.copyurl) return copyText(t.dataset.copyurl);
-    if ("qr" in t.dataset) { qrOpen = !qrOpen; drawHttps(lastHttps); }
+    if ("qr" in t.dataset) { qrOpen = qrOpen === t.dataset.qr ? "" : t.dataset.qr; drawHttps(lastHttps); }
   });
   const shareCtl = setRow(pane, "Plain HTTP on the network", "Without HTTPS (a machine with no Tailscale certificate): it listens on this Mac's Tailscale address, else the LAN's. With HTTPS on, it is not needed.");
   const urlBox = document.createElement("div"); urlBox.className = "set-block"; pane.appendChild(urlBox);
